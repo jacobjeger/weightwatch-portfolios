@@ -1,15 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { getPortfolioChartData } from '../lib/mockData';
+import { isConfigured, getRealPortfolioChartData } from '../lib/finnhub';
 
 const RANGES = ['1M', '3M', '6M', '1Y', 'Max'];
 
 const COLORS = {
-  portfolio:  '#3b82f6',
-  benchmark:  '#f59e0b',
+  portfolio: '#3b82f6',
+  benchmark: '#f59e0b',
 };
 
 function formatDate(dateStr, range) {
@@ -39,8 +40,41 @@ function CustomTooltip({ active, payload, label }) {
 
 export default function PerformanceChart({ holdings, benchmarkTicker, defaultRange }) {
   const [range, setRange] = useState(defaultRange ?? '1Y');
+  const [data, setData]   = useState([]);
+  const [loading, setLoading] = useState(false);
+  const usingReal = isConfigured();
 
-  const data = getPortfolioChartData(holdings, benchmarkTicker, range);
+  // Fetch (real or mock) whenever inputs change
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchData() {
+      if (!holdings?.length) {
+        setData([]);
+        return;
+      }
+
+      if (usingReal) {
+        setLoading(true);
+        try {
+          const real = await getRealPortfolioChartData(holdings, benchmarkTicker ?? null, range);
+          if (!cancelled) {
+            // If Finnhub returned empty (e.g. no data for range), fall back to mock
+            setData(real.length ? real : getPortfolioChartData(holdings, benchmarkTicker, range));
+          }
+        } catch {
+          if (!cancelled) setData(getPortfolioChartData(holdings, benchmarkTicker, range));
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      } else {
+        setData(getPortfolioChartData(holdings, benchmarkTicker, range));
+      }
+    }
+
+    fetchData();
+    return () => { cancelled = true; };
+  }, [holdings, benchmarkTicker, range, usingReal]);
 
   // Thin out X-axis ticks
   const tickInterval = Math.max(1, Math.floor(data.length / 8));
@@ -68,10 +102,16 @@ export default function PerformanceChart({ holdings, benchmarkTicker, defaultRan
             {r}
           </button>
         ))}
-        <span className="ml-auto text-xs text-slate-400">Normalized to 100</span>
+        <span className="ml-auto text-xs text-slate-400">
+          {usingReal ? 'Live data · ' : ''}Normalized to 100
+        </span>
       </div>
 
-      {data.length === 0 ? (
+      {loading ? (
+        <div className="h-48 flex items-center justify-center text-sm text-slate-400 animate-pulse">
+          Loading chart data…
+        </div>
+      ) : data.length === 0 ? (
         <div className="h-48 flex items-center justify-center text-sm text-slate-400">
           Add holdings to see performance
         </div>

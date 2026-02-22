@@ -8,6 +8,7 @@ import PerformanceChart from '../components/PerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
 import { useToast } from '../context/ToastContext';
+import { useMarketData } from '../context/MarketDataContext';
 
 const TIMEFRAMES = [
   { label: '1D', days: 1 },
@@ -23,6 +24,7 @@ export default function PortfolioBuilder() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const toast = useToast();
+  const { live, prices, loadTickers, subscribeTickers } = useMarketData();
 
   const isNew = id === 'new';
 
@@ -52,6 +54,15 @@ export default function PortfolioBuilder() {
       }
     }
   }, [id, user, isNew]);
+
+  // Load + subscribe real-time prices whenever holdings change
+  useEffect(() => {
+    if (!live || !holdings.length) return;
+    const tickers = holdings.map((h) => h.ticker);
+    loadTickers(tickers);
+    const unsub = subscribeTickers(tickers);
+    return unsub;
+  }, [live, holdings, loadTickers, subscribeTickers]);
 
   // Derived
   const totalWeight = holdings.reduce((s, h) => s + parseFloat(h.weight_percent || 0), 0);
@@ -161,14 +172,34 @@ export default function PortfolioBuilder() {
     navigate('/');
   }
 
-  // ── Live snapshot daily moves (mock) ────────────────────────────────────────
+  // ── Live snapshot daily moves ────────────────────────────────────────────────
+  // Uses real Finnhub prices when configured, falls back to mock data
   const topHoldings = [...holdings]
     .sort((a, b) => b.weight_percent - a.weight_percent)
     .slice(0, 5)
-    .map((h) => ({
-      ...h,
-      dailyChange: parseFloat(getReturn(h.ticker, 1)),
-    }));
+    .map((h) => {
+      const realQuote = live ? prices[h.ticker] : null;
+      return {
+        ...h,
+        displayPrice:  realQuote?.price       ?? h.last_price,
+        dailyChange:   realQuote?.changePercent ?? parseFloat(getReturn(h.ticker, 1)),
+        isLive:        !!realQuote,
+      };
+    });
+
+  // Portfolio-level 1D return
+  const portfolioReturn1D = live && holdings.length > 0
+    ? holdings.reduce((sum, h) => {
+        const cp = prices[h.ticker]?.changePercent;
+        return sum + (cp != null ? cp * (h.weight_percent / 100) : 0);
+      }, 0)
+    : parseFloat(getPortfolioReturn(holdings, 1));
+
+  const benchmarkReturn1D = benchmark
+    ? (live && prices[benchmark]?.changePercent != null
+        ? prices[benchmark].changePercent
+        : parseFloat(getReturn(benchmark, 1)))
+    : null;
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
@@ -209,7 +240,7 @@ export default function PortfolioBuilder() {
                 <input
                   className="input"
                   value={name}
-                  onChange={(e) => { setName(e.target.value); setSaved(false); }}
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="Portfolio name"
                 />
               </div>
@@ -218,7 +249,7 @@ export default function PortfolioBuilder() {
                 <select
                   className="input"
                   value={benchmark}
-                  onChange={(e) => { setBenchmark(e.target.value); setSaved(false); }}
+                  onChange={(e) => setBenchmark(e.target.value)}
                 >
                   <option value="">— None —</option>
                   {BENCHMARKS.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -231,7 +262,7 @@ export default function PortfolioBuilder() {
                 className="input resize-none"
                 rows={2}
                 value={description}
-                onChange={(e) => { setDesc(e.target.value); setSaved(false); }}
+                onChange={(e) => setDesc(e.target.value)}
                 placeholder="Optional description"
               />
             </div>
@@ -382,8 +413,18 @@ export default function PortfolioBuilder() {
         {/* Sidebar: live snapshot */}
         <div className="space-y-6">
           <div className="card p-5">
-            <h2 className="section-title mb-1">Live Snapshot</h2>
-            <p className="text-xs text-slate-400 mb-4">Top holdings by weight · simulated daily moves</p>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="section-title">Live Snapshot</h2>
+              {live && (
+                <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
+                  Live
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mb-4">
+              Top holdings by weight · {live ? 'real-time prices' : 'simulated daily moves'}
+            </p>
 
             {topHoldings.length === 0 ? (
               <div className="text-sm text-slate-400 text-center py-6">Add holdings to see snapshot</div>
@@ -397,7 +438,7 @@ export default function PortfolioBuilder() {
                     </div>
                     <div className="text-right">
                       <div className="font-mono text-sm text-slate-700">
-                        ${h.last_price?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${h.displayPrice?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </div>
                       <div className={`text-xs font-medium flex items-center gap-0.5 justify-end ${
                         h.dailyChange > 0 ? 'text-green-600' : h.dailyChange < 0 ? 'text-red-500' : 'text-slate-400'
@@ -417,16 +458,16 @@ export default function PortfolioBuilder() {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Portfolio today</span>
                   <span className={`font-semibold ${
-                    parseFloat(getPortfolioReturn(holdings, 1)) > 0 ? 'text-green-600' : 'text-red-500'
+                    portfolioReturn1D > 0 ? 'text-green-600' : portfolioReturn1D < 0 ? 'text-red-500' : 'text-slate-500'
                   }`}>
-                    {parseFloat(getPortfolioReturn(holdings, 1)) > 0 ? '+' : ''}{parseFloat(getPortfolioReturn(holdings, 1)).toFixed(2)}%
+                    {portfolioReturn1D > 0 ? '+' : ''}{portfolioReturn1D.toFixed(2)}%
                   </span>
                 </div>
-                {benchmark && (
+                {benchmarkReturn1D !== null && (
                   <div className="flex justify-between text-sm mt-1">
                     <span className="text-slate-500">{benchmark} today</span>
-                    <span className={`font-semibold ${parseFloat(getReturn(benchmark, 1)) > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {parseFloat(getReturn(benchmark, 1)) > 0 ? '+' : ''}{parseFloat(getReturn(benchmark, 1)).toFixed(2)}%
+                    <span className={`font-semibold ${benchmarkReturn1D > 0 ? 'text-green-600' : benchmarkReturn1D < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                      {benchmarkReturn1D > 0 ? '+' : ''}{benchmarkReturn1D.toFixed(2)}%
                     </span>
                   </div>
                 )}

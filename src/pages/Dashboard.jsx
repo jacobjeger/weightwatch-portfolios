@@ -7,12 +7,14 @@ import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import NewPortfolioModal from '../components/NewPortfolioModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { formatDistanceToNow } from 'date-fns';
+import { useMarketData } from '../context/MarketDataContext';
 
 const TIMEFRAME_DAYS = { '1D': 1, '1M': 21, '3M': 63, '1Y': 252 };
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { live, prices, loadTickers } = useMarketData();
 
   const [portfolios, setPortfolios] = useState([]);
   const [selected, setSelected] = useState(new Set());
@@ -25,6 +27,15 @@ export default function Dashboard() {
   }
 
   useEffect(() => { load(); }, [user]);
+
+  // Pre-fetch real quotes for all tickers visible on the dashboard
+  useEffect(() => {
+    if (!live || !portfolios.length) return;
+    const allTickers = [...new Set(
+      portfolios.flatMap((p) => (p.holdings ?? []).map((h) => h.ticker))
+    )];
+    if (allTickers.length) loadTickers(allTickers);
+  }, [live, portfolios, loadTickers]);
 
   function handleCreate(data) {
     const portfolio = savePortfolio({
@@ -80,6 +91,27 @@ export default function Dashboard() {
   }
 
   const days = TIMEFRAME_DAYS[perfTimeframe] ?? 252;
+
+  // Compute portfolio performance for the selected timeframe.
+  // For 1D when live is enabled, use real weighted changePercent from Finnhub.
+  function portfolioPerf(portfolio) {
+    const holdings = portfolio.holdings ?? [];
+    if (!holdings.length) return null;
+    if (live && perfTimeframe === '1D') {
+      let weightedReturn = 0;
+      let coveredWeight  = 0;
+      holdings.forEach((h) => {
+        const cp = prices[h.ticker]?.changePercent;
+        if (cp != null) {
+          weightedReturn += cp * (h.weight_percent / 100);
+          coveredWeight  += h.weight_percent;
+        }
+      });
+      // If we have real data for at least half the weight, use it; else fall back
+      if (coveredWeight >= 50) return weightedReturn;
+    }
+    return parseFloat(getPortfolioReturn(holdings, days));
+  }
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
@@ -147,8 +179,8 @@ export default function Dashboard() {
             {portfolios.map((p) => {
               const status = getPortfolioStatus(p);
               const totalWeight = (p.holdings ?? []).reduce((s, h) => s + (h.weight_percent ?? 0), 0);
-              const ret = parseFloat(getPortfolioReturn(p.holdings, days));
-              const retColor = ret > 0 ? 'text-green-600' : ret < 0 ? 'text-red-500' : 'text-slate-500';
+              const ret = portfolioPerf(p);
+              const retColor = ret == null ? 'text-slate-400' : ret > 0 ? 'text-green-600' : ret < 0 ? 'text-red-500' : 'text-slate-500';
               return (
                 <div
                   key={p.id}
@@ -175,7 +207,7 @@ export default function Dashboard() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <div className={`font-semibold text-sm ${retColor}`}>
-                      {p.holdings?.length > 0 ? `${ret > 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
+                      {ret != null ? `${ret > 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
                     </div>
                     <div className="text-xs text-slate-400">{p.holdings?.length ?? 0} holdings</div>
                   </div>
@@ -211,8 +243,8 @@ export default function Dashboard() {
                   {portfolios.map((p) => {
                     const status = getPortfolioStatus(p);
                     const totalWeight = (p.holdings ?? []).reduce((s, h) => s + (h.weight_percent ?? 0), 0);
-                    const ret = parseFloat(getPortfolioReturn(p.holdings, days));
-                    const retColor = ret > 0 ? 'text-green-600' : ret < 0 ? 'text-red-500' : 'text-slate-500';
+                    const ret = portfolioPerf(p);
+                    const retColor = ret == null ? 'text-slate-400' : ret > 0 ? 'text-green-600' : ret < 0 ? 'text-red-500' : 'text-slate-500';
 
                     return (
                       <tr
@@ -249,7 +281,7 @@ export default function Dashboard() {
                           )}
                         </td>
                         <td className="td">
-                          {p.holdings?.length > 0 ? (
+                          {ret != null ? (
                             <span className={`font-semibold ${retColor}`}>
                               {ret > 0 ? '+' : ''}{ret.toFixed(2)}%
                             </span>

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { MarketDataProvider } from './context/MarketDataContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Nav from './components/Nav';
 import Dashboard from './pages/Dashboard';
@@ -13,6 +14,7 @@ import ResetPassword from './pages/ResetPassword';
 export default function App() {
   return (
     <AuthProvider>
+      <MarketDataProvider>
       <BrowserRouter>
         <div className="min-h-screen flex flex-col">
           <Nav />
@@ -37,6 +39,7 @@ export default function App() {
           </main>
         </div>
       </BrowserRouter>
+      </MarketDataProvider>
     </AuthProvider>
   );
 }
