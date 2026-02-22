@@ -210,6 +210,18 @@ export default function PortfolioBuilder() {
         : parseFloat(getReturn(benchmark, 1)))
     : null;
 
+  // Weighted expense ratio and dividend yield (adjusted for cash allocation)
+  const investedFraction = 1 - cashPercent / 100;
+  const weightedER = holdings.reduce((sum, h) => {
+    const inst = INSTRUMENTS.find((i) => i.ticker === h.ticker);
+    return sum + (h.weight_percent / 100) * (inst?.expense_ratio ?? 0);
+  }, 0) * investedFraction;
+
+  const weightedYield = holdings.reduce((sum, h) => {
+    const inst = INSTRUMENTS.find((i) => i.ticker === h.ticker);
+    return sum + (h.weight_percent / 100) * (inst?.div_yield ?? 0);
+  }, 0) * investedFraction;
+
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
       {/* Top toolbar */}
@@ -549,6 +561,16 @@ export default function PortfolioBuilder() {
                     </span>
                   </div>
                 )}
+                <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-gray-50 rounded p-2">
+                    <p className="text-gray-400 mb-0.5">Wtd. Expense Ratio</p>
+                    <p className="font-semibold text-gray-700">{weightedER.toFixed(3)}%</p>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2">
+                    <p className="text-gray-400 mb-0.5">Wtd. Div. Yield</p>
+                    <p className="font-semibold text-green-600">{weightedYield.toFixed(2)}%</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
