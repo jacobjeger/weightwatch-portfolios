@@ -1,0 +1,197 @@
+import { useState } from 'react';
+import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
+import { BENCHMARKS } from '../lib/mockData';
+import { CheckCircle } from 'lucide-react';
+
+const TIMEFRAMES_ALL = ['1D', '7D', '1M', '3M', '6M', 'YTD', '1Y'];
+const CHART_RANGES = ['1M', '3M', '6M', '1Y', 'Max'];
+const REFRESH_OPTIONS = [
+  { label: '15 seconds', value: 15 },
+  { label: '30 seconds', value: 30 },
+  { label: '60 seconds', value: 60 },
+  { label: '5 minutes',  value: 300 },
+  { label: 'Manual',     value: 0 },
+];
+const LOG_GRANULARITY = [
+  { label: 'Standard — log major actions only', value: 'standard' },
+  { label: 'Verbose — log every weight change',  value: 'verbose' },
+  { label: 'Off — disable activity logging',      value: 'off' },
+];
+
+function SectionCard({ title, children, onSave, saved }) {
+  return (
+    <div className="card p-5">
+      <h2 className="section-title mb-4">{title}</h2>
+      {children}
+      <div className="mt-5 flex justify-end">
+        <button
+          className={saved ? 'btn bg-green-600 text-white' : 'btn-primary'}
+          onClick={onSave}
+        >
+          {saved ? <><CheckCircle className="w-4 h-4" />Saved</> : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function useSaved() {
+  const [saved, setSaved] = useState(false);
+  function flash() { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+  return [saved, flash];
+}
+
+export default function AccountSettings() {
+  const { user } = useAuth();
+  const [settings, setSettings] = useState(() => user ? getSettings(user.id) : {});
+
+  const [savedBenchmark,    flashBenchmark]    = useSaved();
+  const [savedTimeframes,   flashTimeframes]   = useSaved();
+  const [savedChart,        flashChart]        = useSaved();
+  const [savedSnapshot,     flashSnapshot]     = useSaved();
+  const [savedBehavior,     flashBehavior]     = useSaved();
+  const [savedLogging,      flashLogging]      = useSaved();
+
+  function set(key, value) {
+    setSettings((s) => ({ ...s, [key]: value }));
+  }
+
+  function persist(flash) {
+    if (user) saveSettings(user.id, settings);
+    flash();
+  }
+
+  function toggleTimeframe(tf) {
+    const hidden = settings.hidden_timeframes ?? [];
+    set('hidden_timeframes',
+      hidden.includes(tf) ? hidden.filter((t) => t !== tf) : [...hidden, tf]
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+      <h1 className="text-2xl font-bold text-slate-900">Account Settings</h1>
+
+      {/* Benchmark Defaults */}
+      <SectionCard title="Benchmark Defaults" onSave={() => persist(flashBenchmark)} saved={savedBenchmark}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Default Primary Benchmark</label>
+            <select className="input" value={settings.primary_benchmark ?? ''} onChange={(e) => set('primary_benchmark', e.target.value)}>
+              <option value="">— None —</option>
+              {BENCHMARKS.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="inherit"
+              className="rounded border-slate-300 text-blue-600"
+              checked={settings.inherit_defaults ?? true}
+              onChange={(e) => set('inherit_defaults', e.target.checked)}
+            />
+            <label htmlFor="inherit" className="text-sm text-slate-700">New portfolios inherit account benchmark defaults</label>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Performance Timeframes */}
+      <SectionCard title="Performance Timeframes" onSave={() => persist(flashTimeframes)} saved={savedTimeframes}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Default Headline Timeframe</label>
+            <select className="input" value={settings.default_timeframe ?? '1Y'} onChange={(e) => set('default_timeframe', e.target.value)}>
+              {TIMEFRAMES_ALL.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
+            </select>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-700 mb-2">Hide Timeframes</p>
+            <div className="flex flex-wrap gap-2">
+              {TIMEFRAMES_ALL.map((tf) => {
+                const hidden = (settings.hidden_timeframes ?? []).includes(tf);
+                return (
+                  <button
+                    key={tf}
+                    onClick={() => toggleTimeframe(tf)}
+                    className={`px-3 py-1 rounded text-sm font-medium border transition-colors ${
+                      hidden
+                        ? 'bg-red-50 border-red-300 text-red-700 line-through'
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-400 mt-2">Click a timeframe to hide it from performance tables.</p>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Chart Display */}
+      <SectionCard title="Chart Display" onSave={() => persist(flashChart)} saved={savedChart}>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Default Chart Range</label>
+          <select className="input" value={settings.default_chart_range ?? '1Y'} onChange={(e) => set('default_chart_range', e.target.value)}>
+            {CHART_RANGES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+      </SectionCard>
+
+      {/* Real-Time Snapshot */}
+      <SectionCard title="Live Snapshot" onSave={() => persist(flashSnapshot)} saved={savedSnapshot}>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Refresh Interval</label>
+          <select
+            className="input"
+            value={settings.snapshot_refresh_interval ?? 60}
+            onChange={(e) => set('snapshot_refresh_interval', parseInt(e.target.value))}
+          >
+            {REFRESH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        </div>
+      </SectionCard>
+
+      {/* Portfolio Behavior */}
+      <SectionCard title="Portfolio Behavior" onSave={() => persist(flashBehavior)} saved={savedBehavior}>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="confirmDeletes"
+              className="rounded border-slate-300 text-blue-600"
+              checked={settings.confirm_deletes ?? true}
+              onChange={(e) => set('confirm_deletes', e.target.checked)}
+            />
+            <label htmlFor="confirmDeletes" className="text-sm text-slate-700">
+              Show confirmation dialog before deleting portfolios
+            </label>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Activity Logging */}
+      <SectionCard title="Activity Logging" onSave={() => persist(flashLogging)} saved={savedLogging}>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Log Granularity</label>
+          <div className="space-y-2">
+            {LOG_GRANULARITY.map((opt) => (
+              <label key={opt.value} className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="granularity"
+                  value={opt.value}
+                  className="text-blue-600"
+                  checked={(settings.activity_log_granularity ?? 'standard') === opt.value}
+                  onChange={() => set('activity_log_granularity', opt.value)}
+                />
+                <span className="text-sm text-slate-700">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
