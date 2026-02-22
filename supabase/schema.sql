@@ -146,3 +146,21 @@ create table if not exists public.activity_log (
 alter table public.activity_log enable row level security;
 create policy "Users can manage own activity log" on public.activity_log
   for all using (auth.uid() = user_id);
+
+-- ────────────────────────────────────────────────────────────
+-- User Portfolios (JSONB blob for cross-browser sync)
+-- This table stores the full portfolios array per user as a
+-- single JSONB document, mirroring the localStorage format.
+-- This enables cross-browser sync without schema normalization.
+-- ────────────────────────────────────────────────────────────
+create table if not exists public.user_portfolios (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  data       jsonb not null default '[]',
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_portfolios enable row level security;
+create policy "Users manage own portfolios"
+  on public.user_portfolios for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

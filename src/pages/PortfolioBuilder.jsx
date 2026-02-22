@@ -262,7 +262,7 @@ export default function PortfolioBuilder() {
       action_type: 'Delete',
       change_summary: `Deleted "${name}"`,
     });
-    deletePortfolios([portfolioId]);
+    deletePortfolios([portfolioId], user.id);
     navigate('/');
   }
 
@@ -664,30 +664,48 @@ export default function PortfolioBuilder() {
 
           {/* Performance summary */}
           <div className="card p-5">
-            <h2 className="section-title mb-4">Performance Summary</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-              {TIMEFRAMES.map(({ label, days }) => {
-                const portfolioRet = parseFloat(getPortfolioReturn(holdings, days));
-                const benchRet = benchmark ? parseFloat(getReturn(benchmark, days)) : null;
-                const outperf = benchRet !== null ? portfolioRet - benchRet : null;
-                return (
-                  <div key={label} className="bg-slate-50 rounded p-3 text-center">
-                    <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
-                    <div className={`text-sm font-bold ${portfolioRet > 0 ? 'text-green-600' : portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-                      {holdings.length > 0 ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
-                    </div>
-                    {benchRet !== null && (
-                      <div className="text-xs text-slate-400 mt-0.5">{benchmark}: {benchRet > 0 ? '+' : ''}{benchRet.toFixed(2)}%</div>
-                    )}
-                    {outperf !== null && holdings.length > 0 && (
-                      <div className={`text-xs mt-1 font-medium ${outperf > 0 ? 'text-green-600' : outperf < 0 ? 'text-red-500' : 'text-slate-400'}`}>
-                        {outperf > 0 ? '▲' : outperf < 0 ? '▼' : '='} {Math.abs(outperf).toFixed(2)}%
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="section-title">Performance Summary</h2>
+              <span className="text-xs text-slate-400 italic">
+                {createdAt ? 'Real since start date · simulated before' : 'All figures backtested / simulated'}
+              </span>
             </div>
+            {(() => {
+              // Portfolio age in approximate trading days (252/year)
+              const portfolioAgeTradingDays = createdAt
+                ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000 * (252 / 365))
+                : 0;
+              return (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                  {TIMEFRAMES.map(({ label, days }) => {
+                    const portfolioRet = parseFloat(getPortfolioReturn(holdings, days));
+                    const benchRet = benchmark ? parseFloat(getReturn(benchmark, days)) : null;
+                    const outperf = benchRet !== null ? portfolioRet - benchRet : null;
+                    // Backtested = portfolio hasn't existed long enough to have real data for this window
+                    const isBacktested = !createdAt || portfolioAgeTradingDays < days;
+                    return (
+                      <div key={label} className={`rounded p-3 text-center ${isBacktested ? 'bg-slate-50/60' : 'bg-slate-50'}`}>
+                        <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
+                        <div className={`text-sm font-bold ${portfolioRet > 0 ? 'text-green-600' : portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                          {holdings.length > 0 ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
+                        </div>
+                        {benchRet !== null && (
+                          <div className="text-xs text-slate-400 mt-0.5">{benchmark}: {benchRet > 0 ? '+' : ''}{benchRet.toFixed(2)}%</div>
+                        )}
+                        {outperf !== null && holdings.length > 0 && (
+                          <div className={`text-xs mt-1 font-medium ${outperf > 0 ? 'text-green-600' : outperf < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                            {outperf > 0 ? '▲' : outperf < 0 ? '▼' : '='} {Math.abs(outperf).toFixed(2)}%
+                          </div>
+                        )}
+                        {isBacktested && holdings.length > 0 && (
+                          <div className="text-xs text-slate-400 italic mt-1">Backtested</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Weight History — collapsible log of all weight changes, rebalances, and additions */}

@@ -70,11 +70,15 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (isSupabaseConfigured) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) syncFromSupabase(u.id).finally(() => setLoading(false));
+        else setLoading(false);
       });
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setUser(session?.user ?? null);
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) syncFromSupabase(u.id);
       });
       return () => subscription.unsubscribe();
     } else {
@@ -138,7 +142,32 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-// ─── Portfolio data helpers (localStorage) ────────────────────────────────────
+// ─── Supabase portfolio sync ──────────────────────────────────────────────────
+// Fetches the user's portfolios from Supabase and writes them into localStorage.
+// Called on login/session restore so the local cache is always up-to-date.
+export async function syncFromSupabase(userId) {
+  if (!isSupabaseConfigured || !userId) return;
+  const { data, error } = await supabase
+    .from('user_portfolios')
+    .select('data')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!error && data?.data) {
+    // Merge: Supabase is the source of truth; overwrite local cache
+    lsSet(LS.portfolios, data.data);
+  }
+}
+
+// Pushes the full portfolios array for a user to Supabase (fire-and-forget).
+function pushToSupabase(userId, all) {
+  if (!isSupabaseConfigured || !userId) return;
+  supabase
+    .from('user_portfolios')
+    .upsert({ user_id: userId, data: all, updated_at: new Date().toISOString() })
+    .then(({ error }) => { if (error) console.warn('[Sync] Supabase write error:', error.message); });
+}
+
+// ─── Portfolio data helpers ───────────────────────────────────────────────────
 export function getPortfolios(userId) {
   return lsGet(LS.portfolios, []).filter((p) => p.owner === userId);
 }
@@ -153,12 +182,14 @@ export function savePortfolio(portfolio) {
     all.push({ ...updated, created_at: updated.last_updated_at });
   }
   lsSet(LS.portfolios, all);
+  pushToSupabase(portfolio.owner, all);
   return updated;
 }
 
-export function deletePortfolios(ids) {
-  const all = lsGet(LS.portfolios, []);
-  lsSet(LS.portfolios, all.filter((p) => !ids.includes(p.id)));
+export function deletePortfolios(ids, userId) {
+  const all = lsGet(LS.portfolios, []).filter((p) => !ids.includes(p.id));
+  lsSet(LS.portfolios, all);
+  if (userId) pushToSupabase(userId, all);
 }
 
 // ─── Activity log helpers ─────────────────────────────────────────────────────
