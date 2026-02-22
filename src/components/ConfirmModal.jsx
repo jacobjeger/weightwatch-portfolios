@@ -14,7 +14,7 @@ export default function ConfirmModal({ title, message, confirmLabel = 'Delete', 
           </div>
         </div>
         <div className="mt-6 flex justify-end gap-3">
-          <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className="btn-secondary" onClick={onCancel} autoFocus>Cancel</button>
           <button className="btn-danger" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>

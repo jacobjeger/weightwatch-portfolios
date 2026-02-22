@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Copy, Save, AlertTriangle, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity } from '../context/AuthContext';
 import { INSTRUMENTS, BENCHMARKS, getReturn, getPortfolioReturn } from '../lib/mockData';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
+import { useToast } from '../context/ToastContext';
 
 const TIMEFRAMES = [
   { label: '1D', days: 1 },
@@ -21,6 +22,7 @@ export default function PortfolioBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
 
   const isNew = id === 'new';
 
@@ -32,7 +34,6 @@ export default function PortfolioBuilder() {
   const [portfolioId, setPortfolioId] = useState(isNew ? crypto.randomUUID() : id);
 
   // UI state
-  const [saved, setSaved]           = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [saving, setSaving]         = useState(false);
   const [weightErrors, setWeightErrors] = useState({});
@@ -70,12 +71,10 @@ export default function PortfolioBuilder() {
         weight_percent: 0,
       },
     ]);
-    setSaved(false);
   }
 
   function removeHolding(ticker) {
     setHoldings((prev) => prev.filter((h) => h.ticker !== ticker));
-    setSaved(false);
   }
 
   function updateWeight(ticker, raw) {
@@ -90,7 +89,6 @@ export default function PortfolioBuilder() {
     } else {
       setWeightErrors((e) => { const n = { ...e }; delete n[ticker]; return n; });
     }
-    setSaved(false);
   }
 
   function normalize() {
@@ -102,7 +100,6 @@ export default function PortfolioBuilder() {
       }))
     );
     setWeightErrors({});
-    setSaved(false);
   }
 
   // ── Save ────────────────────────────────────────────────────────────────────
@@ -126,7 +123,7 @@ export default function PortfolioBuilder() {
       change_summary: `${isNew ? 'Created' : 'Updated'} "${portfolio.name}" (${holdings.length} holdings, ${totalWeight.toFixed(1)}% allocated)`,
     });
     setSaving(false);
-    setSaved(true);
+    toast.success('Portfolio saved');
     if (isNew) navigate(`/portfolio/${portfolioId}`, { replace: true });
   }
 
@@ -179,7 +176,7 @@ export default function PortfolioBuilder() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-slate-900">Portfolio Builder</h1>
-          <StatusBadge status={status} />
+          <StatusBadge status={status} totalWeight={totalWeight} />
         </div>
         <div className="flex items-center gap-2">
           <button className="btn-ghost" onClick={() => navigate('/')}>← Dashboard</button>
@@ -190,11 +187,11 @@ export default function PortfolioBuilder() {
             <Trash2 className="w-4 h-4" />Delete
           </button>
           <button
-            className={saved ? 'btn bg-green-600 text-white' : 'btn-primary'}
+            className="btn-primary"
             onClick={handleSave}
             disabled={saving}
           >
-            {saved ? <><CheckCircle className="w-4 h-4" />Saved</> : <><Save className="w-4 h-4" />Save</>}
+            <Save className="w-4 h-4" />{saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
 import { BENCHMARKS } from '../lib/mockData';
-import { CheckCircle } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const TIMEFRAMES_ALL = ['1D', '7D', '1M', '3M', '6M', 'YTD', '1Y'];
 const CHART_RANGES = ['1M', '3M', '6M', '1Y', 'Max'];
@@ -18,47 +18,30 @@ const LOG_GRANULARITY = [
   { label: 'Off — disable activity logging',      value: 'off' },
 ];
 
-function SectionCard({ title, children, onSave, saved }) {
+function SectionCard({ title, children, onSave }) {
   return (
     <div className="card p-5">
       <h2 className="section-title mb-4">{title}</h2>
       {children}
       <div className="mt-5 flex justify-end">
-        <button
-          className={saved ? 'btn bg-green-600 text-white' : 'btn-primary'}
-          onClick={onSave}
-        >
-          {saved ? <><CheckCircle className="w-4 h-4" />Saved</> : 'Save'}
-        </button>
+        <button className="btn-primary" onClick={onSave}>Save</button>
       </div>
     </div>
   );
 }
 
-function useSaved() {
-  const [saved, setSaved] = useState(false);
-  function flash() { setSaved(true); setTimeout(() => setSaved(false), 2000); }
-  return [saved, flash];
-}
-
 export default function AccountSettings() {
   const { user } = useAuth();
+  const toast = useToast();
   const [settings, setSettings] = useState(() => user ? getSettings(user.id) : {});
-
-  const [savedBenchmark,    flashBenchmark]    = useSaved();
-  const [savedTimeframes,   flashTimeframes]   = useSaved();
-  const [savedChart,        flashChart]        = useSaved();
-  const [savedSnapshot,     flashSnapshot]     = useSaved();
-  const [savedBehavior,     flashBehavior]     = useSaved();
-  const [savedLogging,      flashLogging]      = useSaved();
 
   function set(key, value) {
     setSettings((s) => ({ ...s, [key]: value }));
   }
 
-  function persist(flash) {
+  function persist(label) {
     if (user) saveSettings(user.id, settings);
-    flash();
+    toast.success(`${label} saved`);
   }
 
   function toggleTimeframe(tf) {
@@ -73,7 +56,7 @@ export default function AccountSettings() {
       <h1 className="text-2xl font-bold text-slate-900">Account Settings</h1>
 
       {/* Benchmark Defaults */}
-      <SectionCard title="Benchmark Defaults" onSave={() => persist(flashBenchmark)} saved={savedBenchmark}>
+      <SectionCard title="Benchmark Defaults" onSave={() => persist('Benchmark defaults')}>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Default Primary Benchmark</label>
@@ -96,7 +79,7 @@ export default function AccountSettings() {
       </SectionCard>
 
       {/* Performance Timeframes */}
-      <SectionCard title="Performance Timeframes" onSave={() => persist(flashTimeframes)} saved={savedTimeframes}>
+      <SectionCard title="Performance Timeframes" onSave={() => persist('Timeframe settings')}>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Default Headline Timeframe</label>
@@ -130,7 +113,7 @@ export default function AccountSettings() {
       </SectionCard>
 
       {/* Chart Display */}
-      <SectionCard title="Chart Display" onSave={() => persist(flashChart)} saved={savedChart}>
+      <SectionCard title="Chart Display" onSave={() => persist('Chart settings')}>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Default Chart Range</label>
           <select className="input" value={settings.default_chart_range ?? '1Y'} onChange={(e) => set('default_chart_range', e.target.value)}>
@@ -140,7 +123,7 @@ export default function AccountSettings() {
       </SectionCard>
 
       {/* Real-Time Snapshot */}
-      <SectionCard title="Live Snapshot" onSave={() => persist(flashSnapshot)} saved={savedSnapshot}>
+      <SectionCard title="Live Snapshot" onSave={() => persist('Snapshot settings')}>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Refresh Interval</label>
           <select
@@ -154,7 +137,7 @@ export default function AccountSettings() {
       </SectionCard>
 
       {/* Portfolio Behavior */}
-      <SectionCard title="Portfolio Behavior" onSave={() => persist(flashBehavior)} saved={savedBehavior}>
+      <SectionCard title="Portfolio Behavior" onSave={() => persist('Behavior settings')}>
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <input
@@ -172,7 +155,7 @@ export default function AccountSettings() {
       </SectionCard>
 
       {/* Activity Logging */}
-      <SectionCard title="Activity Logging" onSave={() => persist(flashLogging)} saved={savedLogging}>
+      <SectionCard title="Activity Logging" onSave={() => persist('Logging settings')}>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Log Granularity</label>
           <div className="space-y-2">

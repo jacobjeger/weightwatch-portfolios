@@ -129,108 +129,160 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Table */}
+      {/* Table / Cards */}
       {portfolios.length === 0 ? (
         <div className="card p-16 text-center">
           <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500 mb-4">No portfolios yet. Create your first one to get started.</p>
+          <p className="text-slate-500 mb-2">No portfolios yet.</p>
+          <p className="text-sm text-slate-400 mb-6">Build your first portfolio to start tracking performance.</p>
           <button className="btn-primary" onClick={() => setShowNew(true)}>
             <Plus className="w-4 h-4" />
-            New Portfolio
+            Build your first portfolio →
           </button>
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="th w-10">
+        <>
+          {/* Mobile card list — hidden on sm+ */}
+          <div className="sm:hidden space-y-3">
+            {portfolios.map((p) => {
+              const status = getPortfolioStatus(p);
+              const totalWeight = (p.holdings ?? []).reduce((s, h) => s + (h.weight_percent ?? 0), 0);
+              const ret = parseFloat(getPortfolioReturn(p.holdings, days));
+              const retColor = ret > 0 ? 'text-green-600' : ret < 0 ? 'text-red-500' : 'text-slate-500';
+              return (
+                <div
+                  key={p.id}
+                  className="card p-4 flex items-center justify-between gap-3 cursor-pointer active:bg-slate-50"
+                  onClick={() => navigate(`/portfolio/${p.id}`)}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300"
-                      checked={selected.size === portfolios.length && portfolios.length > 0}
-                      onChange={toggleAll}
+                      className="rounded border-slate-300 flex-shrink-0"
+                      checked={selected.has(p.id)}
+                      onChange={(e) => { e.stopPropagation(); toggleSelect(p.id); }}
+                      onClick={(e) => e.stopPropagation()}
                     />
-                  </th>
-                  <th className="th">Portfolio Name</th>
-                  <th className="th">Primary Benchmark</th>
-                  <th className="th">Performance ({perfTimeframe})</th>
-                  <th className="th">Holdings</th>
-                  <th className="th">Last Updated</th>
-                  <th className="th">Status</th>
-                  <th className="th w-10" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {portfolios.map((p) => {
-                  const status = getPortfolioStatus(p);
-                  const ret = parseFloat(getPortfolioReturn(p.holdings, days));
-                  const retColor = ret > 0 ? 'text-green-600' : ret < 0 ? 'text-red-500' : 'text-slate-500';
-
-                  return (
-                    <tr
-                      key={p.id}
-                      className="hover:bg-slate-50 cursor-pointer"
-                      onClick={() => navigate(`/portfolio/${p.id}`)}
-                    >
-                      <td className="td" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          className="rounded border-slate-300"
-                          checked={selected.has(p.id)}
-                          onChange={() => toggleSelect(p.id)}
-                        />
-                      </td>
-                      <td className="td">
-                        <div className="font-semibold text-slate-900">{p.name}</div>
-                        {p.description && (
-                          <div className="text-xs text-slate-400 mt-0.5 max-w-xs truncate">{p.description}</div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 truncate">{p.name}</div>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <StatusBadge status={status} totalWeight={totalWeight} />
+                        {p.primary_benchmark && (
+                          <span className="text-xs text-slate-400">{p.primary_benchmark}</span>
                         )}
-                      </td>
-                      <td className="td">
-                        {p.primary_benchmark ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-semibold">
-                            {p.primary_benchmark}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="td">
-                        {p.holdings?.length > 0 ? (
-                          <span className={`font-semibold ${retColor}`}>
-                            {ret > 0 ? '+' : ''}{ret.toFixed(2)}%
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">No holdings</span>
-                        )}
-                      </td>
-                      <td className="td">
-                        <span className="text-slate-600">{p.holdings?.length ?? 0}</span>
-                      </td>
-                      <td className="td text-slate-500 text-xs">
-                        {formatDistanceToNow(new Date(p.last_updated_at), { addSuffix: true })}
-                      </td>
-                      <td className="td">
-                        <StatusBadge status={status} />
-                      </td>
-                      <td className="td" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className="text-slate-400 hover:text-blue-600 p-1 rounded"
-                          onClick={() => navigate(`/portfolio/${p.id}`)}
-                          title="Open"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className={`font-semibold text-sm ${retColor}`}>
+                      {p.holdings?.length > 0 ? `${ret > 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
+                    </div>
+                    <div className="text-xs text-slate-400">{p.holdings?.length ?? 0} holdings</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+
+          {/* Desktop table — hidden on mobile */}
+          <div className="card overflow-hidden hidden sm:block">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="th w-10">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300"
+                        checked={selected.size === portfolios.length && portfolios.length > 0}
+                        onChange={toggleAll}
+                      />
+                    </th>
+                    <th className="th">Portfolio Name</th>
+                    <th className="th">Primary Benchmark</th>
+                    <th className="th">Performance ({perfTimeframe})</th>
+                    <th className="th">Holdings</th>
+                    <th className="th">Last Updated</th>
+                    <th className="th">Status</th>
+                    <th className="th w-10" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {portfolios.map((p) => {
+                    const status = getPortfolioStatus(p);
+                    const totalWeight = (p.holdings ?? []).reduce((s, h) => s + (h.weight_percent ?? 0), 0);
+                    const ret = parseFloat(getPortfolioReturn(p.holdings, days));
+                    const retColor = ret > 0 ? 'text-green-600' : ret < 0 ? 'text-red-500' : 'text-slate-500';
+
+                    return (
+                      <tr
+                        key={p.id}
+                        className="hover:bg-slate-50 cursor-pointer"
+                        onClick={() => navigate(`/portfolio/${p.id}`)}
+                      >
+                        <td className="td" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300"
+                            checked={selected.has(p.id)}
+                            onChange={() => toggleSelect(p.id)}
+                          />
+                        </td>
+                        <td className="td">
+                          <div className="font-semibold text-slate-900">{p.name}</div>
+                          {p.description && (
+                            <div
+                              className="text-xs text-slate-400 mt-0.5 max-w-xs truncate"
+                              title={p.description}
+                            >
+                              {p.description}
+                            </div>
+                          )}
+                        </td>
+                        <td className="td">
+                          {p.primary_benchmark ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-semibold">
+                              {p.primary_benchmark}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="td">
+                          {p.holdings?.length > 0 ? (
+                            <span className={`font-semibold ${retColor}`}>
+                              {ret > 0 ? '+' : ''}{ret.toFixed(2)}%
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">No holdings</span>
+                          )}
+                        </td>
+                        <td className="td">
+                          <span className="text-slate-600">{p.holdings?.length ?? 0}</span>
+                        </td>
+                        <td className="td text-slate-500 text-xs">
+                          {formatDistanceToNow(new Date(p.last_updated_at), { addSuffix: true })}
+                        </td>
+                        <td className="td">
+                          <StatusBadge status={status} totalWeight={totalWeight} />
+                        </td>
+                        <td className="td" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="text-slate-400 hover:text-blue-600 p-1 rounded"
+                            onClick={() => navigate(`/portfolio/${p.id}`)}
+                            title="Open"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Modals */}

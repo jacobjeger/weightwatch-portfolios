@@ -14,11 +14,17 @@ export function getPortfolioStatus(portfolio) {
   return allocated ? 'Fully Allocated' : 'Not Fully Allocated';
 }
 
-export default function StatusBadge({ status }) {
+export default function StatusBadge({ status, totalWeight }) {
   const cls = VARIANTS[status] ?? 'bg-slate-100 text-slate-600';
+
+  let label = status;
+  if (status === 'Not Fully Allocated' && totalWeight !== undefined) {
+    label = `${Math.round(totalWeight)}% allocated`;
+  }
+
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${cls}`}>
-      {status}
+      {label}
     </span>
   );
 }
