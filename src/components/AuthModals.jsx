@@ -86,6 +86,7 @@ export function SignUpModal({ onClose, onSwitchToLogin }) {
   const [confirm, setConfirm] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
   function validate() {
     const errs = {};
@@ -103,12 +104,27 @@ export function SignUpModal({ onClose, onSwitchToLogin }) {
     setLoading(true);
     try {
       await signUp(email, password);
-      onClose();
+      setSent(true);
     } catch (err) {
       setErrors({ general: err.message });
     } finally {
       setLoading(false);
     }
+  }
+
+  if (sent) {
+    return (
+      <ModalShell title="Check your email" onClose={onClose}>
+        <div className="space-y-4 text-center">
+          <p className="text-slate-600 text-sm">
+            We sent a confirmation link to <span className="font-medium text-slate-900">{email}</span>.
+            Click it to activate your account.
+          </p>
+          <p className="text-xs text-slate-400">Don't see it? Check your spam folder.</p>
+          <button className="btn-primary w-full justify-center" onClick={onClose}>Done</button>
+        </div>
+      </ModalShell>
+    );
   }
 
   return (
