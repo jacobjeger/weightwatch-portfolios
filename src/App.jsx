@@ -11,6 +11,7 @@ import AccountSettings from './pages/AccountSettings';
 import HelpTour from './pages/HelpTour';
 import ResetPassword from './pages/ResetPassword';
 import ShareView from './pages/ShareView';
+import InviteView from './pages/InviteView';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
               {/* Public */}
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/share/:token" element={<ShareView />} />
+              <Route path="/invite/:token" element={<InviteView />} />
 
               {/* Protected */}
               <Route element={<ProtectedRoute />}>

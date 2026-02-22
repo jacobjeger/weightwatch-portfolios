@@ -10,6 +10,8 @@ const LS = {
   activity: 'wwp_activity',
   settings: 'wwp_settings',
   shares: 'wwp_shares',
+  invites: 'wwp_invites',
+  clients: 'wwp_clients', // { [userId]: { advisor_id, portfolio_ids } }
 };
 
 // ─── Mock helpers ─────────────────────────────────────────────────────────────
@@ -66,6 +68,17 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState('advisor'); // 'advisor' | 'client'
+
+  // Detect role when user changes
+  useEffect(() => {
+    if (user) {
+      const clients = lsGet(LS.clients, {});
+      setRole(clients[user.id] ? 'client' : 'advisor');
+    } else {
+      setRole('advisor');
+    }
+  }, [user]);
 
   // Initialise session
   useEffect(() => {
@@ -145,7 +158,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, resetPassword, isMockMode: !isSupabaseConfigured }}>
+    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, isMockMode: !isSupabaseConfigured }}>
       {children}
     </AuthContext.Provider>
   );
@@ -278,4 +291,54 @@ export async function getSharedPortfolio(token) {
     const shares = lsGet(LS.shares, {});
     return shares[token] ?? null;
   }
+}
+
+// ─── Invite helpers ──────────────────────────────────────────────────────────
+// Creates an invite token that grants a client read-only access to portfolios.
+export async function inviteClient(advisorId, clientEmail, portfolioIds, snapshot) {
+  const token = crypto.randomUUID().replace(/-/g, '');
+  const invite = {
+    token,
+    advisor_id: advisorId,
+    client_email: clientEmail,
+    portfolio_ids: portfolioIds,
+    portfolio_snapshot: snapshot,
+    created_at: new Date().toISOString(),
+  };
+  if (isSupabaseConfigured) {
+    const { error } = await supabase.from('invites').insert(invite);
+    if (error) throw error;
+  } else {
+    const invites = lsGet(LS.invites, {});
+    invites[token] = invite;
+    lsSet(LS.invites, invites);
+  }
+  return token;
+}
+
+// Retrieves an invite by token.
+export async function getInvite(token) {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from('invites')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data;
+  } else {
+    const invites = lsGet(LS.invites, {});
+    return invites[token] ?? null;
+  }
+}
+
+// Accepts an invite: stores client relationship so role detection picks it up.
+export function acceptInvite(userId, invite) {
+  const clients = lsGet(LS.clients, {});
+  clients[userId] = {
+    advisor_id: invite.advisor_id,
+    portfolio_ids: invite.portfolio_ids,
+    accepted_at: new Date().toISOString(),
+  };
+  lsSet(LS.clients, clients);
 }

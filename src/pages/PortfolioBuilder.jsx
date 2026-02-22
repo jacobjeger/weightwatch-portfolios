@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken } from '../context/AuthContext';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn } from '../lib/mockData';
 import TickerSearch from '../components/TickerSearch';
@@ -23,7 +23,7 @@ const TIMEFRAMES = [
 export default function PortfolioBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const toast = useToast();
   const { live, prices, loadTickers, subscribeTickers } = useMarketData();
 
@@ -43,6 +43,11 @@ export default function PortfolioBuilder() {
   const [historyOpen, setHistoryOpen]     = useState(false);   // history panel toggle
   const [pieOpen, setPieOpen]             = useState(true);    // allocation wheel toggle
   const [shareUrl, setShareUrl]           = useState(null);    // generated share link
+  const [erOpen, setErOpen]               = useState(false);   // ER breakdown toggle
+  const [yieldOpen, setYieldOpen]         = useState(false);   // yield breakdown toggle
+  const [showInvite, setShowInvite]       = useState(false);   // invite client modal
+  const [inviteEmail, setInviteEmail]     = useState('');
+  const [inviteUrl, setInviteUrl]         = useState(null);
 
   // UI state
   const [showDelete, setShowDelete]         = useState(false);
@@ -337,6 +342,24 @@ export default function PortfolioBuilder() {
     }
   }
 
+  // ── Invite Client ────────────────────────────────────────────────────────────
+  async function handleInvite() {
+    if (!inviteEmail.trim() || !portfolioId || isNew) return;
+    const snap = { id: portfolioId, name, description,
+      primary_benchmark: benchmark, holdings,
+      starting_value: startingValue, created_at: createdAt };
+    try {
+      const token = await inviteClient(user.id, inviteEmail.trim(), [portfolioId], snap);
+      const url = `${window.location.origin}/invite/${token}`;
+      setInviteUrl(url);
+      navigator.clipboard?.writeText(url);
+      toast.success('Invite link copied to clipboard!');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to create invite link');
+    }
+  }
+
   // ── Live snapshot daily moves ────────────────────────────────────────────────
   // Uses real Finnhub prices when configured, falls back to mock data
   const topHoldings = [...holdings]
@@ -391,6 +414,11 @@ export default function PortfolioBuilder() {
           <button className="btn-secondary flex items-center gap-1.5" onClick={handleShare} disabled={isNew}>
             <Share2 className="w-4 h-4" />Share
           </button>
+          {role !== 'client' && (
+            <button className="btn-secondary flex items-center gap-1.5" onClick={() => { setShowInvite(true); setInviteUrl(null); setInviteEmail(''); }} disabled={isNew}>
+              <Plus className="w-4 h-4" />Invite Client
+            </button>
+          )}
           <button className="btn-secondary" onClick={handleDuplicate} disabled={isNew}>
             <Copy className="w-4 h-4" />Duplicate
           </button>
@@ -942,22 +970,106 @@ export default function PortfolioBuilder() {
                     ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                   </span>
                 </div>
-                {benchmarkReturn1D !== null && (
-                  <div className="flex justify-between text-sm mt-1">
-                    <span className="text-slate-500">{benchmark} today</span>
-                    <span className={`font-semibold ${benchmarkReturn1D > 0 ? 'text-green-600' : benchmarkReturn1D < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-                      {benchmarkReturn1D > 0 ? '+' : ''}{benchmarkReturn1D.toFixed(2)}%
-                    </span>
+                {benchmark && benchmarkReturn1D !== null && (
+                  <div className="mt-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">{benchmark} today</span>
+                      <span className={`font-semibold ${benchmarkReturn1D > 0 ? 'text-green-600' : benchmarkReturn1D < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                        {benchmarkReturn1D > 0 ? '+' : ''}{benchmarkReturn1D.toFixed(2)}%
+                      </span>
+                    </div>
+                    {live && prices[benchmark]?.price != null && (
+                      <div className="flex justify-between text-xs text-slate-400 mt-0.5">
+                        <span>Current / Prev Close</span>
+                        <span className="font-mono">
+                          ${prices[benchmark].price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {prices[benchmark]?.prevClose != null &&
+                            ` / $${prices[benchmark].prevClose.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
-                <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-gray-50 rounded p-2">
-                    <p className="text-gray-400 mb-0.5 cursor-help" title="Weighted Expense Ratio: annual cost drag across all holdings, weighted by allocation">Wtd. Expense Ratio</p>
-                    <p className="font-semibold text-gray-700">{weightedER.toFixed(3)}%</p>
+                {/* Expandable ER + Yield breakdown cards */}
+                <div className="mt-3 pt-3 border-t border-gray-100 space-y-2 text-xs">
+                  {/* Expense Ratio card */}
+                  <div className="bg-gray-50 rounded p-2 cursor-pointer select-none" onClick={() => setErOpen((o) => !o)}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-gray-400">Wtd. Expense Ratio</p>
+                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${erOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    <p className="font-semibold text-gray-700 mt-0.5">{weightedER.toFixed(3)}%</p>
+                    {erOpen && (() => {
+                      const rows = holdings.map((h) => {
+                        const inst = INSTRUMENTS.find((i) => i.ticker === h.ticker);
+                        const rate = inst?.expense_ratio ?? 0;
+                        return { ticker: h.ticker, weight: h.weight_percent, rate,
+                                 contribution: (h.weight_percent / 100) * rate * investedFraction };
+                      }).filter((r) => r.rate > 0);
+                      if (!rows.length) return <p className="text-gray-400 italic mt-2">All holdings have 0% ER</p>;
+                      return (
+                        <table className="w-full mt-2 border-t border-gray-200">
+                          <thead>
+                            <tr className="text-gray-400">
+                              <td className="py-1">Ticker</td>
+                              <td className="py-1 text-right">Wt.</td>
+                              <td className="py-1 text-right">ER</td>
+                              <td className="py-1 text-right">Contrib.</td>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((r) => (
+                              <tr key={r.ticker} className="border-t border-gray-100">
+                                <td className="py-1 font-mono font-semibold text-gray-700">{r.ticker}</td>
+                                <td className="py-1 text-right text-gray-500">{r.weight.toFixed(1)}%</td>
+                                <td className="py-1 text-right text-gray-500">{r.rate.toFixed(3)}%</td>
+                                <td className="py-1 text-right font-semibold text-gray-700">{r.contribution.toFixed(4)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      );
+                    })()}
                   </div>
-                  <div className="bg-gray-50 rounded p-2">
-                    <p className="text-gray-400 mb-0.5 cursor-help" title="Weighted Dividend Yield: trailing 12-month income, weighted by allocation">Wtd. Div. Yield</p>
-                    <p className="font-semibold text-green-600">{weightedYield.toFixed(2)}%</p>
+
+                  {/* Dividend Yield card */}
+                  <div className="bg-gray-50 rounded p-2 cursor-pointer select-none" onClick={() => setYieldOpen((o) => !o)}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-gray-400">Wtd. Div. Yield</p>
+                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${yieldOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    <p className="font-semibold text-green-600 mt-0.5">{weightedYield.toFixed(2)}%</p>
+                    {yieldOpen && (() => {
+                      const rows = holdings.map((h) => {
+                        const inst = INSTRUMENTS.find((i) => i.ticker === h.ticker);
+                        const rate = inst?.div_yield ?? 0;
+                        return { ticker: h.ticker, weight: h.weight_percent, rate,
+                                 contribution: (h.weight_percent / 100) * rate * investedFraction };
+                      }).filter((r) => r.rate > 0);
+                      if (!rows.length) return <p className="text-gray-400 italic mt-2">No dividend-paying holdings</p>;
+                      return (
+                        <table className="w-full mt-2 border-t border-gray-200">
+                          <thead>
+                            <tr className="text-gray-400">
+                              <td className="py-1">Ticker</td>
+                              <td className="py-1 text-right">Wt.</td>
+                              <td className="py-1 text-right">Yield</td>
+                              <td className="py-1 text-right">Contrib.</td>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((r) => (
+                              <tr key={r.ticker} className="border-t border-gray-100">
+                                <td className="py-1 font-mono font-semibold text-gray-700">{r.ticker}</td>
+                                <td className="py-1 text-right text-gray-500">{r.weight.toFixed(1)}%</td>
+                                <td className="py-1 text-right text-green-600">{r.rate.toFixed(2)}%</td>
+                                <td className="py-1 text-right font-semibold text-green-600">{r.contribution.toFixed(3)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1012,6 +1124,46 @@ export default function PortfolioBuilder() {
           onConfirm={handleRebalance}
           onCancel={() => setShowRebalance(false)}
         />
+      )}
+
+      {/* Invite Client Modal */}
+      {showInvite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Invite Client</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Send a read-only invite link for <span className="font-medium text-gray-700">{name}</span> to a client.
+            </p>
+            <input
+              type="email"
+              placeholder="client@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+            />
+            {inviteUrl && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+                <p className="text-xs text-green-700 mb-1 font-medium">Invite link (copied to clipboard):</p>
+                <p className="text-xs text-green-800 font-mono break-all">{inviteUrl}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary text-sm" onClick={() => setShowInvite(false)}>
+                {inviteUrl ? 'Done' : 'Cancel'}
+              </button>
+              {!inviteUrl && (
+                <button
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
+                  onClick={handleInvite}
+                  disabled={!inviteEmail.trim()}
+                >
+                  Generate Invite
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
