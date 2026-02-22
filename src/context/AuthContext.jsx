@@ -79,7 +79,19 @@ export function AuthProvider({ children }) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         const u = session?.user ?? null;
         setUser(u);
-        if (u) syncFromSupabase(u.id);
+        if (u) {
+          if (_event === 'SIGNED_IN') {
+            // Fresh login on a browser with no cached session:
+            // re-engage the loading gate so ProtectedRoute holds until sync completes.
+            // Without this, Dashboard mounts and reads empty localStorage before sync finishes.
+            setLoading(true);
+            syncFromSupabase(u.id).finally(() => setLoading(false));
+          } else {
+            // INITIAL_SESSION / TOKEN_REFRESHED:
+            // getSession() above already awaited sync on page load; fire-and-forget is fine.
+            syncFromSupabase(u.id);
+          }
+        }
       });
       return () => subscription.unsubscribe();
     } else {
