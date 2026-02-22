@@ -9,6 +9,7 @@ const LS = {
   portfolios: 'wwp_portfolios',
   activity: 'wwp_activity',
   settings: 'wwp_settings',
+  shares: 'wwp_shares',
 };
 
 // ─── Mock helpers ─────────────────────────────────────────────────────────────
@@ -230,4 +231,39 @@ export function saveSettings(userId, partial) {
   all[userId] = { ...(all[userId] ?? DEFAULT_SETTINGS), ...partial };
   lsSet(LS.settings, all);
   return all[userId];
+}
+
+// ─── Share token helpers ───────────────────────────────────────────────────────
+// Creates a share token storing a full portfolio snapshot.
+// Works in both Supabase mode (share_tokens table) and mock mode (localStorage).
+export async function createShareToken(userId, portfolio) {
+  const token = crypto.randomUUID().replace(/-/g, '');
+  const snapshot = { ...portfolio, _sharedAt: new Date().toISOString() };
+  if (isSupabaseConfigured) {
+    const { error } = await supabase
+      .from('share_tokens')
+      .insert({ token, owner_id: userId, portfolio_snapshot: snapshot });
+    if (error) throw error;
+  } else {
+    const shares = lsGet(LS.shares, {});
+    shares[token] = snapshot;
+    lsSet(LS.shares, shares);
+  }
+  return token;
+}
+
+// Retrieves the portfolio snapshot for a given share token (no auth required).
+export async function getSharedPortfolio(token) {
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabase
+      .from('share_tokens')
+      .select('portfolio_snapshot')
+      .eq('token', token)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.portfolio_snapshot;
+  } else {
+    const shares = lsGet(LS.shares, {});
+    return shares[token] ?? null;
+  }
 }

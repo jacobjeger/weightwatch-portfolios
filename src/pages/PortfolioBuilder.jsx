@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity } from '../context/AuthContext';
+import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown } from 'lucide-react';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken } from '../context/AuthContext';
+import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn } from '../lib/mockData';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
@@ -40,6 +41,8 @@ export default function PortfolioBuilder() {
   const [startingValue, setStartingValue] = useState(100_000); // $ portfolio size
   const [weightHistory, setWeightHistory] = useState([]);      // log of weight changes
   const [historyOpen, setHistoryOpen]     = useState(false);   // history panel toggle
+  const [pieOpen, setPieOpen]             = useState(true);    // allocation wheel toggle
+  const [shareUrl, setShareUrl]           = useState(null);    // generated share link
 
   // UI state
   const [showDelete, setShowDelete]         = useState(false);
@@ -131,6 +134,7 @@ export default function PortfolioBuilder() {
         last_price: instrument.last_price,
         entry_price: entryPrice,
         weight_percent: 0,
+        category: 'Core',
       },
     ]);
   }
@@ -151,6 +155,10 @@ export default function PortfolioBuilder() {
     } else {
       setWeightErrors((e) => { const n = { ...e }; delete n[ticker]; return n; });
     }
+  }
+
+  function updateCategory(ticker, cat) {
+    setHoldings((prev) => prev.map((h) => h.ticker === ticker ? { ...h, category: cat } : h));
   }
 
   function normalize() {
@@ -306,6 +314,29 @@ export default function PortfolioBuilder() {
     toast.success('Portfolio rebalanced to target weights');
   }
 
+  // ── Share with Client ────────────────────────────────────────────────────────
+  async function handleShare() {
+    if (isNew) {
+      toast.error('Save the portfolio first before sharing.');
+      return;
+    }
+    const snap = {
+      id: portfolioId, name, description,
+      primary_benchmark: benchmark, holdings,
+      starting_value: startingValue, created_at: createdAt,
+    };
+    try {
+      const token = await createShareToken(user.id, snap);
+      const url = `${window.location.origin}/share/${token}`;
+      setShareUrl(url);
+      navigator.clipboard?.writeText(url);
+      toast.success('Share link copied to clipboard!');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to generate share link');
+    }
+  }
+
   // ── Live snapshot daily moves ────────────────────────────────────────────────
   // Uses real Finnhub prices when configured, falls back to mock data
   const topHoldings = [...holdings]
@@ -357,6 +388,9 @@ export default function PortfolioBuilder() {
         </div>
         <div className="flex items-center gap-2">
           <button className="btn-ghost" onClick={() => navigate('/')}>← Dashboard</button>
+          <button className="btn-secondary flex items-center gap-1.5" onClick={handleShare} disabled={isNew}>
+            <Share2 className="w-4 h-4" />Share
+          </button>
           <button className="btn-secondary" onClick={handleDuplicate} disabled={isNew}>
             <Copy className="w-4 h-4" />Duplicate
           </button>
@@ -372,6 +406,18 @@ export default function PortfolioBuilder() {
           </button>
         </div>
       </div>
+      {shareUrl && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800 flex items-center gap-2">
+          <span className="font-mono truncate flex-1">{shareUrl}</span>
+          <button
+            onClick={() => { navigator.clipboard?.writeText(shareUrl); toast.success('Copied!'); }}
+            className="shrink-0 underline"
+          >
+            Copy
+          </button>
+          <button onClick={() => setShareUrl(null)} className="shrink-0 text-green-600 hover:text-green-800 ml-1">✕</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Main column */}
@@ -534,6 +580,7 @@ export default function PortfolioBuilder() {
                         <th className="th pl-0">Symbol</th>
                         <th className="th">Name</th>
                         <th className="th">Type</th>
+                        <th className="th">Role</th>
                         <th className="th text-right">Last Price</th>
                         <th className="th text-right">Target %</th>
                         <th className="th text-right">Current %</th>
@@ -550,6 +597,17 @@ export default function PortfolioBuilder() {
                               h.type === 'ETF' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                             }`}>{h.type}</span>
                           </td>
+                          <td className="td">
+                            <select
+                              className="input text-xs py-0.5 px-1"
+                              value={h.category || 'Core'}
+                              onChange={(e) => updateCategory(h.ticker, e.target.value)}
+                            >
+                              <option>Core</option>
+                              <option>Tilt</option>
+                              <option>Satellite</option>
+                            </select>
+                          </td>
                           <td className="td text-right font-mono text-slate-700">
                             {(() => {
                               const lp = live && prices[h.ticker]?.price
@@ -565,17 +623,28 @@ export default function PortfolioBuilder() {
                             })()}
                           </td>
                           <td className="td text-right">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex flex-col items-end gap-1">
                               <input
-                                type="number"
+                                type="range"
                                 min={0}
                                 max={100}
-                                step={0.01}
-                                className={`input w-24 text-right font-mono ${weightErrors[h.ticker] ? 'border-red-400' : ''}`}
-                                value={h.weight_percent}
+                                step={1}
+                                className="w-24 accent-blue-600 cursor-pointer"
+                                value={h.weight_percent || 0}
                                 onChange={(e) => updateWeight(h.ticker, e.target.value)}
                               />
-                              <span className="text-slate-400 text-sm">%</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={0.01}
+                                  className={`input w-14 text-right font-mono text-sm ${weightErrors[h.ticker] ? 'border-red-400' : ''}`}
+                                  value={h.weight_percent}
+                                  onChange={(e) => updateWeight(h.ticker, e.target.value)}
+                                />
+                                <span className="text-slate-400 text-sm">%</span>
+                              </div>
                             </div>
                             {weightErrors[h.ticker] && (
                               <p className="text-xs text-red-500 mt-0.5 text-right">{weightErrors[h.ticker]}</p>
@@ -614,7 +683,7 @@ export default function PortfolioBuilder() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-slate-200">
-                        <td colSpan={4} className="td font-semibold text-slate-700">Total Weight</td>
+                        <td colSpan={5} className="td font-semibold text-slate-700">Total Weight</td>
                         <td className={`td text-right font-semibold font-mono text-lg ${
                           isFullyAllocated ? 'text-green-600' : Math.abs(totalWeight - 100) < 5 ? 'text-yellow-600' : 'text-red-500'
                         }`}>
@@ -643,6 +712,39 @@ export default function PortfolioBuilder() {
             )}
           </div>
 
+          {/* Allocation Breakdown (Core / Tilt / Satellite) */}
+          {holdings.length > 0 && (() => {
+            const CATS = ['Core', 'Tilt', 'Satellite'];
+            const CAT_COLORS = { Core: 'bg-blue-500', Tilt: 'bg-violet-500', Satellite: 'bg-amber-500' };
+            const hasAny = CATS.some((cat) =>
+              holdings.some((h) => (h.category || 'Core') === cat && (h.weight_percent || 0) > 0)
+            );
+            if (!hasAny) return null;
+            return (
+              <div className="card p-5">
+                <h2 className="section-title mb-3">Allocation Breakdown</h2>
+                {CATS.map((cat) => {
+                  const w = holdings
+                    .filter((h) => (h.category || 'Core') === cat)
+                    .reduce((s, h) => s + (h.weight_percent || 0), 0);
+                  if (w === 0) return null;
+                  return (
+                    <div key={cat} className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-slate-500 w-16">{cat}</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2">
+                        <div
+                          className={`${CAT_COLORS[cat]} h-2 rounded-full transition-all`}
+                          style={{ width: `${Math.min(w, 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-mono text-slate-700 w-10 text-right">{w.toFixed(1)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           {/* Performance chart */}
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
@@ -661,6 +763,20 @@ export default function PortfolioBuilder() {
               drip={drip}
             />
           </div>
+
+          {/* Allocation Wheel (pie chart) */}
+          {holdings.length > 0 && (
+            <div className="card p-5">
+              <button
+                className="flex items-center justify-between w-full"
+                onClick={() => setPieOpen((o) => !o)}
+              >
+                <h2 className="section-title">Allocation Wheel</h2>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${pieOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {pieOpen && <AllocationPieChart holdings={holdings} />}
+            </div>
+          )}
 
           {/* Performance summary */}
           <div className="card p-5">
@@ -698,7 +814,12 @@ export default function PortfolioBuilder() {
                           </div>
                         )}
                         {isBacktested && holdings.length > 0 && (
-                          <div className="text-xs text-slate-400 italic mt-1">Backtested</div>
+                          <div
+                            className="text-xs text-slate-400 italic mt-1 cursor-help"
+                            title="Return is simulated from historical data; portfolio did not exist for this full period"
+                          >
+                            Backtested
+                          </div>
                         )}
                       </div>
                     );
@@ -816,7 +937,7 @@ export default function PortfolioBuilder() {
                   </span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
-                  <span className="text-slate-500">Est. Value</span>
+                  <span className="text-slate-500 cursor-help" title="Estimated portfolio value based on starting value and simulated growth">Est. Value</span>
                   <span className="font-semibold text-slate-800">
                     ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                   </span>
@@ -831,11 +952,11 @@ export default function PortfolioBuilder() {
                 )}
                 <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-gray-50 rounded p-2">
-                    <p className="text-gray-400 mb-0.5">Wtd. Expense Ratio</p>
+                    <p className="text-gray-400 mb-0.5 cursor-help" title="Weighted Expense Ratio: annual cost drag across all holdings, weighted by allocation">Wtd. Expense Ratio</p>
                     <p className="font-semibold text-gray-700">{weightedER.toFixed(3)}%</p>
                   </div>
                   <div className="bg-gray-50 rounded p-2">
-                    <p className="text-gray-400 mb-0.5">Wtd. Div. Yield</p>
+                    <p className="text-gray-400 mb-0.5 cursor-help" title="Weighted Dividend Yield: trailing 12-month income, weighted by allocation">Wtd. Div. Yield</p>
                     <p className="font-semibold text-green-600">{weightedYield.toFixed(2)}%</p>
                   </div>
                 </div>

@@ -164,3 +164,29 @@ create policy "Users manage own portfolios"
   on public.user_portfolios for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+
+-- ────────────────────────────────────────────────────────────
+-- Share Tokens (read-only client share links)
+-- Stores a snapshot of a portfolio at the time it was shared.
+-- Public read access (no auth required) so share links work
+-- for unauthenticated clients.
+-- ────────────────────────────────────────────────────────────
+create table if not exists public.share_tokens (
+  token                text primary key default encode(gen_random_bytes(20), 'hex'),
+  owner_id             uuid not null references auth.users(id) on delete cascade,
+  portfolio_snapshot   jsonb not null,
+  created_at           timestamptz not null default now()
+);
+
+alter table public.share_tokens enable row level security;
+
+-- Anyone with the token URL can read the record (enables unauthenticated share links)
+create policy "Public can read share tokens"
+  on public.share_tokens for select using (true);
+
+-- Only the owner can create or delete their own share tokens
+create policy "Owners manage own share tokens"
+  on public.share_tokens for all
+  using (auth.uid() = owner_id)
+  with check (auth.uid() = owner_id);

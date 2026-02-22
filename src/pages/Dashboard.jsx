@@ -292,13 +292,13 @@ export default function Dashboard() {
                             <span className="text-slate-400 text-xs">No holdings</span>
                           )}
                         </td>
-                        <td className="td">
-                          <span className="text-slate-600">{p.holdings?.length ?? 0}</span>
-                        </td>
                         <td className="td text-right font-mono text-slate-700 text-sm">
                           {p.starting_value
                             ? `$${(p.starting_value / 1000).toFixed(0)}K`
                             : '—'}
+                        </td>
+                        <td className="td">
+                          <span className="text-slate-600">{p.holdings?.length ?? 0}</span>
                         </td>
                         <td className="td text-slate-500 text-xs">
                           {formatDistanceToNow(new Date(p.last_updated_at), { addSuffix: true })}

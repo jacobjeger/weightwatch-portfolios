@@ -10,6 +10,7 @@ import History from './pages/History';
 import AccountSettings from './pages/AccountSettings';
 import HelpTour from './pages/HelpTour';
 import ResetPassword from './pages/ResetPassword';
+import ShareView from './pages/ShareView';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
             <Routes>
               {/* Public */}
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/share/:token" element={<ShareView />} />
 
               {/* Protected */}
               <Route element={<ProtectedRoute />}>
