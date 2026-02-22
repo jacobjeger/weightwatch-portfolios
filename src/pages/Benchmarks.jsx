@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getYTDReturn } from '../lib/mockData';
-import { CheckCircle } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
@@ -34,8 +34,8 @@ function PctCell({ val }) {
 
 export default function Benchmarks() {
   const { user } = useAuth();
+  const toast    = useToast();
   const [settings, setSettings] = useState(() => user ? getSettings(user.id) : {});
-  const [saved, setSaved] = useState(false);
   const [chartRange, setChartRange] = useState('1Y');
 
   // Build multi-line chart data for all 6 benchmarks
@@ -46,6 +46,7 @@ export default function Benchmarks() {
     // Import at top level won't work in closure, so we inline the logic
     // using the pre-imported functions
     const histories = BENCHMARKS.map((t) => {
+      // Indices (^ prefix) don't have an INSTRUMENTS entry — just use 100 as base
       const inst = INSTRUMENTS.find((i) => i.ticker === t);
       const currentPrice = inst?.last_price ?? 100;
       const prices = generateMockHistory(t, currentPrice, numDays);
@@ -58,7 +59,8 @@ export default function Benchmarks() {
     return dates.map((date, i) => {
       const entry = { date };
       histories.forEach((h) => {
-        entry[h.ticker] = parseFloat(((h.prices[i] / h.prices[0]) * 100).toFixed(2));
+        // Return % change from start (0 = flat, positive = gain)
+        entry[h.ticker] = parseFloat(((h.prices[i] / h.prices[0] - 1) * 100).toFixed(2));
       });
       return entry;
     });
@@ -67,8 +69,7 @@ export default function Benchmarks() {
   function handleSave() {
     if (user) {
       saveSettings(user.id, settings);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      toast.success('Benchmark defaults saved');
     }
   }
 
@@ -93,13 +94,14 @@ export default function Benchmarks() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {BENCHMARKS.map((ticker) => {
+                const meta = BENCHMARK_META[ticker];
                 const inst = INSTRUMENTS.find((i) => i.ticker === ticker);
                 return (
                   <tr key={ticker} className="hover:bg-slate-50">
                     <td className="td">
                       <span className="font-semibold text-slate-900">{ticker}</span>
                     </td>
-                    <td className="td text-slate-600">{inst?.name}</td>
+                    <td className="td text-slate-600">{meta?.label ?? inst?.name ?? ticker}</td>
                     {TIMEFRAMES.map((tf) => {
                       const ret = tf.label === 'YTD' ? getYTDReturn(ticker) : getReturn(ticker, tf.days);
                       return (
@@ -119,7 +121,7 @@ export default function Benchmarks() {
       {/* Comparison chart */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="section-title">Normalized Comparison</h2>
+          <h2 className="section-title">% Return Comparison</h2>
           <div className="flex items-center gap-1">
             {CHART_RANGES.map((r) => (
               <button
@@ -148,15 +150,15 @@ export default function Benchmarks() {
               interval={Math.max(1, Math.floor(multiChartData.length / 6) - 1)}
             />
             <YAxis
-              tickFormatter={(v) => v.toFixed(0)}
+              tickFormatter={(v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
               tick={{ fontSize: 11, fill: '#64748b' }}
               axisLine={false} tickLine={false}
-              width={40}
+              width={52}
               domain={['auto', 'auto']}
             />
-            <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="4 2" />
+            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
             <Tooltip
-              formatter={(v, name) => [`${v?.toFixed(2)}`, name]}
+              formatter={(v, name) => [`${v >= 0 ? '+' : ''}${v?.toFixed(2)}%`, name]}
               labelFormatter={(l) => new Date(l).toLocaleDateString('en-US', { dateStyle: 'medium' })}
               contentStyle={{ fontSize: 12 }}
             />
@@ -169,6 +171,7 @@ export default function Benchmarks() {
                 stroke={CHART_COLORS[i]}
                 dot={false}
                 strokeWidth={2}
+                name={BENCHMARK_META[ticker]?.label ?? ticker}
               />
             ))}
           </LineChart>
@@ -187,7 +190,9 @@ export default function Benchmarks() {
               onChange={(e) => setSettings((s) => ({ ...s, primary_benchmark: e.target.value }))}
             >
               <option value="">— None —</option>
-              {BENCHMARKS.map((b) => <option key={b} value={b}>{b}</option>)}
+              {BENCHMARKS.map((b) => (
+                <option key={b} value={b}>{BENCHMARK_META[b]?.label ?? b} ({b})</option>
+              ))}
             </select>
           </div>
           <div className="flex items-center gap-3 pt-6">
@@ -206,15 +211,12 @@ export default function Benchmarks() {
         <div className="mt-4 flex gap-3">
           <button
             className="btn-secondary text-xs"
-            onClick={() => setSettings((s) => ({ ...s, primary_benchmark: 'SPY', inherit_defaults: true }))}
+            onClick={() => setSettings((s) => ({ ...s, primary_benchmark: '^GSPC', inherit_defaults: true }))}
           >
             Reset to Recommended Defaults
           </button>
-          <button
-            className={saved ? 'btn bg-green-600 text-white text-xs' : 'btn-primary text-xs'}
-            onClick={handleSave}
-          >
-            {saved ? <><CheckCircle className="w-3.5 h-3.5" />Saved</> : 'Save Account Defaults'}
+          <button className="btn-primary text-xs" onClick={handleSave}>
+            Save Account Defaults
           </button>
         </div>
       </div>
@@ -233,7 +235,8 @@ function tickerHash(t) {
   return h;
 }
 function generateMockHistory(ticker, currentPrice, numDays) {
-  const vol = ['SPY','QQQ','IWM','EFA','ACWI','AGG','VOO','VTI','BND','TLT'].includes(ticker) ? 0.007 : 0.016;
+  const isIndex = ticker.startsWith('^');
+  const vol = isIndex || ['SPY','QQQ','IWM','EFA','ACWI','AGG','VOO','VTI','BND','TLT','DIA','EEM','HYG','LQD','TIPS','SLV'].includes(ticker) ? 0.007 : 0.016;
   const drift = 0.00035;
   const rand = seedRand(tickerHash(ticker));
   const returns = Array.from({ length: numDays - 1 }, () => {

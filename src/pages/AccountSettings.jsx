@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
-import { BENCHMARKS } from '../lib/mockData';
+import { BENCHMARKS, BENCHMARK_META } from '../lib/mockData';
 import { useToast } from '../context/ToastContext';
 
 const TIMEFRAMES_ALL = ['1D', '7D', '1M', '3M', '6M', 'YTD', '1Y'];
@@ -62,7 +62,9 @@ export default function AccountSettings() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Default Primary Benchmark</label>
             <select className="input" value={settings.primary_benchmark ?? ''} onChange={(e) => set('primary_benchmark', e.target.value)}>
               <option value="">— None —</option>
-              {BENCHMARKS.map((b) => <option key={b} value={b}>{b}</option>)}
+              {BENCHMARKS.map((b) => (
+                <option key={b} value={b}>{BENCHMARK_META[b]?.label ?? b} ({b})</option>
+              ))}
             </select>
           </div>
           <div className="flex items-center gap-3">

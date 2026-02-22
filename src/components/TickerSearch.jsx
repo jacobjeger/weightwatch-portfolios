@@ -1,28 +1,52 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { INSTRUMENTS } from '../lib/mockData';
+import { isConfigured, searchSymbols } from '../lib/finnhub';
+
+const useLive = isConfigured();
 
 export default function TickerSearch({ existingTickers = [], onAdd }) {
-  const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
+  const [query, setQuery]                       = useState('');
+  const [open, setOpen]                         = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const ref = useRef(null);
-  const listRef = useRef(null);
+  const [liveResults, setLiveResults]           = useState(null); // null = not yet searched
+  const [searching, setSearching]               = useState(false);
+  const ref         = useRef(null);
+  const listRef     = useRef(null);
+  const debounceRef = useRef(null);
 
+  // ── Debounced Finnhub symbol search ────────────────────────────────────────
+  useEffect(() => {
+    if (!useLive || query.trim().length < 1) {
+      setLiveResults(null);
+      setSearching(false);
+      clearTimeout(debounceRef.current);
+      return;
+    }
+
+    setSearching(true);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const res = await searchSymbols(query);
+      setLiveResults(res);
+      setSearching(false);
+    }, 300);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [query]);
+
+  // ── Results: live Finnhub search when configured, else static filter ───────
   const results = query.trim().length > 0
-    ? INSTRUMENTS.filter((i) => {
-        const q = query.toUpperCase();
-        return (
-          i.ticker.startsWith(q) ||
-          i.name.toUpperCase().includes(query.toUpperCase())
-        );
-      }).slice(0, 10)
+    ? (useLive && liveResults !== null
+        ? liveResults
+        : INSTRUMENTS.filter((i) => {
+            const q = query.toUpperCase();
+            return i.ticker.startsWith(q) || i.name.toUpperCase().includes(q.toUpperCase());
+          }).slice(0, 10))
     : [];
 
-  // Reset highlight when results change
-  useEffect(() => {
-    setHighlightedIndex(-1);
-  }, [query]);
+  // Reset highlight when query changes
+  useEffect(() => { setHighlightedIndex(-1); }, [query]);
 
   // Close on outside click
   useEffect(() => {
@@ -46,20 +70,18 @@ export default function TickerSearch({ existingTickers = [], onAdd }) {
     setQuery('');
     setOpen(false);
     setHighlightedIndex(-1);
+    setLiveResults(null);
   }
 
   function handleKeyDown(e) {
     if (!open || results.length === 0) return;
-
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      // Skip already-added (disabled) items going down
       let next = highlightedIndex + 1;
       while (next < results.length && existingTickers.includes(results[next].ticker)) next++;
       if (next < results.length) setHighlightedIndex(next);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      // Skip disabled items going up
       let prev = highlightedIndex - 1;
       while (prev >= 0 && existingTickers.includes(results[prev].ticker)) prev--;
       if (prev >= 0) setHighlightedIndex(prev);
@@ -74,13 +96,18 @@ export default function TickerSearch({ existingTickers = [], onAdd }) {
     }
   }
 
+  const showSpinner = useLive && searching && query.trim().length > 0;
+
   return (
     <div ref={ref} className="relative">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        {showSpinner
+          ? <Loader2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 animate-spin" />
+          : <Search  className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        }
         <input
           className="input pl-8 w-64"
-          placeholder="Search ticker or name…"
+          placeholder={useLive ? 'Search any ticker or name…' : 'Search ticker or name…'}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
@@ -97,7 +124,7 @@ export default function TickerSearch({ existingTickers = [], onAdd }) {
           role="listbox"
         >
           {results.map((inst, idx) => {
-            const already = existingTickers.includes(inst.ticker);
+            const already      = existingTickers.includes(inst.ticker);
             const isHighlighted = idx === highlightedIndex;
             return (
               <button
@@ -113,23 +140,30 @@ export default function TickerSearch({ existingTickers = [], onAdd }) {
               >
                 <div>
                   <span className="font-semibold text-slate-900 text-sm">{inst.ticker}</span>
-                  <span className="ml-2 text-xs text-slate-500">{inst.name}</span>
+                  <span className="ml-2 text-xs text-slate-500 truncate max-w-[180px] inline-block align-bottom">{inst.name}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${inst.type === 'ETF' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
-                    {inst.type}
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                    inst.type === 'ETF' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {inst.type ?? 'Stock'}
                   </span>
                   {already && <span className="text-xs text-slate-400">added</span>}
                 </div>
               </button>
             );
           })}
+          {useLive && (
+            <div className="px-4 py-1.5 text-xs text-slate-400 border-t border-slate-100 bg-slate-50 rounded-b-lg">
+              Powered by Finnhub
+            </div>
+          )}
         </div>
       )}
 
-      {open && query.trim().length > 0 && results.length === 0 && (
-        <div className="absolute z-40 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg px-4 py-3 text-sm text-slate-500">
-          No instruments found for "{query}"
+      {open && query.trim().length > 0 && results.length === 0 && !searching && (
+        <div className="absolute z-40 mt-1 w-72 bg-white border border-slate-200 rounded-lg shadow-lg px-4 py-3 text-sm text-slate-500">
+          No instruments found for &ldquo;{query}&rdquo;
         </div>
       )}
     </div>

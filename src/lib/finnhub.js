@@ -8,10 +8,12 @@ const KEY  = import.meta.env.VITE_FINNHUB_API_KEY;
 export const isConfigured = () => Boolean(KEY);
 
 // ── In-memory caches ─────────────────────────────────────────────────────────
-const quoteCache  = new Map(); // ticker  → { data, ts }
+const quoteCache  = new Map(); // ticker   → { data, ts }
 const candleCache = new Map(); // cacheKey → { data, ts }
+const searchCache = new Map(); // query    → { data, ts }
 const QUOTE_TTL   = 30_000;   // 30 s  — refresh quotes every 30 s
 const CANDLE_TTL  = 300_000;  // 5 min — candles don't change intraday
+const SEARCH_TTL  = 60_000;   // 1 min — search results are stable
 
 // ── Quote (current price + daily change) ─────────────────────────────────────
 // Returns: { price, change, changePercent, prevClose, high, low, open }
@@ -23,6 +25,9 @@ export async function getQuote(ticker) {
   if (!res.ok) throw new Error(`Quote fetch failed for ${ticker}: ${res.status}`);
 
   const raw  = await res.json();
+  // If Finnhub returns all zeros, the symbol isn't supported — throw so caller falls back
+  if (!raw.c) throw new Error(`No data for ${ticker}`);
+
   const data = {
     price:         raw.c,
     change:        raw.d,
@@ -64,8 +69,46 @@ export async function getCandles(ticker, fromDate, toDate) {
   return data;
 }
 
-// ── Portfolio chart data (same shape as mockData.getPortfolioChartData) ───────
-// Returns: [{ date, portfolio, benchmark? }, ...] — all normalized to 100
+// ── Symbol search ─────────────────────────────────────────────────────────────
+// Returns: [{ ticker, name, type, exchange }] matching the query
+export async function searchSymbols(query) {
+  const q = query.trim();
+  if (!q || !KEY) return [];
+
+  const key    = q.toUpperCase();
+  const cached = searchCache.get(key);
+  if (cached && Date.now() - cached.ts < SEARCH_TTL) return cached.data;
+
+  try {
+    const res  = await fetch(`${BASE}/search?q=${encodeURIComponent(q)}&token=${KEY}`);
+    if (!res.ok) return [];
+    const json = await res.json();
+
+    const data = (json.result ?? [])
+      // Keep US stocks and ETFs with simple symbols (no dots/slashes = likely US listed)
+      .filter(r =>
+        (r.type === 'Common Stock' || r.type === 'ETP') &&
+        /^[A-Z]{1,5}$/.test(r.symbol)
+      )
+      .slice(0, 10)
+      .map(r => ({
+        ticker:     r.symbol,
+        name:       r.description,
+        type:       r.type === 'ETP' ? 'ETF' : 'Stock',
+        exchange:   r.primaryExchange ?? '',
+        last_price: null, // will be fetched on demand by loadTickers
+      }));
+
+    searchCache.set(key, { data, ts: Date.now() });
+    return data;
+  } catch {
+    return [];
+  }
+}
+
+// ── Portfolio chart data ──────────────────────────────────────────────────────
+// Returns: [{ date, portfolio: +5.34, benchmark?: +3.21 }, ...]
+// Values are % return from start of range (0 = start date, positive = gain).
 const RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'Max': 1095 };
 
 export async function getRealPortfolioChartData(holdings, benchmarkTicker, range = '1Y') {
@@ -75,7 +118,7 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
   const toDate   = new Date().toISOString().slice(0, 10);
   const fromDate = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
-  // Fetch all in parallel; catch individual failures so one bad ticker doesn't kill everything
+  // Fetch all in parallel; catch individual failures gracefully
   const [holdingCandles, benchCandles] = await Promise.all([
     Promise.all(holdings.map(h => getCandles(h.ticker, fromDate, toDate).catch(() => []))),
     benchmarkTicker
@@ -99,19 +142,19 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
   const startBenchmark = benchCandles[0]?.price ?? 1;
 
   return dates.map(date => {
-    // Weighted portfolio value, normalized to 100 at start
+    // Weighted % return from start (0 = flat, +5 = up 5%)
     let portfolio = 0;
     holdings.forEach((h, i) => {
       const start   = startPrices[i] || 1;
       const current = priceMaps[i][date] ?? start;
-      portfolio += (current / start) * 100 * (h.weight_percent / 100);
+      portfolio += ((current / start) - 1) * 100 * (h.weight_percent / 100);
     });
 
     const point = { date, portfolio: parseFloat(portfolio.toFixed(2)) };
 
     if (benchmarkTicker && startBenchmark > 0) {
       const bPrice = benchMap[date] ?? startBenchmark;
-      point.benchmark = parseFloat(((bPrice / startBenchmark) * 100).toFixed(2));
+      point.benchmark = parseFloat(((bPrice / startBenchmark - 1) * 100).toFixed(2));
     }
 
     return point;
@@ -119,7 +162,7 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
 }
 
 // ── WebSocket — real-time trade feed ─────────────────────────────────────────
-let ws            = null;
+let ws             = null;
 const wsSubscribed  = new Set();
 const tradeListeners = new Set();
 
@@ -146,11 +189,10 @@ function ensureWS() {
   };
 
   ws.onclose = () => {
-    // Auto-reconnect after 5 s if we have active subscriptions
     if (wsSubscribed.size > 0) setTimeout(ensureWS, 5_000);
   };
 
-  ws.onerror = () => {}; // errors are handled via onclose
+  ws.onerror = () => {}; // errors handled via onclose
 }
 
 // Subscribe to live trade prices for a list of tickers.

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity } from '../context/AuthContext';
-import { INSTRUMENTS, BENCHMARKS, getReturn, getPortfolioReturn } from '../lib/mockData';
+import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn } from '../lib/mockData';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
@@ -29,16 +29,19 @@ export default function PortfolioBuilder() {
   const isNew = id === 'new';
 
   // Portfolio state
-  const [name, setName]           = useState('New Portfolio');
-  const [description, setDesc]    = useState('');
-  const [benchmark, setBenchmark] = useState('');
-  const [holdings, setHoldings]   = useState([]);
+  const [name, setName]               = useState('New Portfolio');
+  const [description, setDesc]        = useState('');
+  const [benchmark, setBenchmark]     = useState('');
+  const [holdings, setHoldings]       = useState([]);
   const [portfolioId, setPortfolioId] = useState(isNew ? crypto.randomUUID() : id);
+  const [createdAt, setCreatedAt]     = useState(null);
+  const [drip, setDrip]               = useState(true);   // dividend reinvestment
+  const [cashPercent, setCashPercent] = useState(0);      // % held as cash
 
   // UI state
-  const [showDelete, setShowDelete] = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [weightErrors, setWeightErrors] = useState({});
+  const [showDelete, setShowDelete]         = useState(false);
+  const [saving, setSaving]                 = useState(false);
+  const [weightErrors, setWeightErrors]     = useState({});
 
   // Load existing portfolio
   useEffect(() => {
@@ -51,6 +54,9 @@ export default function PortfolioBuilder() {
         setBenchmark(p.primary_benchmark ?? '');
         setHoldings(p.holdings ?? []);
         setPortfolioId(p.id);
+        setCreatedAt(p.created_at ?? null);
+        setDrip(p.drip_enabled ?? true);
+        setCashPercent(p.cash_percent ?? 0);
       }
     }
   }, [id, user, isNew]);
@@ -118,13 +124,16 @@ export default function PortfolioBuilder() {
     if (!name.trim()) return;
     setSaving(true);
     const portfolio = {
-      id: portfolioId,
-      owner: user.id,
-      name: name.trim(),
-      description: description.trim(),
-      primary_benchmark: benchmark || null,
+      id:                  portfolioId,
+      owner:               user.id,
+      name:                name.trim(),
+      description:         description.trim(),
+      primary_benchmark:   benchmark || null,
       secondary_benchmarks: [],
       holdings,
+      drip_enabled:        drip,
+      cash_percent:        cashPercent,
+      created_at:          createdAt ?? new Date().toISOString(),
     };
     savePortfolio(portfolio);
     logActivity(user.id, {
@@ -252,7 +261,11 @@ export default function PortfolioBuilder() {
                   onChange={(e) => setBenchmark(e.target.value)}
                 >
                   <option value="">— None —</option>
-                  {BENCHMARKS.map((b) => <option key={b} value={b}>{b}</option>)}
+                  {BENCHMARKS.map((b) => (
+                    <option key={b} value={b}>
+                      {BENCHMARK_META[b]?.label ?? b} ({b})
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -265,6 +278,47 @@ export default function PortfolioBuilder() {
                 onChange={(e) => setDesc(e.target.value)}
                 placeholder="Optional description"
               />
+            </div>
+
+            {/* Cash + DRIP row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Cash Reserve
+                  <span className="ml-1 text-xs font-normal text-slate-400">% of portfolio held as cash</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="input w-24 text-right font-mono"
+                    value={cashPercent}
+                    onChange={(e) => setCashPercent(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                  />
+                  <span className="text-slate-400 text-sm">%</span>
+                  {cashPercent > 0 && (
+                    <span className="text-xs text-blue-600 font-medium flex items-center gap-0.5">
+                      <DollarSign className="w-3 h-3" />{cashPercent}% cash earning ~5% p.a.
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Dividend Reinvestment</label>
+                <label className="flex items-center gap-3 cursor-pointer mt-1.5">
+                  <div
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${drip ? 'bg-blue-600' : 'bg-slate-300'}`}
+                    onClick={() => setDrip(!drip)}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${drip ? 'translate-x-4' : 'translate-x-1'}`} />
+                  </div>
+                  <span className="text-sm text-slate-700">
+                    {drip ? 'DRIP enabled — dividends auto-reinvested' : 'DRIP off — dividends go to cash'}
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -314,7 +368,18 @@ export default function PortfolioBuilder() {
                             }`}>{h.type}</span>
                           </td>
                           <td className="td text-right font-mono text-slate-700">
-                            ${h.last_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {(() => {
+                              const lp = live && prices[h.ticker]?.price
+                                ? prices[h.ticker].price
+                                : h.last_price;
+                              const isReal = live && prices[h.ticker]?.price;
+                              return (
+                                <span>
+                                  ${lp?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {isReal && <span className="ml-1 text-green-500 text-xs">●</span>}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="td text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -377,8 +442,21 @@ export default function PortfolioBuilder() {
 
           {/* Performance chart */}
           <div className="card p-5">
-            <h2 className="section-title mb-4">Performance Chart</h2>
-            <PerformanceChart holdings={holdings} benchmarkTicker={benchmark || null} />
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="section-title">Performance Chart</h2>
+              {cashPercent > 0 && (
+                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                  Includes {cashPercent}% cash · {drip ? 'DRIP on' : 'DRIP off'}
+                </span>
+              )}
+            </div>
+            <PerformanceChart
+              holdings={holdings}
+              benchmarkTicker={benchmark || null}
+              createdAt={createdAt}
+              cashPercent={cashPercent}
+              drip={drip}
+            />
           </div>
 
           {/* Performance summary */}
