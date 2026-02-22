@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity } from '../context/AuthContext';
@@ -37,9 +37,13 @@ export default function PortfolioBuilder() {
   const [createdAt, setCreatedAt]     = useState(null);
   const [drip, setDrip]               = useState(true);   // dividend reinvestment
   const [cashPercent, setCashPercent] = useState(0);      // % held as cash
+  const [startingValue, setStartingValue] = useState(100_000); // $ portfolio size
+  const [weightHistory, setWeightHistory] = useState([]);      // log of weight changes
+  const [historyOpen, setHistoryOpen]     = useState(false);   // history panel toggle
 
   // UI state
   const [showDelete, setShowDelete]         = useState(false);
+  const [showRebalance, setShowRebalance]   = useState(false);
   const [saving, setSaving]                 = useState(false);
   const [weightErrors, setWeightErrors]     = useState({});
 
@@ -57,6 +61,8 @@ export default function PortfolioBuilder() {
         setCreatedAt(p.created_at ?? null);
         setDrip(p.drip_enabled ?? true);
         setCashPercent(p.cash_percent ?? 0);
+        setStartingValue(p.starting_value ?? 100_000);
+        setWeightHistory(p.weight_history ?? []);
       }
     }
   }, [id, user, isNew]);
@@ -75,9 +81,47 @@ export default function PortfolioBuilder() {
   const isFullyAllocated = Math.abs(totalWeight - 100) < 0.01;
   const status = getPortfolioStatus({ holdings, primary_benchmark: benchmark });
 
+  // Drifted weights: what each holding's actual weight is given price movements since entry
+  const currentWeights = useMemo(() => {
+    if (!holdings.length) return {};
+    const rows = holdings.map((h) => {
+      const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
+      const entryPrice   = h.entry_price ?? h.last_price;
+      const ratio = (entryPrice && entryPrice > 0) ? currentPrice / entryPrice : 1;
+      return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
+    });
+    const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
+    if (!denom) return {};
+    return Object.fromEntries(rows.map((r) => [r.ticker, {
+      driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
+      ratio: r.ratio,
+    }]));
+  }, [holdings, prices, live]);
+
+  // Current estimated portfolio value in dollars
+  const currentPortfolioValue = useMemo(() => {
+    if (!holdings.length) return startingValue;
+    const investedFrac = 1 - cashPercent / 100;
+    const growthFactor = holdings.reduce(
+      (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
+    );
+    return startingValue * (growthFactor * investedFrac + cashPercent / 100);
+  }, [holdings, currentWeights, startingValue, cashPercent]);
+
+  // Show Rebalance button when any holding has drifted ≥ 0.5% from its target
+  const needsRebalance = useMemo(() =>
+    holdings.some((h) =>
+      Math.abs((currentWeights[h.ticker]?.driftedWeight ?? h.weight_percent) - h.weight_percent) >= 0.5
+    ), [holdings, currentWeights]
+  );
+
   // ── Holdings mutations ──────────────────────────────────────────────────────
   function addTicker(instrument) {
     if (holdings.find((h) => h.ticker === instrument.ticker)) return;
+    // Capture entry price at time of adding — used for drift / rebalance calculations
+    const entryPrice = (live && prices[instrument.ticker]?.price)
+      ? prices[instrument.ticker].price
+      : (instrument.last_price ?? 0);
     setHoldings((prev) => [
       ...prev,
       {
@@ -85,6 +129,7 @@ export default function PortfolioBuilder() {
         name: instrument.name,
         type: instrument.type,
         last_price: instrument.last_price,
+        entry_price: entryPrice,
         weight_percent: 0,
       },
     ]);
@@ -123,6 +168,44 @@ export default function PortfolioBuilder() {
   function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
+
+    // ── Weight history diffing ────────────────────────────────────────────────
+    const allSaved   = getPortfolios(user.id);
+    const savedPortf = allSaved.find((p) => p.id === portfolioId);
+    const prevHistory = savedPortf?.weight_history ?? weightHistory;
+
+    let newEvent = null;
+    if (!savedPortf) {
+      // Brand-new portfolio
+      newEvent = {
+        id: crypto.randomUUID(), date: new Date().toISOString(), type: 'created',
+        changes: holdings.map((h) => ({ ticker: h.ticker, from: null, to: h.weight_percent })),
+      };
+    } else {
+      const prevMap = Object.fromEntries((savedPortf.holdings ?? []).map((h) => [h.ticker, h.weight_percent]));
+      const changes = [];
+      holdings.forEach((h) => {
+        const prev = prevMap[h.ticker];
+        if (prev == null) {
+          changes.push({ ticker: h.ticker, from: null, to: h.weight_percent });
+        } else if (Math.abs(prev - h.weight_percent) >= 0.01) {
+          changes.push({ ticker: h.ticker, from: prev, to: h.weight_percent });
+        }
+      });
+      (savedPortf.holdings ?? []).forEach((h) => {
+        if (!holdings.find((c) => c.ticker === h.ticker))
+          changes.push({ ticker: h.ticker, from: h.weight_percent, to: null });
+      });
+      if (changes.length) {
+        const type = changes.every((c) => c.from == null)  ? 'holding_added'
+                   : changes.every((c) => c.to   == null)  ? 'holding_removed'
+                   : 'adjustment';
+        newEvent = { id: crypto.randomUUID(), date: new Date().toISOString(), type, changes };
+      }
+    }
+    const updatedHistory = newEvent ? [...prevHistory, newEvent] : prevHistory;
+    if (newEvent) setWeightHistory(updatedHistory);
+
     const portfolio = {
       id:                  portfolioId,
       owner:               user.id,
@@ -133,7 +216,9 @@ export default function PortfolioBuilder() {
       holdings,
       drip_enabled:        drip,
       cash_percent:        cashPercent,
+      starting_value:      startingValue,
       created_at:          createdAt ?? new Date().toISOString(),
+      weight_history:      updatedHistory,
     };
     savePortfolio(portfolio);
     logActivity(user.id, {
@@ -179,6 +264,46 @@ export default function PortfolioBuilder() {
     });
     deletePortfolios([portfolioId]);
     navigate('/');
+  }
+
+  // ── Rebalance ────────────────────────────────────────────────────────────────
+  // Resets each holding's entry_price to its current price, zeroing the drift.
+  // Logs a 'rebalance' event showing before (drifted) → after (target) weights.
+  function handleRebalance() {
+    const rebalanceEvent = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      type: 'rebalance',
+      changes: holdings.map((h) => ({
+        ticker: h.ticker,
+        from: parseFloat((currentWeights[h.ticker]?.driftedWeight ?? h.weight_percent).toFixed(2)),
+        to: h.weight_percent,
+      })),
+    };
+    const rebalancedHoldings = holdings.map((h) => ({
+      ...h,
+      entry_price: (live && prices[h.ticker]?.price) || h.last_price,
+    }));
+    const newHistory = [...weightHistory, rebalanceEvent];
+    const portfolio = {
+      id:                  portfolioId,
+      owner:               user.id,
+      name:                name.trim(),
+      description:         description.trim(),
+      primary_benchmark:   benchmark || null,
+      secondary_benchmarks: [],
+      holdings:            rebalancedHoldings,
+      drip_enabled:        drip,
+      cash_percent:        cashPercent,
+      starting_value:      startingValue,
+      created_at:          createdAt ?? new Date().toISOString(),
+      weight_history:      newHistory,
+    };
+    savePortfolio(portfolio);
+    setHoldings(rebalancedHoldings);
+    setWeightHistory(newHistory);
+    setShowRebalance(false);
+    toast.success('Portfolio rebalanced to target weights');
   }
 
   // ── Live snapshot daily moves ────────────────────────────────────────────────
@@ -292,6 +417,46 @@ export default function PortfolioBuilder() {
               />
             </div>
 
+            {/* Starting value + Starting date row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Starting Value
+                  <span className="ml-1 text-xs font-normal text-slate-400">initial portfolio size</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400 text-sm font-medium">$</span>
+                  <input
+                    type="number"
+                    min={1000}
+                    step={1000}
+                    className="input text-right font-mono"
+                    value={startingValue}
+                    onChange={(e) => setStartingValue(Math.max(1000, parseFloat(e.target.value) || 100_000))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Starting Date
+                  <span className="ml-1 text-xs font-normal text-slate-400">sets "Since Creation" range</span>
+                </label>
+                <input
+                  type="date"
+                  className="input"
+                  value={createdAt ? createdAt.slice(0, 10) : ''}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setCreatedAt(new Date(e.target.value + 'T12:00:00').toISOString());
+                    } else {
+                      setCreatedAt(null);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
             {/* Cash + DRIP row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100">
               <div>
@@ -344,6 +509,11 @@ export default function PortfolioBuilder() {
                     Normalize to 100%
                   </button>
                 )}
+                {needsRebalance && (
+                  <button className="btn-secondary text-xs" onClick={() => setShowRebalance(true)}>
+                    ⟳ Rebalance
+                  </button>
+                )}
                 <TickerSearch
                   existingTickers={holdings.map((h) => h.ticker)}
                   onAdd={addTicker}
@@ -365,7 +535,8 @@ export default function PortfolioBuilder() {
                         <th className="th">Name</th>
                         <th className="th">Type</th>
                         <th className="th text-right">Last Price</th>
-                        <th className="th text-right">Weight %</th>
+                        <th className="th text-right">Target %</th>
+                        <th className="th text-right">Current %</th>
                         <th className="th w-10" />
                       </tr>
                     </thead>
@@ -410,6 +581,25 @@ export default function PortfolioBuilder() {
                               <p className="text-xs text-red-500 mt-0.5 text-right">{weightErrors[h.ticker]}</p>
                             )}
                           </td>
+                          {/* Current (drifted) weight — read-only, color-coded vs target */}
+                          <td className="td text-right">
+                            {(() => {
+                              const drifted = currentWeights[h.ticker]?.driftedWeight;
+                              if (drifted == null) return <span className="text-slate-300 text-xs">—</span>;
+                              const diff = drifted - h.weight_percent;
+                              return (
+                                <span className={`font-mono text-sm ${
+                                  Math.abs(diff) < 0.5
+                                    ? 'text-slate-500'
+                                    : diff > 0
+                                      ? 'text-green-600 font-semibold'
+                                      : 'text-orange-500 font-semibold'
+                                }`}>
+                                  {drifted.toFixed(2)}%
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="td">
                             <button
                               className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
@@ -430,7 +620,8 @@ export default function PortfolioBuilder() {
                         }`}>
                           {totalWeight.toFixed(2)}%
                         </td>
-                        <td />
+                        <td />{/* Current % — no total needed */}
+                        <td />{/* Delete button column */}
                       </tr>
                     </tfoot>
                   </table>
@@ -498,6 +689,59 @@ export default function PortfolioBuilder() {
               })}
             </div>
           </div>
+
+          {/* Weight History — collapsible log of all weight changes, rebalances, and additions */}
+          {weightHistory.length > 0 && (
+            <div className="card p-5">
+              <button
+                className="flex items-center justify-between w-full"
+                onClick={() => setHistoryOpen((o) => !o)}
+              >
+                <h2 className="section-title">
+                  Weight History
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    ({weightHistory.length} event{weightHistory.length !== 1 ? 's' : ''})
+                  </span>
+                </h2>
+                <span className="text-slate-400 text-sm">{historyOpen ? '▲' : '▼'}</span>
+              </button>
+              {historyOpen && (
+                <div className="mt-4 space-y-3">
+                  {[...weightHistory].reverse().map((event) => {
+                    const typeConfig = {
+                      created:         { icon: '★', color: 'text-blue-500',  label: 'Portfolio created' },
+                      rebalance:       { icon: '⟳', color: 'text-green-600', label: 'Rebalanced to targets' },
+                      adjustment:      { icon: '↕', color: 'text-amber-500', label: 'Weights adjusted' },
+                      holding_added:   { icon: '+', color: 'text-blue-500',  label: 'Holdings added' },
+                      holding_removed: { icon: '−', color: 'text-red-500',   label: 'Holdings removed' },
+                    }[event.type] ?? { icon: '·', color: 'text-slate-400', label: event.type };
+                    return (
+                      <div key={event.id} className="flex gap-3 text-sm">
+                        <div className={`flex-shrink-0 w-5 text-center font-bold mt-0.5 ${typeConfig.color}`}>
+                          {typeConfig.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="font-medium text-slate-700">{typeConfig.label}</span>
+                            <span className="text-xs text-slate-400 flex-shrink-0">
+                              {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {event.changes.map((c) => (
+                              <span key={c.ticker} className="text-xs bg-slate-100 rounded px-1.5 py-0.5 text-slate-600 font-mono">
+                                {c.ticker}: {c.from != null ? `${c.from.toFixed(1)}%` : '—'} → {c.to != null ? `${c.to.toFixed(1)}%` : '—'}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Sidebar: live snapshot */}
@@ -551,6 +795,12 @@ export default function PortfolioBuilder() {
                     portfolioReturn1D > 0 ? 'text-green-600' : portfolioReturn1D < 0 ? 'text-red-500' : 'text-slate-500'
                   }`}>
                     {portfolioReturn1D > 0 ? '+' : ''}{portfolioReturn1D.toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm mt-1">
+                  <span className="text-slate-500">Est. Value</span>
+                  <span className="font-semibold text-slate-800">
+                    ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                   </span>
                 </div>
                 {benchmarkReturn1D !== null && (
@@ -612,6 +862,16 @@ export default function PortfolioBuilder() {
           message="All holdings and history for this portfolio will be permanently removed."
           onConfirm={handleDelete}
           onCancel={() => setShowDelete(false)}
+        />
+      )}
+
+      {showRebalance && (
+        <ConfirmModal
+          title="Rebalance to target weights?"
+          message="Entry prices will be updated to current market prices, resetting drift back to zero. A rebalance event will be logged in the weight history."
+          confirmLabel="Rebalance"
+          onConfirm={handleRebalance}
+          onCancel={() => setShowRebalance(false)}
         />
       )}
     </div>

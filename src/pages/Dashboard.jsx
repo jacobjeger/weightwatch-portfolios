@@ -209,7 +209,9 @@ export default function Dashboard() {
                     <div className={`font-semibold text-sm ${retColor}`}>
                       {ret != null ? `${ret > 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
                     </div>
-                    <div className="text-xs text-slate-400">{p.holdings?.length ?? 0} holdings</div>
+                    <div className="text-xs text-slate-400">
+                      {p.starting_value ? `$${(p.starting_value / 1000).toFixed(0)}K · ` : ''}{p.holdings?.length ?? 0} holdings
+                    </div>
                   </div>
                 </div>
               );
@@ -233,6 +235,7 @@ export default function Dashboard() {
                     <th className="th">Portfolio Name</th>
                     <th className="th">Primary Benchmark</th>
                     <th className="th">Performance ({perfTimeframe})</th>
+                    <th className="th text-right">Value</th>
                     <th className="th">Holdings</th>
                     <th className="th">Last Updated</th>
                     <th className="th">Status</th>
@@ -291,6 +294,11 @@ export default function Dashboard() {
                         </td>
                         <td className="td">
                           <span className="text-slate-600">{p.holdings?.length ?? 0}</span>
+                        </td>
+                        <td className="td text-right font-mono text-slate-700 text-sm">
+                          {p.starting_value
+                            ? `$${(p.starting_value / 1000).toFixed(0)}K`
+                            : '—'}
                         </td>
                         <td className="td text-slate-500 text-xs">
                           {formatDistanceToNow(new Date(p.last_updated_at), { addSuffix: true })}

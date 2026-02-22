@@ -302,6 +302,8 @@ export function getPortfolioReturn(holdings, tradingDays) {
 // ─── Demo seed portfolios ─────────────────────────────────────────────────────
 export function createDemoPortfolios(userId) {
   const now = new Date().toISOString();
+  // Two years ago (approximate portfolio creation date for demo)
+  const twoYearsAgo = new Date(Date.now() - 2 * 365.25 * 24 * 60 * 60 * 1000).toISOString();
   return [
     {
       id: 'demo-1',
@@ -310,14 +312,16 @@ export function createDemoPortfolios(userId) {
       description: 'Concentrated US mega-cap tech exposure',
       primary_benchmark: '^NDX',
       secondary_benchmarks: [],
-      created_at: now,
+      starting_value: 100_000,
+      weight_history: [],
+      created_at: twoYearsAgo,
       last_updated_at: now,
       holdings: [
-        { ticker: 'AAPL',  name: 'Apple Inc.',             type: 'Stock', last_price: 228.52, weight_percent: 25 },
-        { ticker: 'MSFT',  name: 'Microsoft Corporation',  type: 'Stock', last_price: 415.40, weight_percent: 25 },
-        { ticker: 'GOOGL', name: 'Alphabet Inc. Class A',  type: 'Stock', last_price: 194.75, weight_percent: 20 },
-        { ticker: 'NVDA',  name: 'NVIDIA Corporation',     type: 'Stock', last_price: 873.22, weight_percent: 20 },
-        { ticker: 'AMZN',  name: 'Amazon.com Inc.',        type: 'Stock', last_price: 224.80, weight_percent: 10 },
+        { ticker: 'AAPL',  name: 'Apple Inc.',             type: 'Stock', last_price: 228.52, entry_price: 228.52, weight_percent: 25 },
+        { ticker: 'MSFT',  name: 'Microsoft Corporation',  type: 'Stock', last_price: 415.40, entry_price: 415.40, weight_percent: 25 },
+        { ticker: 'GOOGL', name: 'Alphabet Inc. Class A',  type: 'Stock', last_price: 194.75, entry_price: 194.75, weight_percent: 20 },
+        { ticker: 'NVDA',  name: 'NVIDIA Corporation',     type: 'Stock', last_price: 873.22, entry_price: 873.22, weight_percent: 20 },
+        { ticker: 'AMZN',  name: 'Amazon.com Inc.',        type: 'Stock', last_price: 224.80, entry_price: 224.80, weight_percent: 10 },
       ],
     },
     {
@@ -327,10 +331,12 @@ export function createDemoPortfolios(userId) {
       description: 'Pure passive US large-cap index exposure',
       primary_benchmark: '^GSPC',
       secondary_benchmarks: [],
-      created_at: now,
+      starting_value: 100_000,
+      weight_history: [],
+      created_at: twoYearsAgo,
       last_updated_at: now,
       holdings: [
-        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', type: 'ETF', last_price: 596.41, weight_percent: 100 },
+        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', type: 'ETF', last_price: 596.41, entry_price: 596.41, weight_percent: 100 },
       ],
     },
     {
@@ -340,13 +346,15 @@ export function createDemoPortfolios(userId) {
       description: 'Diversified across equities, bonds, and international',
       primary_benchmark: 'EFA',
       secondary_benchmarks: [],
-      created_at: now,
+      starting_value: 100_000,
+      weight_history: [],
+      created_at: twoYearsAgo,
       last_updated_at: now,
       holdings: [
-        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust',          type: 'ETF', last_price: 596.41, weight_percent: 40 },
-        { ticker: 'AGG', name: 'iShares Core U.S. Aggregate Bond', type: 'ETF', last_price: 97.20,  weight_percent: 40 },
-        { ticker: 'IWM', name: 'iShares Russell 2000 ETF',         type: 'ETF', last_price: 228.15, weight_percent: 10 },
-        { ticker: 'EFA', name: 'iShares MSCI EAFE ETF',            type: 'ETF', last_price: 78.44,  weight_percent: 10 },
+        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust',          type: 'ETF', last_price: 596.41, entry_price: 596.41, weight_percent: 40 },
+        { ticker: 'AGG', name: 'iShares Core U.S. Aggregate Bond', type: 'ETF', last_price: 97.20,  entry_price: 97.20,  weight_percent: 40 },
+        { ticker: 'IWM', name: 'iShares Russell 2000 ETF',         type: 'ETF', last_price: 228.15, entry_price: 228.15, weight_percent: 10 },
+        { ticker: 'EFA', name: 'iShares MSCI EAFE ETF',            type: 'ETF', last_price: 78.44,  entry_price: 78.44,  weight_percent: 10 },
       ],
     },
   ];
