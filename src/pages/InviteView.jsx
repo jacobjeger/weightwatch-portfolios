@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth, getInvite, acceptInvite } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import PerformanceChart from '../components/PerformanceChart';
+import MessagePanel from '../components/MessagePanel';
 
 export default function InviteView() {
   const { token } = useParams();
@@ -240,6 +241,17 @@ export default function InviteView() {
             drip={false}
           />
         </div>
+
+        {/* Messages with advisor + approve/comment */}
+        {user && accepted && (
+          <MessagePanel
+            portfolioId={invite.portfolio_snapshot.id}
+            userId={user.id}
+            userEmail={user.email}
+            userRole="client"
+            showApprovalActions={true}
+          />
+        )}
 
         <p className="text-center text-xs text-slate-400 pb-4">
           Powered by <span className="font-semibold text-blue-600">WeightWatch Portfolios</span>

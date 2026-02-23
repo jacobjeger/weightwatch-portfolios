@@ -132,16 +132,25 @@ export const INSTRUMENTS = [
 ];
 
 // ─── Benchmark indexes ────────────────────────────────────────────────────────
-// These use real index symbols (^ prefix) as used by Finnhub and most data providers.
-export const BENCHMARKS = ['^GSPC', '^NDX', '^RUT', '^DJI', 'EFA', 'AGG'];
+// Offers both index tickers (^ prefix) and ETF equivalents.
+// ETFs (SPY, QQQ, etc.) work better with live data providers like Finnhub.
+export const BENCHMARKS = [
+  'SPY', 'QQQ', 'IWM', 'DIA',           // ETF equivalents (tradeable, reliable live data)
+  '^GSPC', '^NDX', '^RUT', '^DJI',      // Index tickers (raw index values)
+  'EFA', 'AGG',                           // International & bonds
+];
 
 export const BENCHMARK_META = {
-  '^GSPC': { label: 'S&P 500',          description: 'Large-cap US equities (500 companies)',    color: '#3b82f6' },
-  '^NDX':  { label: 'NASDAQ-100',       description: 'Top 100 NASDAQ non-financial companies',   color: '#8b5cf6' },
-  '^RUT':  { label: 'Russell 2000',     description: 'US small-cap equities (2,000 companies)',  color: '#f59e0b' },
-  '^DJI':  { label: 'Dow Jones 30',     description: '30 blue-chip US industrial companies',     color: '#10b981' },
-  'EFA':   { label: 'MSCI EAFE',        description: 'Developed international markets ex-US',    color: '#06b6d4' },
-  'AGG':   { label: 'US Aggregate Bond',description: 'Investment-grade US bond market',          color: '#6b7280' },
+  'SPY':   { label: 'S&P 500 (SPY)',         description: 'SPDR S&P 500 ETF — large-cap US equities',        color: '#3b82f6' },
+  'QQQ':   { label: 'NASDAQ-100 (QQQ)',      description: 'Invesco QQQ Trust — top 100 NASDAQ companies',    color: '#8b5cf6' },
+  'IWM':   { label: 'Russell 2000 (IWM)',    description: 'iShares Russell 2000 ETF — US small-cap equities',color: '#f59e0b' },
+  'DIA':   { label: 'Dow Jones 30 (DIA)',    description: 'SPDR Dow Jones ETF — 30 blue-chip industrials',   color: '#10b981' },
+  '^GSPC': { label: 'S&P 500 Index',         description: 'Large-cap US equities index (500 companies)',     color: '#3b82f6' },
+  '^NDX':  { label: 'NASDAQ-100 Index',      description: 'Top 100 NASDAQ non-financial companies index',    color: '#8b5cf6' },
+  '^RUT':  { label: 'Russell 2000 Index',    description: 'US small-cap equities index (2,000 companies)',   color: '#f59e0b' },
+  '^DJI':  { label: 'Dow Jones 30 Index',    description: '30 blue-chip US industrial companies index',      color: '#10b981' },
+  'EFA':   { label: 'MSCI EAFE',             description: 'Developed international markets ex-US',           color: '#06b6d4' },
+  'AGG':   { label: 'US Aggregate Bond',     description: 'Investment-grade US bond market',                 color: '#6b7280' },
 };
 
 // ─── Seeded random ────────────────────────────────────────────────────────────
@@ -174,10 +183,13 @@ const DRIFT = 0.00035; // slight upward drift per trading day (~9% annual)
 // Used to bias-correct the random walk so chart direction matches reality.
 // All others fall back to DRIFT * 504 default (~19% over 2 years).
 const TICKER_TARGET_2YR = {
+  // Index tickers
   '^GSPC':  0.27,  // S&P 500 ~+27%
   '^NDX':   0.38,  // NASDAQ-100 ~+38%
   '^DJI':   0.22,  // Dow Jones ~+22%
   '^RUT':   0.08,  // Russell 2000 ~+8% (small caps lagged)
+  // ETF equivalents (mirror their index)
+  'SPY':    0.27,  'QQQ':   0.38,  'DIA':   0.22,  'IWM':   0.08,
   'EFA':    0.10,  // MSCI EAFE ~+10%
   'AGG':   -0.02,  // US Agg bonds ~-2% (rates stayed elevated)
   // Mega-cap highlights

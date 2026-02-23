@@ -12,6 +12,7 @@ const LS = {
   shares: 'wwp_shares',
   invites: 'wwp_invites',
   clients: 'wwp_clients', // { [userId]: { advisor_id, portfolio_ids } }
+  messages: 'wwp_messages',
 };
 
 // ─── Mock helpers ─────────────────────────────────────────────────────────────
@@ -341,4 +342,31 @@ export function acceptInvite(userId, invite) {
     accepted_at: new Date().toISOString(),
   };
   lsSet(LS.clients, clients);
+}
+
+// ─── Message helpers ─────────────────────────────────────────────────────────
+// Advisor ↔ client messaging per portfolio.
+export function getMessages(portfolioId) {
+  return lsGet(LS.messages, [])
+    .filter((m) => m.portfolio_id === portfolioId)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+}
+
+export function sendMessage(message) {
+  const all = lsGet(LS.messages, []);
+  const msg = {
+    id: crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+    ...message,
+  };
+  all.push(msg);
+  lsSet(LS.messages, all);
+  return msg;
+}
+
+// Returns the most recent approval or change_request for a portfolio.
+export function getLatestApproval(portfolioId) {
+  return lsGet(LS.messages, [])
+    .filter((m) => m.portfolio_id === portfolioId && (m.type === 'approval' || m.type === 'change_request'))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] ?? null;
 }

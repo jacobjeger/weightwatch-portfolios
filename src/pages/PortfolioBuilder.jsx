@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient } from '../context/AuthContext';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn } from '../lib/mockData';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
+import MessagePanel from '../components/MessagePanel';
 import { useToast } from '../context/ToastContext';
 import { useMarketData } from '../context/MarketDataContext';
 
@@ -474,7 +475,7 @@ export default function PortfolioBuilder() {
                   <option value="">— None —</option>
                   {BENCHMARKS.map((b) => (
                     <option key={b} value={b}>
-                      {BENCHMARK_META[b]?.label ?? b} ({b})
+                      {BENCHMARK_META[b]?.label ?? b}
                     </option>
                   ))}
                 </select>
@@ -612,6 +613,7 @@ export default function PortfolioBuilder() {
                         <th className="th text-right">Last Price</th>
                         <th className="th text-right">Target %</th>
                         <th className="th text-right">Current %</th>
+                        <th className="th text-right">Est. Value</th>
                         <th className="th w-10" />
                       </tr>
                     </thead>
@@ -626,15 +628,26 @@ export default function PortfolioBuilder() {
                             }`}>{h.type}</span>
                           </td>
                           <td className="td">
-                            <select
-                              className="input text-xs py-0.5 px-1"
-                              value={h.category || 'Core'}
-                              onChange={(e) => updateCategory(h.ticker, e.target.value)}
-                            >
-                              <option>Core</option>
-                              <option>Tilt</option>
-                              <option>Satellite</option>
-                            </select>
+                            <div className="flex items-center gap-1">
+                              {['Core', 'Tilt', 'Satellite'].map((cat) => {
+                                const active = (h.category || 'Core') === cat;
+                                const colors = {
+                                  Core: active ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-300' : 'text-slate-400 hover:bg-blue-50 hover:text-blue-600',
+                                  Tilt: active ? 'bg-violet-100 text-violet-700 ring-1 ring-violet-300' : 'text-slate-400 hover:bg-violet-50 hover:text-violet-600',
+                                  Satellite: active ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300' : 'text-slate-400 hover:bg-amber-50 hover:text-amber-600',
+                                };
+                                return (
+                                  <button
+                                    key={cat}
+                                    type="button"
+                                    className={`text-xs px-2 py-1 rounded-full font-medium transition-all cursor-pointer ${colors[cat]}`}
+                                    onClick={() => updateCategory(h.ticker, cat)}
+                                  >
+                                    {cat}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </td>
                           <td className="td text-right font-mono text-slate-700">
                             {(() => {
@@ -697,6 +710,18 @@ export default function PortfolioBuilder() {
                               );
                             })()}
                           </td>
+                          <td className="td text-right">
+                            {(() => {
+                              const drifted = currentWeights[h.ticker]?.driftedWeight;
+                              if (drifted == null) return <span className="text-slate-300 text-xs">--</span>;
+                              const dollarValue = currentPortfolioValue * (drifted / 100);
+                              return (
+                                <span className="font-mono text-sm text-slate-700">
+                                  ${Math.round(dollarValue).toLocaleString('en-US')}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="td">
                             <button
                               className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
@@ -718,6 +743,9 @@ export default function PortfolioBuilder() {
                           {totalWeight.toFixed(2)}%
                         </td>
                         <td />{/* Current % — no total needed */}
+                        <td className="td text-right font-semibold font-mono text-sm text-slate-700">
+                          ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
+                        </td>
                         <td />{/* Delete button column */}
                       </tr>
                     </tfoot>
@@ -909,10 +937,39 @@ export default function PortfolioBuilder() {
               )}
             </div>
           )}
+
+          {/* Messages — advisor ↔ client communication */}
+          {!isNew && (
+            <MessagePanel
+              portfolioId={portfolioId}
+              userId={user.id}
+              userEmail={user.email}
+              userRole={role}
+            />
+          )}
         </div>
 
         {/* Sidebar: live snapshot */}
         <div className="space-y-6">
+          {/* Client approval status badge */}
+          {!isNew && (() => {
+            const approval = getLatestApproval(portfolioId);
+            if (!approval) return null;
+            return (
+              <div className={`p-3 rounded-lg text-sm ${
+                approval.type === 'approval'
+                  ? 'bg-green-50 border border-green-200 text-green-700'
+                  : 'bg-amber-50 border border-amber-200 text-amber-700'
+              }`}>
+                <span className="font-medium">
+                  {approval.type === 'approval' ? 'Client approved' : 'Changes requested'}
+                </span>
+                <span className="block text-xs opacity-75 mt-0.5">
+                  {approval.sender_email} &middot; {new Date(approval.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            );
+          })()}
           <div className="card p-5">
             <div className="flex items-center justify-between mb-1">
               <h2 className="section-title">Live Snapshot</h2>

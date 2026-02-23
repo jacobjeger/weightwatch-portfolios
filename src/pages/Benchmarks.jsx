@@ -191,7 +191,7 @@ export default function Benchmarks() {
             >
               <option value="">— None —</option>
               {BENCHMARKS.map((b) => (
-                <option key={b} value={b}>{BENCHMARK_META[b]?.label ?? b} ({b})</option>
+                <option key={b} value={b}>{BENCHMARK_META[b]?.label ?? b}</option>
               ))}
             </select>
           </div>

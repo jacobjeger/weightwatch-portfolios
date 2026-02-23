@@ -190,3 +190,49 @@ create policy "Owners manage own share tokens"
   on public.share_tokens for all
   using (auth.uid() = owner_id)
   with check (auth.uid() = owner_id);
+
+-- ────────────────────────────────────────────────────────────
+-- Messages (advisor ↔ client communication per portfolio)
+-- ────────────────────────────────────────────────────────────
+create table if not exists public.messages (
+  id           uuid primary key default gen_random_uuid(),
+  portfolio_id uuid not null,
+  sender_id    uuid not null references auth.users(id) on delete cascade,
+  sender_email text,
+  sender_role  text not null check (sender_role in ('advisor', 'client')),
+  type         text not null default 'comment' check (type in ('comment', 'approval', 'change_request')),
+  text         text not null,
+  created_at   timestamptz not null default now()
+);
+
+alter table public.messages enable row level security;
+
+create policy "Users can read messages for their portfolios"
+  on public.messages for select using (
+    auth.uid() = sender_id
+  );
+
+create policy "Users can send messages"
+  on public.messages for insert
+  with check (auth.uid() = sender_id);
+
+-- ────────────────────────────────────────────────────────────
+-- Invites (advisor → client invite links)
+-- ────────────────────────────────────────────────────────────
+create table if not exists public.invites (
+  token              text primary key,
+  advisor_id         uuid not null references auth.users(id) on delete cascade,
+  client_email       text,
+  portfolio_ids      uuid[],
+  portfolio_snapshot jsonb,
+  created_at         timestamptz not null default now()
+);
+
+alter table public.invites enable row level security;
+
+create policy "Anyone can read invites by token"
+  on public.invites for select using (true);
+
+create policy "Advisors can create invites"
+  on public.invites for insert
+  with check (auth.uid() = advisor_id);
