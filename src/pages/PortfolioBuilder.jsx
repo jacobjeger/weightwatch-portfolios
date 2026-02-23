@@ -351,7 +351,9 @@ export default function PortfolioBuilder() {
       starting_value: startingValue, created_at: createdAt };
     try {
       const token = await inviteClient(user.id, inviteEmail.trim(), [portfolioId], snap);
-      const url = `${window.location.origin}/invite/${token}`;
+      // Encode invite data in URL for cross-browser demo mode support
+      const encoded = btoa(JSON.stringify({ token, advisor_id: user.id, client_email: inviteEmail.trim(), portfolio_ids: [portfolioId], portfolio_snapshot: snap, created_at: new Date().toISOString() }));
+      const url = `${window.location.origin}/invite/${token}?d=${encodeURIComponent(encoded)}`;
       setInviteUrl(url);
       navigator.clipboard?.writeText(url);
       toast.success('Invite link copied to clipboard!');
@@ -1030,7 +1032,7 @@ export default function PortfolioBuilder() {
                 {benchmark && benchmarkReturn1D !== null && (
                   <div className="mt-1">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">{benchmark} today</span>
+                      <span className="text-slate-500">{BENCHMARK_META[benchmark]?.label ?? benchmark} today</span>
                       <span className={`font-semibold ${benchmarkReturn1D > 0 ? 'text-green-600' : benchmarkReturn1D < 0 ? 'text-red-500' : 'text-slate-500'}`}>
                         {benchmarkReturn1D > 0 ? '+' : ''}{benchmarkReturn1D.toFixed(2)}%
                       </span>
@@ -1059,11 +1061,11 @@ export default function PortfolioBuilder() {
                     {erOpen && (() => {
                       const rows = holdings.map((h) => {
                         const inst = INSTRUMENTS.find((i) => i.ticker === h.ticker);
-                        const rate = inst?.expense_ratio ?? 0;
+                        const rate = inst?.expense_ratio ?? null;
                         return { ticker: h.ticker, weight: h.weight_percent, rate,
-                                 contribution: (h.weight_percent / 100) * rate * investedFraction };
-                      }).filter((r) => r.rate > 0);
-                      if (!rows.length) return <p className="text-gray-400 italic mt-2">All holdings have 0% ER</p>;
+                                 contribution: rate != null ? (h.weight_percent / 100) * rate * investedFraction : null };
+                      });
+                      if (!rows.length) return <p className="text-gray-400 italic mt-2">No holdings</p>;
                       return (
                         <table className="w-full mt-2 border-t border-gray-200">
                           <thead>
@@ -1079,8 +1081,8 @@ export default function PortfolioBuilder() {
                               <tr key={r.ticker} className="border-t border-gray-100">
                                 <td className="py-1 font-mono font-semibold text-gray-700">{r.ticker}</td>
                                 <td className="py-1 text-right text-gray-500">{r.weight.toFixed(1)}%</td>
-                                <td className="py-1 text-right text-gray-500">{r.rate.toFixed(3)}%</td>
-                                <td className="py-1 text-right font-semibold text-gray-700">{r.contribution.toFixed(4)}%</td>
+                                <td className="py-1 text-right text-gray-500">{r.rate != null ? `${r.rate.toFixed(3)}%` : <span className="text-gray-300">N/A</span>}</td>
+                                <td className="py-1 text-right font-semibold text-gray-700">{r.contribution != null ? `${r.contribution.toFixed(4)}%` : <span className="text-gray-300">—</span>}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1099,11 +1101,11 @@ export default function PortfolioBuilder() {
                     {yieldOpen && (() => {
                       const rows = holdings.map((h) => {
                         const inst = INSTRUMENTS.find((i) => i.ticker === h.ticker);
-                        const rate = inst?.div_yield ?? 0;
+                        const rate = inst?.div_yield ?? null;
                         return { ticker: h.ticker, weight: h.weight_percent, rate,
-                                 contribution: (h.weight_percent / 100) * rate * investedFraction };
-                      }).filter((r) => r.rate > 0);
-                      if (!rows.length) return <p className="text-gray-400 italic mt-2">No dividend-paying holdings</p>;
+                                 contribution: rate != null ? (h.weight_percent / 100) * rate * investedFraction : null };
+                      });
+                      if (!rows.length) return <p className="text-gray-400 italic mt-2">No holdings</p>;
                       return (
                         <table className="w-full mt-2 border-t border-gray-200">
                           <thead>
@@ -1119,8 +1121,8 @@ export default function PortfolioBuilder() {
                               <tr key={r.ticker} className="border-t border-gray-100">
                                 <td className="py-1 font-mono font-semibold text-gray-700">{r.ticker}</td>
                                 <td className="py-1 text-right text-gray-500">{r.weight.toFixed(1)}%</td>
-                                <td className="py-1 text-right text-green-600">{r.rate.toFixed(2)}%</td>
-                                <td className="py-1 text-right font-semibold text-green-600">{r.contribution.toFixed(3)}%</td>
+                                <td className="py-1 text-right text-green-600">{r.rate != null ? `${r.rate.toFixed(2)}%` : <span className="text-gray-300">N/A</span>}</td>
+                                <td className="py-1 text-right font-semibold text-green-600">{r.contribution != null ? `${r.contribution.toFixed(3)}%` : <span className="text-gray-300">—</span>}</td>
                               </tr>
                             ))}
                           </tbody>

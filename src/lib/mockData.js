@@ -36,6 +36,19 @@ export const INSTRUMENTS = [
   { ticker: 'TQQQ', name: 'ProShares UltraPro QQQ',              type: 'ETF',   exchange: 'NASDAQ', last_price: 68.14,   expense_ratio: 0.88,   div_yield: 0.2  },
   { ticker: 'SQQQ', name: 'ProShares UltraPro Short QQQ',        type: 'ETF',   exchange: 'NASDAQ', last_price: 9.43,    expense_ratio: 0.95,   div_yield: 0    },
   { ticker: 'SOXX', name: 'iShares Semiconductor ETF',           type: 'ETF',   exchange: 'NASDAQ', last_price: 248.71,  expense_ratio: 0.35,   div_yield: 0.7  },
+  // Additional popular ETFs
+  { ticker: 'VXUS', name: 'Vanguard Total International Stock', type: 'ETF',   exchange: 'NASDAQ', last_price: 60.12,   expense_ratio: 0.07,   div_yield: 3.1  },
+  { ticker: 'QQQM', name: 'Invesco NASDAQ 100 ETF',             type: 'ETF',   exchange: 'NASDAQ', last_price: 209.55,  expense_ratio: 0.15,   div_yield: 0.6  },
+  { ticker: 'AVUV', name: 'Avantis US Small Cap Value ETF',     type: 'ETF',   exchange: 'NYSE',   last_price: 99.87,   expense_ratio: 0.25,   div_yield: 1.8  },
+  { ticker: 'SCHD', name: 'Schwab US Dividend Equity ETF',      type: 'ETF',   exchange: 'NYSE',   last_price: 28.42,   expense_ratio: 0.06,   div_yield: 3.4  },
+  { ticker: 'XLU',  name: 'Utilities Select Sector SPDR',       type: 'ETF',   exchange: 'NYSE',   last_price: 75.83,   expense_ratio: 0.13,   div_yield: 2.8  },
+  { ticker: 'GLTR', name: 'abrdn Physical Precious Metals ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 108.92,  expense_ratio: 0.60,   div_yield: 0    },
+  { ticker: 'BITW', name: 'Bitwise 10 Crypto Index Fund',       type: 'ETF',   exchange: 'OTC',    last_price: 38.56,   expense_ratio: 2.50,   div_yield: 0    },
+  { ticker: 'IBIT', name: 'iShares Bitcoin Trust ETF',           type: 'ETF',   exchange: 'NASDAQ', last_price: 52.34,   expense_ratio: 0.25,   div_yield: 0    },
+  { ticker: 'JEPI', name: 'JPMorgan Equity Premium Income ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 57.12,   expense_ratio: 0.35,   div_yield: 7.2  },
+  { ticker: 'JEPQ', name: 'JPMorgan Nasdaq Equity Premium Income', type: 'ETF', exchange: 'NASDAQ', last_price: 53.88,  expense_ratio: 0.35,   div_yield: 9.5  },
+  { ticker: 'VIG',  name: 'Vanguard Dividend Appreciation ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 188.76,  expense_ratio: 0.06,   div_yield: 1.8  },
+  { ticker: 'SPLG', name: 'SPDR Portfolio S&P 500 ETF',         type: 'ETF',   exchange: 'NYSE',   last_price: 67.28,   expense_ratio: 0.02,   div_yield: 1.3  },
   // Large-cap Tech                                                               expense_ratio: 0 for all stocks
   { ticker: 'AAPL', name: 'Apple Inc.',                          type: 'Stock', exchange: 'NASDAQ', last_price: 228.52,  expense_ratio: 0,      div_yield: 0.5  },
   { ticker: 'MSFT', name: 'Microsoft Corporation',               type: 'Stock', exchange: 'NASDAQ', last_price: 415.40,  expense_ratio: 0,      div_yield: 0.7  },
@@ -132,11 +145,11 @@ export const INSTRUMENTS = [
 ];
 
 // ─── Benchmark indexes ────────────────────────────────────────────────────────
-// Offers both index tickers (^ prefix) and ETF equivalents.
+// Offers both CBOE index tickers and ETF equivalents.
 // ETFs (SPY, QQQ, etc.) work better with live data providers like Finnhub.
 export const BENCHMARKS = [
   'SPY', 'QQQ', 'IWM', 'DIA',           // ETF equivalents (tradeable, reliable live data)
-  '^GSPC', '^NDX', '^RUT', '^DJI',      // Index tickers (raw index values)
+  'SPX', 'NDX', 'RUT', 'DJI',           // CBOE index tickers
   'EFA', 'AGG',                           // International & bonds
 ];
 
@@ -145,10 +158,10 @@ export const BENCHMARK_META = {
   'QQQ':   { label: 'NASDAQ-100 (QQQ)',      description: 'Invesco QQQ Trust — top 100 NASDAQ companies',    color: '#8b5cf6' },
   'IWM':   { label: 'Russell 2000 (IWM)',    description: 'iShares Russell 2000 ETF — US small-cap equities',color: '#f59e0b' },
   'DIA':   { label: 'Dow Jones 30 (DIA)',    description: 'SPDR Dow Jones ETF — 30 blue-chip industrials',   color: '#10b981' },
-  '^GSPC': { label: 'S&P 500 Index',         description: 'Large-cap US equities index (500 companies)',     color: '#3b82f6' },
-  '^NDX':  { label: 'NASDAQ-100 Index',      description: 'Top 100 NASDAQ non-financial companies index',    color: '#8b5cf6' },
-  '^RUT':  { label: 'Russell 2000 Index',    description: 'US small-cap equities index (2,000 companies)',   color: '#f59e0b' },
-  '^DJI':  { label: 'Dow Jones 30 Index',    description: '30 blue-chip US industrial companies index',      color: '#10b981' },
+  'SPX':   { label: 'S&P 500 (CBOE: SPX)',   description: 'CBOE S&P 500 index — 500 large-cap US equities',  color: '#3b82f6' },
+  'NDX':   { label: 'NASDAQ-100 (CBOE: NDX)',description: 'CBOE NASDAQ-100 — top 100 non-financial companies',color: '#8b5cf6' },
+  'RUT':   { label: 'Russell 2000 (CBOE: RUT)', description: 'CBOE Russell 2000 — US small-cap equities',    color: '#f59e0b' },
+  'DJI':   { label: 'Dow Jones 30 (CBOE: DJI)', description: 'CBOE Dow Jones — 30 blue-chip industrials',    color: '#10b981' },
   'EFA':   { label: 'MSCI EAFE',             description: 'Developed international markets ex-US',           color: '#06b6d4' },
   'AGG':   { label: 'US Aggregate Bond',     description: 'Investment-grade US bond market',                 color: '#6b7280' },
 };
@@ -183,13 +196,16 @@ const DRIFT = 0.00035; // slight upward drift per trading day (~9% annual)
 // Used to bias-correct the random walk so chart direction matches reality.
 // All others fall back to DRIFT * 504 default (~19% over 2 years).
 const TICKER_TARGET_2YR = {
-  // Index tickers
-  '^GSPC':  0.27,  // S&P 500 ~+27%
-  '^NDX':   0.38,  // NASDAQ-100 ~+38%
-  '^DJI':   0.22,  // Dow Jones ~+22%
-  '^RUT':   0.08,  // Russell 2000 ~+8% (small caps lagged)
+  // CBOE index tickers
+  'SPX':    0.27,  // S&P 500 ~+27%
+  'NDX':    0.38,  // NASDAQ-100 ~+38%
+  'DJI':    0.22,  // Dow Jones ~+22%
+  'RUT':    0.08,  // Russell 2000 ~+8% (small caps lagged)
   // ETF equivalents (mirror their index)
   'SPY':    0.27,  'QQQ':   0.38,  'DIA':   0.22,  'IWM':   0.08,
+  // Popular ETFs the user may add
+  'VOO':    0.27,  'VXUS':  0.10,  'QQQM':  0.38,  'AVUV':  0.12,
+  'SCHD':   0.18,  'XLU':   0.15,  'GLTR':  0.25,  'BITW':  0.60,
   'EFA':    0.10,  // MSCI EAFE ~+10%
   'AGG':   -0.02,  // US Agg bonds ~-2% (rates stayed elevated)
   // Mega-cap highlights

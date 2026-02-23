@@ -211,7 +211,7 @@ export default function Benchmarks() {
         <div className="mt-4 flex gap-3">
           <button
             className="btn-secondary text-xs"
-            onClick={() => setSettings((s) => ({ ...s, primary_benchmark: '^GSPC', inherit_defaults: true }))}
+            onClick={() => setSettings((s) => ({ ...s, primary_benchmark: 'SPX', inherit_defaults: true }))}
           >
             Reset to Recommended Defaults
           </button>

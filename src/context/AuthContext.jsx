@@ -196,7 +196,17 @@ function pushToSupabase(userId, all) {
 
 // ─── Portfolio data helpers ───────────────────────────────────────────────────
 export function getPortfolios(userId) {
-  return lsGet(LS.portfolios, []).filter((p) => p.owner === userId);
+  const all = lsGet(LS.portfolios, []);
+  const owned = all.filter((p) => p.owner === userId);
+  // Also include portfolios shared via invite (client → advisor's portfolios)
+  const clientData = lsGet(LS.clients, {})[userId];
+  if (clientData?.portfolio_ids) {
+    const shared = all.filter(
+      (p) => clientData.portfolio_ids.includes(p.id) && p.owner !== userId
+    );
+    return [...owned, ...shared];
+  }
+  return owned;
 }
 
 export function savePortfolio(portfolio) {

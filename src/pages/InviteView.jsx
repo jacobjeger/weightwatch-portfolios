@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth, getInvite, acceptInvite } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import PerformanceChart from '../components/PerformanceChart';
@@ -8,6 +8,7 @@ import MessagePanel from '../components/MessagePanel';
 export default function InviteView() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, signUp, signIn } = useAuth();
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,14 +24,27 @@ export default function InviteView() {
 
   useEffect(() => {
     getInvite(token).then((inv) => {
-      if (!inv) setNotFound(true);
-      else {
+      if (inv) {
         setInvite(inv);
         if (inv.client_email) setEmail(inv.client_email);
+      } else {
+        // Fall back to URL-encoded invite data (cross-browser demo mode)
+        const encoded = searchParams.get('d');
+        if (encoded) {
+          try {
+            const decoded = JSON.parse(atob(decodeURIComponent(encoded)));
+            setInvite(decoded);
+            if (decoded.client_email) setEmail(decoded.client_email);
+          } catch {
+            setNotFound(true);
+          }
+        } else {
+          setNotFound(true);
+        }
       }
       setLoading(false);
     });
-  }, [token]);
+  }, [token, searchParams]);
 
   // Auto-accept when user is logged in
   useEffect(() => {
@@ -245,7 +259,7 @@ export default function InviteView() {
         {/* Messages with advisor + approve/comment */}
         {user && accepted && (
           <MessagePanel
-            portfolioId={invite.portfolio_snapshot.id}
+            portfolioId={invite.portfolio_ids?.[0] ?? invite.portfolio_snapshot?.id}
             userId={user.id}
             userEmail={user.email}
             userRole="client"
