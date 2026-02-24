@@ -1,11 +1,20 @@
 // ─── Finnhub market data client ───────────────────────────────────────────────
 // API key is exposed client-side (VITE_ prefix). Acceptable for a personal/demo
 // app on the free tier — the key only grants market data read access.
+//
+// Historical candle data: tries Finnhub first; if the free-tier returns 403,
+// automatically falls back to Yahoo Finance (via /api/yahoo-chart proxy) for
+// all subsequent requests.  This gives us free unlimited historical data.
+
+import { getYahooCandles } from './yahoo';
 
 const BASE = 'https://finnhub.io/api/v1';
 const KEY  = import.meta.env.VITE_FINNHUB_API_KEY;
 
 export const isConfigured = () => Boolean(KEY);
+
+// After the first 403 from Finnhub candles, switch permanently to Yahoo
+let candleSource = 'finnhub'; // 'finnhub' | 'yahoo'
 
 // ── In-memory caches ─────────────────────────────────────────────────────────
 const quoteCache  = new Map(); // ticker   → { data, ts }
@@ -69,6 +78,29 @@ export async function getCandles(ticker, fromDate, toDate) {
   return data;
 }
 
+// ── Unified candle fetcher (auto-fallback Finnhub → Yahoo) ─────────────────
+// Tries Finnhub candles first; on 403 switches to Yahoo Finance permanently.
+// Returns same format: [{ date, price }, ...]
+async function getHistoricalCandles(ticker, fromDate, toDate) {
+  // Already switched to Yahoo — go straight there
+  if (candleSource === 'yahoo') {
+    return getYahooCandles(ticker, fromDate, toDate);
+  }
+
+  try {
+    const data = await getCandles(ticker, fromDate, toDate);
+    return data;
+  } catch (err) {
+    // Finnhub free tier returns 403 for candle endpoint — switch to Yahoo
+    if (err.message.includes('403')) {
+      console.info('[Market Data] Finnhub candles returned 403 — switching to Yahoo Finance (free)');
+      candleSource = 'yahoo';
+      return getYahooCandles(ticker, fromDate, toDate);
+    }
+    throw err;
+  }
+}
+
 // ── Symbol search ─────────────────────────────────────────────────────────────
 // Returns: [{ ticker, name, type, exchange }] matching the query
 export async function searchSymbols(query) {
@@ -118,11 +150,11 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
   const toDate   = new Date().toISOString().slice(0, 10);
   const fromDate = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
-  // Fetch all in parallel; catch individual failures gracefully
+  // Fetch all via unified candle fetcher (auto-fallback Finnhub → Yahoo)
   const [holdingCandles, benchCandles] = await Promise.all([
-    Promise.all(holdings.map(h => getCandles(h.ticker, fromDate, toDate).catch(() => []))),
+    Promise.all(holdings.map(h => getHistoricalCandles(h.ticker, fromDate, toDate).catch(() => []))),
     benchmarkTicker
-      ? getCandles(benchmarkTicker, fromDate, toDate).catch(() => [])
+      ? getHistoricalCandles(benchmarkTicker, fromDate, toDate).catch(() => [])
       : Promise.resolve([]),
   ]);
 
@@ -162,16 +194,18 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
 }
 
 // ── Staggered fetch helper ──────────────────────────────────────────────────
-// Finnhub free tier: 60 calls/min.  Stagger by 200 ms to stay well within.
+// Stagger requests to stay within rate limits.  Uses getHistoricalCandles
+// which auto-falls-back from Finnhub to Yahoo Finance.
 async function staggeredCandles(tickers, fromDate, toDate) {
   const results = [];
   for (let i = 0; i < tickers.length; i++) {
-    if (i > 0) await new Promise(r => setTimeout(r, 200));
+    // Smaller delay for Yahoo (no rate limit), 200 ms for Finnhub
+    if (i > 0) await new Promise(r => setTimeout(r, candleSource === 'yahoo' ? 50 : 200));
     try {
-      const data = await getCandles(tickers[i], fromDate, toDate);
+      const data = await getHistoricalCandles(tickers[i], fromDate, toDate);
       results.push(data);
     } catch (err) {
-      console.warn(`[Finnhub] Candle fetch failed for ${tickers[i]}:`, err.message);
+      console.warn(`[${candleSource === 'yahoo' ? 'Yahoo' : 'Finnhub'}] Candle fetch failed for ${tickers[i]}:`, err.message);
       results.push([]);
     }
   }
@@ -239,7 +273,8 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
   const tickers = holdings.map(h => h.ticker);
   const allTickers = benchmarkTicker ? [...tickers, benchmarkTicker] : tickers;
 
-  console.info('[Finnhub] Fetching candles for', allTickers.length, 'tickers…');
+  const src = candleSource === 'yahoo' ? 'Yahoo' : 'Finnhub';
+  console.info(`[${src}] Fetching candles for`, allTickers.length, 'tickers…');
   const candleResults = await staggeredCandles(allTickers, fromDate, toDate);
 
   const holdingCandles = candleResults.slice(0, tickers.length);
@@ -247,7 +282,8 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
 
   // Log how many tickers got data
   const withData = holdingCandles.filter(c => c.length > 0).length;
-  console.info(`[Finnhub] Candle data: ${withData}/${tickers.length} holdings, benchmark: ${benchCandles.length > 0 ? 'yes' : 'no'}`);
+  const srcNow = candleSource === 'yahoo' ? 'Yahoo' : 'Finnhub';
+  console.info(`[${srcNow}] Candle data: ${withData}/${tickers.length} holdings, benchmark: ${benchCandles.length > 0 ? 'yes' : 'no'}`);
 
   // Build price lookup maps
   const priceMaps = holdingCandles.map(candles => {
@@ -263,7 +299,7 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
 
   // If no candle data at all, fall back to quote-based 1D returns only
   if (!allDates.length) {
-    console.warn('[Finnhub] No candle data available — falling back to quote-based 1D returns');
+    console.warn(`[${srcNow}] No candle data available — falling back to quote-based 1D returns`);
     const quoteRet = await getQuoteBasedReturns(holdings, benchmarkTicker);
     const result = { portfolio: {}, benchmark: {} };
     for (const label of Object.keys(PERF_DAYS)) {

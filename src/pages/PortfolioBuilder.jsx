@@ -933,7 +933,7 @@ export default function PortfolioBuilder() {
               <h2 className="section-title">Performance Summary</h2>
               <span className={`text-xs italic ${realReturns ? 'text-green-500' : 'text-slate-400'}`}>
                 {realReturns
-                  ? `● Live · Finnhub real data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
+                  ? `● Live · real market data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
                   : (live ? 'Loading real data…' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated'))}
               </span>
             </div>
@@ -970,7 +970,7 @@ export default function PortfolioBuilder() {
                           </div>
                         )}
                         {hasReal && (
-                          <div className="text-xs text-green-500 mt-1 font-medium" title="Returns calculated from real market closing prices via Finnhub">
+                          <div className="text-xs text-green-500 mt-1 font-medium" title="Returns calculated from real market closing prices">
                             Real
                           </div>
                         )}
