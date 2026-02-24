@@ -32,11 +32,22 @@ export default function InviteView() {
         const encoded = searchParams.get('d');
         if (encoded) {
           try {
-            const decoded = JSON.parse(atob(decodeURIComponent(encoded)));
+            // Decode base64 → bytes → UTF-8 string → JSON
+            const binary = atob(decodeURIComponent(encoded));
+            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+            const jsonStr = new TextDecoder().decode(bytes);
+            const decoded = JSON.parse(jsonStr);
             setInvite(decoded);
             if (decoded.client_email) setEmail(decoded.client_email);
           } catch {
-            setNotFound(true);
+            // Fallback: try legacy atob approach
+            try {
+              const decoded = JSON.parse(atob(decodeURIComponent(encoded)));
+              setInvite(decoded);
+              if (decoded.client_email) setEmail(decoded.client_email);
+            } catch {
+              setNotFound(true);
+            }
           }
         } else {
           setNotFound(true);

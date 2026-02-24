@@ -54,6 +54,15 @@ export default function PortfolioBuilder() {
   const [inviteEmail, setInviteEmail]     = useState('');
   const [inviteUrl, setInviteUrl]         = useState(null);
 
+  // Collapsible section toggles
+  const [holdingsOpen, setHoldingsOpen]     = useState(true);
+  const [allocBreakOpen, setAllocBreakOpen] = useState(true);
+  const [perfChartOpen, setPerfChartOpen]   = useState(true);
+  const [holdingsPerfOpen, setHoldingsPerfOpen] = useState(true);
+  const [perfSummaryOpen, setPerfSummaryOpen]   = useState(true);
+  const [liveSnapOpen, setLiveSnapOpen]         = useState(true);
+  const [allocBarOpen, setAllocBarOpen]         = useState(true);
+
   // UI state
   const [showDelete, setShowDelete]         = useState(false);
   const [showRebalance, setShowRebalance]   = useState(false);
@@ -363,36 +372,63 @@ export default function PortfolioBuilder() {
 
   // ── Invite Client ────────────────────────────────────────────────────────────
   async function handleInvite() {
-    if (!inviteEmail.trim() || !portfolioId || isNew) {
-      if (isNew) toast.error('Save the portfolio first before inviting a client.');
+    if (!inviteEmail.trim()) {
+      toast.error('Please enter a client email address.');
       return;
     }
-    // Build a minimal snapshot to keep URL length manageable
-    const snap = { id: portfolioId, name, description,
-      primary_benchmark: benchmark, holdings: holdings.map(h => ({
-        ticker: h.ticker, name: h.name, type: h.type, weight_percent: h.weight_percent,
-        category: h.category, last_price: h.last_price,
+    // If the portfolio is new / unsaved, save it first
+    if (isNew || !portfolioId) {
+      toast.error('Save the portfolio first before inviting a client.');
+      return;
+    }
+    // Build a minimal snapshot — strip heavy fields to keep URL short
+    const snap = {
+      id: portfolioId,
+      name,
+      description: (description || '').slice(0, 200),
+      primary_benchmark: benchmark,
+      holdings: holdings.map(h => ({
+        ticker: h.ticker,
+        name: (h.name || '').replace(/[^\x20-\x7E]/g, ''), // ASCII-safe
+        type: h.type,
+        weight_percent: h.weight_percent,
+        category: h.category || 'Core',
+        last_price: h.last_price,
       })),
-      starting_value: startingValue, created_at: createdAt };
+      starting_value: startingValue,
+      created_at: createdAt,
+    };
     try {
       const token = await inviteClient(user.id, inviteEmail.trim(), [portfolioId], snap);
-      // Encode invite data in URL for cross-browser demo mode support
-      // Use a try/catch for btoa in case the JSON is too large
+      // Build invite URL with encoded data for cross-browser demo mode
+      const inviteData = {
+        token,
+        advisor_id: user.id,
+        client_email: inviteEmail.trim(),
+        portfolio_ids: [portfolioId],
+        portfolio_snapshot: snap,
+        created_at: new Date().toISOString(),
+      };
       let url;
       try {
-        const inviteData = { token, advisor_id: user.id, client_email: inviteEmail.trim(), portfolio_ids: [portfolioId], portfolio_snapshot: snap, created_at: new Date().toISOString() };
-        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(inviteData))));
-        url = `${window.location.origin}/invite/${token}?d=${encodeURIComponent(encoded)}`;
+        // Use TextEncoder → base64 to handle any characters safely
+        const jsonStr = JSON.stringify(inviteData);
+        const bytes = new TextEncoder().encode(jsonStr);
+        let binary = '';
+        bytes.forEach(b => { binary += String.fromCharCode(b); });
+        const encoded = btoa(binary);
+        const fullUrl = `${window.location.origin}/invite/${token}?d=${encodeURIComponent(encoded)}`;
+        // Browsers can handle URLs up to ~2000 chars; use token-only if too long
+        url = fullUrl.length < 8000 ? fullUrl : `${window.location.origin}/invite/${token}`;
       } catch {
-        // If encoding fails (too large), just use the token
         url = `${window.location.origin}/invite/${token}`;
       }
       setInviteUrl(url);
-      try { await navigator.clipboard?.writeText(url); } catch { /* clipboard may not be available */ }
-      toast.success('Invite link copied to clipboard!');
+      try { await navigator.clipboard?.writeText(url); } catch { /* ok */ }
+      toast.success('Invite link created! Link copied to clipboard.');
     } catch (e) {
       console.error('Invite creation error:', e);
-      toast.error(`Failed to create invite link: ${e.message || 'Unknown error'}`);
+      toast.error(`Failed to create invite: ${e.message || 'Unknown error. Check console for details.'}`);
     }
   }
 
@@ -501,7 +537,10 @@ export default function PortfolioBuilder() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Primary Benchmark</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Primary Benchmark
+                  <span className="ml-1 text-xs font-normal text-slate-400">ETFs (SPY, QQQ) have real data; indices (SPX) may not</span>
+                </label>
                 <select
                   className="input"
                   value={benchmark}
@@ -510,7 +549,7 @@ export default function PortfolioBuilder() {
                   <option value="">— None —</option>
                   {BENCHMARKS.map((b) => (
                     <option key={b} value={b}>
-                      {BENCHMARK_META[b]?.label ?? b}
+                      {BENCHMARK_META[b]?.label ?? b}{['SPY','QQQ','IWM','DIA','EFA','AGG'].includes(b) ? ' (ETF — real data)' : ''}
                     </option>
                   ))}
                 </select>
@@ -611,9 +650,14 @@ export default function PortfolioBuilder() {
 
           {/* Holdings table */}
           <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title">Holdings</h2>
-              <div className="flex items-center gap-2">
+            <button
+              className="flex items-center justify-between w-full mb-4"
+              onClick={() => setHoldingsOpen((o) => !o)}
+            >
+              <h2 className="section-title">Holdings ({holdings.length})</h2>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${holdingsOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {holdingsOpen && <div className="flex items-center justify-end gap-2 mb-4">
                 {!isFullyAllocated && holdings.length > 0 && (
                   <button className="btn-secondary text-xs" onClick={normalize}>
                     Normalize to 100%
@@ -629,9 +673,9 @@ export default function PortfolioBuilder() {
                   onAdd={addTicker}
                 />
               </div>
-            </div>
+            }
 
-            {holdings.length === 0 ? (
+            {holdingsOpen && (holdings.length === 0 ? (
               <div className="text-center py-8 text-slate-400 text-sm">
                 Use the search above to add tickers to this portfolio.
               </div>
@@ -800,7 +844,7 @@ export default function PortfolioBuilder() {
                   </div>
                 )}
               </>
-            )}
+            ))}
           </div>
 
           {/* Allocation Breakdown (Core / Tilt / Satellite) */}
@@ -813,8 +857,11 @@ export default function PortfolioBuilder() {
             if (!hasAny) return null;
             return (
               <div className="card p-5">
-                <h2 className="section-title mb-3">Allocation Breakdown</h2>
-                {CATS.map((cat) => {
+                <button className="flex items-center justify-between w-full" onClick={() => setAllocBreakOpen(o => !o)}>
+                  <h2 className="section-title">Allocation Breakdown</h2>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${allocBreakOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {allocBreakOpen && <div className="mt-3">{CATS.map((cat) => {
                   const w = holdings
                     .filter((h) => (h.category || 'Core') === cat)
                     .reduce((s, h) => s + (h.weight_percent || 0), 0);
@@ -831,36 +878,50 @@ export default function PortfolioBuilder() {
                       <span className="text-xs font-mono text-slate-700 w-10 text-right">{w.toFixed(1)}%</span>
                     </div>
                   );
-                })}
+                })}</div>}
               </div>
             );
           })()}
 
           {/* Performance chart */}
           <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
+            <button className="flex items-center justify-between w-full" onClick={() => setPerfChartOpen(o => !o)}>
               <h2 className="section-title">Performance Chart</h2>
-              {cashPercent > 0 && (
-                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  Includes {cashPercent}% cash · {drip ? 'DRIP on' : 'DRIP off'}
-                </span>
-              )}
-            </div>
-            <PerformanceChart
-              holdings={holdings}
-              benchmarkTicker={benchmark || null}
-              createdAt={createdAt}
-              cashPercent={cashPercent}
-              drip={drip}
-            />
+              <div className="flex items-center gap-2">
+                {cashPercent > 0 && (
+                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                    {cashPercent}% cash · {drip ? 'DRIP on' : 'DRIP off'}
+                  </span>
+                )}
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${perfChartOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+            {perfChartOpen && (
+              <div className="mt-4">
+                <PerformanceChart
+                  holdings={holdings}
+                  benchmarkTicker={benchmark || null}
+                  createdAt={createdAt}
+                  cashPercent={cashPercent}
+                  drip={drip}
+                />
+              </div>
+            )}
           </div>
 
           {/* Individual Holdings Performance */}
           {holdings.length > 1 && (
             <div className="card p-5">
-              <h2 className="section-title mb-4">Holdings Performance</h2>
-              <p className="text-xs text-slate-400 mb-3">Individual % return for each holding in the portfolio</p>
-              <HoldingsPerformanceChart holdings={holdings} />
+              <button className="flex items-center justify-between w-full" onClick={() => setHoldingsPerfOpen(o => !o)}>
+                <h2 className="section-title">Holdings Performance</h2>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${holdingsPerfOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {holdingsPerfOpen && (
+                <div className="mt-4">
+                  <p className="text-xs text-slate-400 mb-3">Individual % return for each holding in the portfolio</p>
+                  <HoldingsPerformanceChart holdings={holdings} />
+                </div>
+              )}
             </div>
           )}
 
@@ -955,14 +1016,18 @@ export default function PortfolioBuilder() {
 
           {/* Performance summary */}
           <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
+            <button className="flex items-center justify-between w-full" onClick={() => setPerfSummaryOpen(o => !o)}>
               <h2 className="section-title">Performance Summary</h2>
-              <span className={`text-xs italic ${realReturns ? 'text-green-500' : 'text-slate-400'}`}>
-                {realReturns
-                  ? `● Live · real market data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
-                  : (live ? 'Loading real data…' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated'))}
-              </span>
-            </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs italic ${realReturns ? 'text-green-500' : 'text-slate-400'}`}>
+                  {realReturns
+                    ? `● Live · real market data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
+                    : (live ? 'Loading real data…' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated'))}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${perfSummaryOpen ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+            {perfSummaryOpen && <div className="mt-4">
             {(() => {
               // Portfolio age in approximate trading days (252/year)
               const portfolioAgeTradingDays = createdAt
@@ -1050,6 +1115,7 @@ export default function PortfolioBuilder() {
                 </div>
               );
             })()}
+          </div>}
           </div>
 
           {/* Weight History — collapsible log of all weight changes, rebalances, and additions */}
@@ -1138,16 +1204,20 @@ export default function PortfolioBuilder() {
             );
           })()}
           <div className="card p-5">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="section-title">Live Snapshot</h2>
-              {live && (
-                <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
-                  Live
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mb-4">
+            <button className="flex items-center justify-between w-full" onClick={() => setLiveSnapOpen(o => !o)}>
+              <div className="flex items-center gap-2">
+                <h2 className="section-title">Live Snapshot</h2>
+                {live && (
+                  <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
+                    Live
+                  </span>
+                )}
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${liveSnapOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {liveSnapOpen && <>
+            <p className="text-xs text-slate-400 mb-4 mt-2">
               Top holdings by weight · {live ? 'real-time prices' : 'simulated daily moves'}
             </p>
 
@@ -1298,12 +1368,17 @@ export default function PortfolioBuilder() {
                 </div>
               </div>
             )}
+          </>}
           </div>
 
           {/* Weight breakdown */}
           {holdings.length > 0 && (
             <div className="card p-5">
-              <h2 className="section-title mb-3">Allocation</h2>
+              <button className="flex items-center justify-between w-full" onClick={() => setAllocBarOpen(o => !o)}>
+                <h2 className="section-title">Allocation</h2>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${allocBarOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {allocBarOpen && <div className="mt-3">
               <div className="space-y-2">
                 {[...holdings].sort((a, b) => b.weight_percent - a.weight_percent).map((h) => (
                   <div key={h.ticker}>
@@ -1326,6 +1401,7 @@ export default function PortfolioBuilder() {
                   {totalWeight.toFixed(2)}%
                 </span>
               </div>
+              </div>}
             </div>
           )}
         </div>
