@@ -327,6 +327,24 @@ export function getPortfolioReturn(holdings, tradingDays) {
   return total.toFixed(2);
 }
 
+// Portfolio-level YTD return
+export function getPortfolioYTDReturn(holdings) {
+  if (!holdings || holdings.length === 0) return '0.00';
+  const total = holdings.reduce((sum, h) => {
+    return sum + (h.weight_percent / 100) * parseFloat(getYTDReturn(h.ticker));
+  }, 0);
+  return total.toFixed(2);
+}
+
+// Portfolio-level return since a specific date
+export function getPortfolioSinceReturn(holdings, sinceDate) {
+  if (!holdings || holdings.length === 0 || !sinceDate) return '0.00';
+  const diffMs = Date.now() - new Date(sinceDate).getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const tradingDays = Math.max(1, Math.round(diffDays * (252 / 365)));
+  return getPortfolioReturn(holdings, tradingDays);
+}
+
 // ─── Demo seed portfolios ─────────────────────────────────────────────────────
 export function createDemoPortfolios(userId) {
   const now = new Date().toISOString();

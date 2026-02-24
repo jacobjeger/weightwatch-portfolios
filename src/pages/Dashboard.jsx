@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3 } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity } from '../context/AuthContext';
-import { getPortfolioReturn } from '../lib/mockData';
+import { getPortfolioReturn, getPortfolioYTDReturn } from '../lib/mockData';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import NewPortfolioModal from '../components/NewPortfolioModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { formatDistanceToNow } from 'date-fns';
 import { useMarketData } from '../context/MarketDataContext';
 
-const TIMEFRAME_DAYS = { '1D': 1, '1M': 21, '3M': 63, '1Y': 252 };
+const TIMEFRAME_DAYS = { '1D': 1, '1M': 21, '3M': 63, 'YTD': null, '1Y': 252 };
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -20,7 +20,7 @@ export default function Dashboard() {
   const [selected, setSelected] = useState(new Set());
   const [showNew, setShowNew] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const [perfTimeframe, setPerfTimeframe] = useState('1Y');
+  const [perfTimeframe, setPerfTimeframe] = useState('YTD');
 
   function load() {
     if (user) setPortfolios(getPortfolios(user.id));
@@ -109,6 +109,9 @@ export default function Dashboard() {
       });
       // If we have real data for at least half the weight, use it; else fall back
       if (coveredWeight >= 50) return weightedReturn;
+    }
+    if (perfTimeframe === 'YTD') {
+      return parseFloat(getPortfolioYTDReturn(holdings));
     }
     return parseFloat(getPortfolioReturn(holdings, days));
   }

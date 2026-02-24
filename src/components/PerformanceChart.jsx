@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, ReferenceLine,
+  Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { getPortfolioChartData } from '../lib/mockData';
 import { isConfigured, getRealPortfolioChartData } from '../lib/finnhub';
@@ -24,11 +24,15 @@ function formatDate(dateStr, range) {
   return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 }
 
-function CustomTooltip({ active, payload, label }) {
+function CustomTooltip({ active, payload, label, createdAt }) {
   if (!active || !payload?.length) return null;
+  const isBacktested = createdAt && label < createdAt.slice(0, 10);
   return (
     <div className="bg-white border border-slate-200 rounded shadow-lg px-3 py-2 text-sm">
       <p className="font-medium text-slate-700 mb-1">{label}</p>
+      {isBacktested && (
+        <p className="text-xs text-amber-600 mb-1 font-medium">Backtested</p>
+      )}
       {payload.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
@@ -68,12 +72,10 @@ export default function PerformanceChart({
   cashPercent = 0,
   drip = true,
 }) {
-  // Build the range list — add "Since" if createdAt is provided
+  // Build the range list — always add "Since" if createdAt is provided
   const ranges = useMemo(() => {
     if (createdAt) {
-      const msAge = Date.now() - new Date(createdAt).getTime();
-      // Only show "Since" if portfolio is older than 1 day and younger than Max
-      if (msAge > 86_400_000) return [...BASE_RANGES, 'Since'];
+      return [...BASE_RANGES, 'Since'];
     }
     return BASE_RANGES;
   }, [createdAt]);
@@ -144,6 +146,36 @@ export default function PerformanceChart({
   const hasBenchmark = !!benchmarkTicker;
   const benchLabel   = BENCHMARK_META[benchmarkTicker]?.label ?? benchmarkTicker;
 
+  // Determine the account start date for backtest/live distinction
+  const accountStartDate = createdAt ? createdAt.slice(0, 10) : null;
+
+  // Find the backtest boundary in the data
+  const backtestBoundary = useMemo(() => {
+    if (!accountStartDate || !data.length) return null;
+    // Find the first date >= accountStartDate
+    const idx = data.findIndex((d) => d.date >= accountStartDate);
+    if (idx <= 0 || idx >= data.length) return null; // all data is before or after
+    return data[idx].date;
+  }, [accountStartDate, data]);
+
+  // Calculate how many days of actual history we have
+  const historyDays = useMemo(() => {
+    if (!createdAt) return 0;
+    return Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
+  }, [createdAt]);
+
+  // Data source label
+  const dataSourceLabel = useMemo(() => {
+    if (usingReal) {
+      return 'Live market data';
+    }
+    if (!createdAt) return 'Simulated data';
+    if (historyDays <= 1) return `${historyDays} day of history · Simulated`;
+    if (historyDays < 30) return `${historyDays} days of history · Simulated`;
+    if (historyDays < 365) return `${Math.floor(historyDays / 30)}mo of history · Simulated`;
+    return `${(historyDays / 365).toFixed(1)}yr of history · Simulated`;
+  }, [usingReal, createdAt, historyDays]);
+
   return (
     <div>
       {/* Range selector */}
@@ -164,9 +196,24 @@ export default function PerformanceChart({
           </button>
         ))}
         <span className="ml-auto text-xs text-slate-400">
-          {usingReal ? '🟢 Live · ' : ''}% return from start
+          {usingReal && <span className="text-green-500 mr-1">●</span>}
+          {dataSourceLabel}
         </span>
       </div>
+
+      {/* Backtest legend when chart shows a boundary */}
+      {backtestBoundary && (
+        <div className="flex items-center gap-4 mb-2 text-xs">
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-1.5 bg-amber-200 rounded-sm inline-block" />
+            <span className="text-slate-500">Backtested (before account start)</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-1.5 bg-blue-100 rounded-sm inline-block" />
+            <span className="text-slate-500">Live (since account start)</span>
+          </span>
+        </div>
+      )}
 
       {loading ? (
         <div className="h-48 flex items-center justify-center text-sm text-slate-400 animate-pulse">
@@ -180,6 +227,35 @@ export default function PerformanceChart({
         <ResponsiveContainer width="100%" height={260}>
           <LineChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+
+            {/* Shaded backtest region (before account start) */}
+            {backtestBoundary && data.length > 0 && (
+              <ReferenceArea
+                x1={data[0].date}
+                x2={backtestBoundary}
+                fill="#fef3c7"
+                fillOpacity={0.35}
+                strokeOpacity={0}
+              />
+            )}
+
+            {/* Vertical line at account start */}
+            {backtestBoundary && (
+              <ReferenceLine
+                x={backtestBoundary}
+                stroke="#f59e0b"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{
+                  value: 'Account Start',
+                  position: 'top',
+                  fill: '#d97706',
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}
+              />
+            )}
+
             <XAxis
               dataKey="date"
               ticks={ticks}
@@ -197,7 +273,7 @@ export default function PerformanceChart({
               width={52}
             />
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip createdAt={createdAt} />} />
             <Legend
               wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
               formatter={(v) => v}
