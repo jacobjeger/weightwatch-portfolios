@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
-import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn } from '../lib/mockData';
+import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
 import { getRealPerformanceReturns } from '../lib/finnhub';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
+import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
 import MessagePanel from '../components/MessagePanel';
@@ -19,6 +20,7 @@ const TIMEFRAMES = [
   { label: '1M', days: 21 },
   { label: '3M', days: 63 },
   { label: '6M', days: 126 },
+  { label: 'YTD', days: null },
   { label: '1Y', days: 252 },
 ];
 
@@ -361,21 +363,36 @@ export default function PortfolioBuilder() {
 
   // ── Invite Client ────────────────────────────────────────────────────────────
   async function handleInvite() {
-    if (!inviteEmail.trim() || !portfolioId || isNew) return;
+    if (!inviteEmail.trim() || !portfolioId || isNew) {
+      if (isNew) toast.error('Save the portfolio first before inviting a client.');
+      return;
+    }
+    // Build a minimal snapshot to keep URL length manageable
     const snap = { id: portfolioId, name, description,
-      primary_benchmark: benchmark, holdings,
+      primary_benchmark: benchmark, holdings: holdings.map(h => ({
+        ticker: h.ticker, name: h.name, type: h.type, weight_percent: h.weight_percent,
+        category: h.category, last_price: h.last_price,
+      })),
       starting_value: startingValue, created_at: createdAt };
     try {
       const token = await inviteClient(user.id, inviteEmail.trim(), [portfolioId], snap);
       // Encode invite data in URL for cross-browser demo mode support
-      const encoded = btoa(JSON.stringify({ token, advisor_id: user.id, client_email: inviteEmail.trim(), portfolio_ids: [portfolioId], portfolio_snapshot: snap, created_at: new Date().toISOString() }));
-      const url = `${window.location.origin}/invite/${token}?d=${encodeURIComponent(encoded)}`;
+      // Use a try/catch for btoa in case the JSON is too large
+      let url;
+      try {
+        const inviteData = { token, advisor_id: user.id, client_email: inviteEmail.trim(), portfolio_ids: [portfolioId], portfolio_snapshot: snap, created_at: new Date().toISOString() };
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(inviteData))));
+        url = `${window.location.origin}/invite/${token}?d=${encodeURIComponent(encoded)}`;
+      } catch {
+        // If encoding fails (too large), just use the token
+        url = `${window.location.origin}/invite/${token}`;
+      }
       setInviteUrl(url);
-      navigator.clipboard?.writeText(url);
+      try { await navigator.clipboard?.writeText(url); } catch { /* clipboard may not be available */ }
       toast.success('Invite link copied to clipboard!');
     } catch (e) {
-      console.error(e);
-      toast.error('Failed to create invite link');
+      console.error('Invite creation error:', e);
+      toast.error(`Failed to create invite link: ${e.message || 'Unknown error'}`);
     }
   }
 
@@ -838,6 +855,15 @@ export default function PortfolioBuilder() {
             />
           </div>
 
+          {/* Individual Holdings Performance */}
+          {holdings.length > 1 && (
+            <div className="card p-5">
+              <h2 className="section-title mb-4">Holdings Performance</h2>
+              <p className="text-xs text-slate-400 mb-3">Individual % return for each holding in the portfolio</p>
+              <HoldingsPerformanceChart holdings={holdings} />
+            </div>
+          )}
+
           {/* Allocation Wheel (pie chart) — swipeable between current and historical snapshots */}
           {holdings.length > 0 && (
             <div className="card p-5">
@@ -942,21 +968,40 @@ export default function PortfolioBuilder() {
               const portfolioAgeTradingDays = createdAt
                 ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000 * (252 / 365))
                 : 0;
+
+              // Build the "Since Creation" tracker data
+              const sinceCreationData = createdAt && holdings.length > 0 ? (() => {
+                const portfolioRet = parseFloat(getPortfolioSinceReturn(holdings, createdAt));
+                const benchRet = benchmark ? (() => {
+                  const diffMs = Date.now() - new Date(createdAt).getTime();
+                  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                  const tradingDays = Math.max(1, Math.round(diffDays * (252 / 365)));
+                  return parseFloat(getReturn(benchmark, tradingDays));
+                })() : null;
+                return { portfolioRet, benchRet, outperf: benchRet !== null ? portfolioRet - benchRet : null };
+              })() : null;
+
               return (
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {TIMEFRAMES.map(({ label, days }) => {
                     // Prefer real Finnhub data, fall back to mock
                     const hasReal = realReturns?.portfolio?.[label] != null;
                     const portfolioRet = hasReal
                       ? realReturns.portfolio[label]
-                      : parseFloat(getPortfolioReturn(holdings, days));
+                      : label === 'YTD'
+                        ? parseFloat(getPortfolioYTDReturn(holdings))
+                        : parseFloat(getPortfolioReturn(holdings, days));
                     const benchRet = hasReal && realReturns.benchmark?.[label] != null
                       ? realReturns.benchmark[label]
-                      : (benchmark ? parseFloat(getReturn(benchmark, days)) : null);
+                      : (benchmark
+                          ? (label === 'YTD'
+                              ? parseFloat(getYTDReturn(benchmark))
+                              : parseFloat(getReturn(benchmark, days)))
+                          : null);
                     const outperf = benchRet !== null ? portfolioRet - benchRet : null;
-                    const isBacktested = !hasReal && (!createdAt || portfolioAgeTradingDays < days);
+                    const isBacktested = !hasReal && label !== 'YTD' && (!createdAt || portfolioAgeTradingDays < days);
                     return (
-                      <div key={label} className={`rounded p-3 text-center ${hasReal ? 'bg-green-50/50' : isBacktested ? 'bg-slate-50/60' : 'bg-slate-50'}`}>
+                      <div key={label} className={`rounded p-3 text-center ${hasReal ? 'bg-green-50/50' : isBacktested ? 'bg-amber-50/40 border border-amber-100' : 'bg-slate-50'}`}>
                         <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
                         <div className={`text-sm font-bold ${portfolioRet > 0 ? 'text-green-600' : portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
                           {holdings.length > 0 ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
@@ -979,12 +1024,29 @@ export default function PortfolioBuilder() {
                             className="text-xs text-slate-400 italic mt-1 cursor-help"
                             title={realReturns ? 'Candle data unavailable for this timeframe' : 'Return is simulated — connect Finnhub API for real market data'}
                           >
-                            {realReturns ? 'Est.' : (isBacktested ? 'Simulated' : '')}
+                            {realReturns ? 'Est.' : (isBacktested ? 'Backtested' : '')}
                           </div>
                         )}
                       </div>
                     );
                   })}
+                  {/* Since Creation tracker */}
+                  {sinceCreationData && (
+                    <div className="rounded p-3 text-center bg-purple-50/50 border border-purple-100">
+                      <div className="text-xs font-medium text-purple-600 mb-2">Since Creation</div>
+                      <div className={`text-sm font-bold ${sinceCreationData.portfolioRet > 0 ? 'text-green-600' : sinceCreationData.portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                        {sinceCreationData.portfolioRet > 0 ? '+' : ''}{sinceCreationData.portfolioRet.toFixed(2)}%
+                      </div>
+                      {sinceCreationData.benchRet !== null && (
+                        <div className="text-xs text-slate-400 mt-0.5">{BENCHMARK_META[benchmark]?.label ?? benchmark}: {sinceCreationData.benchRet > 0 ? '+' : ''}{sinceCreationData.benchRet.toFixed(2)}%</div>
+                      )}
+                      {sinceCreationData.outperf !== null && (
+                        <div className={`text-xs mt-1 font-medium ${sinceCreationData.outperf > 0 ? 'text-green-600' : sinceCreationData.outperf < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                          {sinceCreationData.outperf > 0 ? '▲' : sinceCreationData.outperf < 0 ? '▼' : '='} {Math.abs(sinceCreationData.outperf).toFixed(2)}%
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()}

@@ -174,14 +174,73 @@ export function useAuth() {
 // Called on login/session restore so the local cache is always up-to-date.
 export async function syncFromSupabase(userId) {
   if (!isSupabaseConfigured || !userId) return;
+
+  // Sync portfolios
   const { data, error } = await supabase
     .from('user_portfolios')
     .select('data')
     .eq('user_id', userId)
     .maybeSingle();
   if (!error && data?.data) {
-    // Merge: Supabase is the source of truth; overwrite local cache
     lsSet(LS.portfolios, data.data);
+  }
+
+  // Sync user settings
+  const { data: settingsData } = await supabase
+    .from('user_settings')
+    .select('data')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (settingsData?.data) {
+    const allSettings = lsGet(LS.settings, {});
+    allSettings[userId] = settingsData.data;
+    lsSet(LS.settings, allSettings);
+  }
+
+  // Sync messages (user's messages)
+  const { data: msgData } = await supabase
+    .from('messages')
+    .select('*')
+    .or(`sender_id.eq.${userId}`)
+    .order('created_at', { ascending: true });
+  if (msgData?.length) {
+    const existing = lsGet(LS.messages, []);
+    const existingIds = new Set(existing.map((m) => m.id));
+    const merged = [...existing, ...msgData.filter((m) => !existingIds.has(m.id))];
+    lsSet(LS.messages, merged);
+  }
+
+  // Sync client relationships
+  const { data: clientData } = await supabase
+    .from('invites')
+    .select('*')
+    .eq('client_email', userId);
+  if (clientData?.length) {
+    const clients = lsGet(LS.clients, {});
+    clientData.forEach((inv) => {
+      if (!clients[userId]) {
+        clients[userId] = {
+          advisor_id: inv.advisor_id,
+          portfolio_ids: inv.portfolio_ids,
+          accepted_at: inv.accepted_at,
+        };
+      }
+    });
+    lsSet(LS.clients, clients);
+  }
+
+  // Sync activity log
+  const { data: actData } = await supabase
+    .from('activity_log')
+    .select('*')
+    .eq('user_id', userId)
+    .order('occurred_at', { ascending: false })
+    .limit(500);
+  if (actData?.length) {
+    const existing = lsGet(LS.activity, []);
+    const existingIds = new Set(existing.map((a) => a.id));
+    const merged = [...actData.filter((a) => !existingIds.has(a.id)), ...existing].slice(0, 500);
+    lsSet(LS.activity, merged);
   }
 }
 
@@ -192,6 +251,33 @@ function pushToSupabase(userId, all) {
     .from('user_portfolios')
     .upsert({ user_id: userId, data: all, updated_at: new Date().toISOString() })
     .then(({ error }) => { if (error) console.warn('[Sync] Supabase write error:', error.message); });
+}
+
+// Push settings to Supabase
+function pushSettingsToSupabase(userId, settings) {
+  if (!isSupabaseConfigured || !userId) return;
+  supabase
+    .from('user_settings')
+    .upsert({ user_id: userId, data: settings, updated_at: new Date().toISOString() })
+    .then(({ error }) => { if (error) console.warn('[Sync] Settings write error:', error.message); });
+}
+
+// Push a message to Supabase
+function pushMessageToSupabase(msg) {
+  if (!isSupabaseConfigured) return;
+  supabase
+    .from('messages')
+    .insert(msg)
+    .then(({ error }) => { if (error) console.warn('[Sync] Message write error:', error.message); });
+}
+
+// Push activity to Supabase
+function pushActivityToSupabase(entry) {
+  if (!isSupabaseConfigured) return;
+  supabase
+    .from('activity_log')
+    .insert(entry)
+    .then(({ error }) => { if (error) console.warn('[Sync] Activity write error:', error.message); });
 }
 
 // ─── Portfolio data helpers ───────────────────────────────────────────────────
@@ -232,13 +318,15 @@ export function deletePortfolios(ids, userId) {
 // ─── Activity log helpers ─────────────────────────────────────────────────────
 export function logActivity(userId, entry) {
   const log = lsGet(LS.activity, []);
-  log.unshift({
+  const record = {
     id: crypto.randomUUID(),
     user_id: userId,
     occurred_at: new Date().toISOString(),
     ...entry,
-  });
+  };
+  log.unshift(record);
   lsSet(LS.activity, log.slice(0, 500)); // cap at 500 entries
+  pushActivityToSupabase(record);
 }
 
 export function getActivity(userId) {
@@ -266,6 +354,7 @@ export function saveSettings(userId, partial) {
   const all = lsGet(LS.settings, {});
   all[userId] = { ...(all[userId] ?? DEFAULT_SETTINGS), ...partial };
   lsSet(LS.settings, all);
+  pushSettingsToSupabase(userId, all[userId]);
   return all[userId];
 }
 
@@ -371,6 +460,7 @@ export function sendMessage(message) {
   };
   all.push(msg);
   lsSet(LS.messages, all);
+  pushMessageToSupabase(msg);
   return msg;
 }
 

@@ -4,13 +4,24 @@ import { BarChart3, LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { LoginModal, SignUpModal } from './AuthModals';
 
-const LINKS = [
+const ADVISOR_LINKS = [
   { to: '/',           label: 'Dashboard' },
   { to: '/portfolio/new', label: 'Portfolio Builder' },
   { to: '/benchmarks', label: 'Benchmarks' },
+  { to: '/messages',   label: 'Messages' },
+  { to: '/meetings',   label: 'Meetings' },
   { to: '/history',    label: 'History' },
   { to: '/settings',   label: 'Settings' },
   { to: '/help',       label: 'Help' },
+];
+
+const CLIENT_LINKS = [
+  { to: '/',               label: 'Dashboard' },
+  { to: '/client-portal',  label: 'My Portal' },
+  { to: '/messages',       label: 'Messages' },
+  { to: '/meetings',       label: 'Meetings' },
+  { to: '/settings',       label: 'Settings' },
+  { to: '/help',           label: 'Help' },
 ];
 
 function NavItem({ to, label, onClick }) {
@@ -32,7 +43,8 @@ function NavItem({ to, label, onClick }) {
 }
 
 export default function Nav() {
-  const { user, signOut, isMockMode } = useAuth();
+  const { user, signOut, isMockMode, role } = useAuth();
+  const LINKS = role === 'client' ? CLIENT_LINKS : ADVISOR_LINKS;
   const navigate = useNavigate();
   const location = useLocation();
   const [modal, setModal] = useState(null); // 'login' | 'signup' | null

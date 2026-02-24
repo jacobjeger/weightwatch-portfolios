@@ -12,6 +12,9 @@ import HelpTour from './pages/HelpTour';
 import ResetPassword from './pages/ResetPassword';
 import ShareView from './pages/ShareView';
 import InviteView from './pages/InviteView';
+import ClientPortal from './pages/ClientPortal';
+import Messages from './pages/Messages';
+import MeetingScheduler from './pages/MeetingScheduler';
 
 export default function App() {
   return (
@@ -36,6 +39,9 @@ export default function App() {
                 <Route path="/history" element={<History />} />
                 <Route path="/settings" element={<AccountSettings />} />
                 <Route path="/help" element={<HelpTour />} />
+                <Route path="/client-portal" element={<ClientPortal />} />
+                <Route path="/messages" element={<Messages />} />
+                <Route path="/meetings" element={<MeetingScheduler />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
