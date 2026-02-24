@@ -59,7 +59,6 @@ function mockSignOut() {
 function mockResetPassword(email) {
   const users = lsGet(LS.users, {});
   if (!users[email]) throw new Error('No account found with that email.');
-  // In mock mode, just succeed (no real email sent)
   return true;
 }
 
@@ -95,14 +94,9 @@ export function AuthProvider({ children }) {
         setUser(u);
         if (u) {
           if (_event === 'SIGNED_IN') {
-            // Fresh login on a browser with no cached session:
-            // re-engage the loading gate so ProtectedRoute holds until sync completes.
-            // Without this, Dashboard mounts and reads empty localStorage before sync finishes.
             setLoading(true);
             syncFromSupabase(u.id).finally(() => setLoading(false));
           } else {
-            // INITIAL_SESSION / TOKEN_REFRESHED:
-            // getSession() above already awaited sync on page load; fire-and-forget is fine.
             syncFromSupabase(u.id);
           }
         }
@@ -170,121 +164,126 @@ export function useAuth() {
 }
 
 // ─── Supabase portfolio sync ──────────────────────────────────────────────────
-// Fetches the user's portfolios from Supabase and writes them into localStorage.
-// Called on login/session restore so the local cache is always up-to-date.
+// The ONLY reliable cross-browser sync table is user_portfolios (JSONB blob).
+// All other tables may not exist or may have schema mismatches, so each is
+// wrapped in try/catch and failures are non-fatal.
+
 export async function syncFromSupabase(userId) {
   if (!isSupabaseConfigured || !userId) return;
 
-  // Sync portfolios
-  const { data, error } = await supabase
-    .from('user_portfolios')
-    .select('data')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!error && data?.data) {
-    lsSet(LS.portfolios, data.data);
+  // 1) Portfolios — the critical sync path (user_portfolios table with JSONB)
+  try {
+    const { data, error } = await supabase
+      .from('user_portfolios')
+      .select('data')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!error && data?.data) {
+      lsSet(LS.portfolios, data.data);
+      console.info('[Sync] Portfolios loaded from Supabase (' + data.data.length + ' portfolios)');
+    } else if (error) {
+      console.warn('[Sync] Portfolio fetch error:', error.message);
+    }
+  } catch (e) {
+    console.warn('[Sync] Portfolio fetch failed:', e.message);
   }
 
-  // Sync user settings
-  const { data: settingsData } = await supabase
-    .from('user_settings')
-    .select('data')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (settingsData?.data) {
-    const allSettings = lsGet(LS.settings, {});
-    allSettings[userId] = settingsData.data;
-    lsSet(LS.settings, allSettings);
+  // 2) Invites — pull any invites where this user email was invited
+  try {
+    const { data: invData } = await supabase
+      .from('invites')
+      .select('*')
+      .eq('client_email', userId);
+    if (invData?.length) {
+      const invites = lsGet(LS.invites, {});
+      const clients = lsGet(LS.clients, {});
+      invData.forEach((inv) => {
+        invites[inv.token] = inv;
+        if (!clients[userId]) {
+          clients[userId] = {
+            advisor_id: inv.advisor_id,
+            portfolio_ids: inv.portfolio_ids,
+            accepted_at: inv.accepted_at || new Date().toISOString(),
+          };
+        }
+      });
+      lsSet(LS.invites, invites);
+      lsSet(LS.clients, clients);
+    }
+  } catch {
+    // Table may not exist — silently skip
   }
 
-  // Sync messages (user's messages)
-  const { data: msgData } = await supabase
-    .from('messages')
-    .select('*')
-    .or(`sender_id.eq.${userId}`)
-    .order('created_at', { ascending: true });
-  if (msgData?.length) {
-    const existing = lsGet(LS.messages, []);
-    const existingIds = new Set(existing.map((m) => m.id));
-    const merged = [...existing, ...msgData.filter((m) => !existingIds.has(m.id))];
-    lsSet(LS.messages, merged);
+  // 3) Messages
+  try {
+    const { data: msgData } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`sender_id.eq.${userId}`)
+      .order('created_at', { ascending: true });
+    if (msgData?.length) {
+      const existing = lsGet(LS.messages, []);
+      const existingIds = new Set(existing.map((m) => m.id));
+      const merged = [...existing, ...msgData.filter((m) => !existingIds.has(m.id))];
+      lsSet(LS.messages, merged);
+    }
+  } catch {
+    // Table may not exist — silently skip
   }
 
-  // Sync client relationships
-  const { data: clientData } = await supabase
-    .from('invites')
-    .select('*')
-    .eq('client_email', userId);
-  if (clientData?.length) {
-    const clients = lsGet(LS.clients, {});
-    clientData.forEach((inv) => {
-      if (!clients[userId]) {
-        clients[userId] = {
-          advisor_id: inv.advisor_id,
-          portfolio_ids: inv.portfolio_ids,
-          accepted_at: inv.accepted_at,
-        };
-      }
-    });
-    lsSet(LS.clients, clients);
-  }
-
-  // Sync activity log
-  const { data: actData } = await supabase
-    .from('activity_log')
-    .select('*')
-    .eq('user_id', userId)
-    .order('occurred_at', { ascending: false })
-    .limit(500);
-  if (actData?.length) {
-    const existing = lsGet(LS.activity, []);
-    const existingIds = new Set(existing.map((a) => a.id));
-    const merged = [...actData.filter((a) => !existingIds.has(a.id)), ...existing].slice(0, 500);
-    lsSet(LS.activity, merged);
+  // 4) Activity log
+  try {
+    const { data: actData } = await supabase
+      .from('activity_log')
+      .select('*')
+      .eq('user_id', userId)
+      .order('occurred_at', { ascending: false })
+      .limit(500);
+    if (actData?.length) {
+      const existing = lsGet(LS.activity, []);
+      const existingIds = new Set(existing.map((a) => a.id));
+      const merged = [...actData.filter((a) => !existingIds.has(a.id)), ...existing].slice(0, 500);
+      lsSet(LS.activity, merged);
+    }
+  } catch {
+    // Table may not exist — silently skip
   }
 }
 
-// Pushes the full portfolios array for a user to Supabase (fire-and-forget).
+// Pushes the full portfolios array for a user to Supabase.
+// This is the CRITICAL sync operation for cross-browser support.
 function pushToSupabase(userId, all) {
   if (!isSupabaseConfigured || !userId) return;
   supabase
     .from('user_portfolios')
     .upsert({ user_id: userId, data: all, updated_at: new Date().toISOString() })
-    .then(({ error }) => { if (error) console.warn('[Sync] Supabase write error:', error.message); });
+    .then(({ error }) => {
+      if (error) {
+        console.error('[Sync] CRITICAL: Portfolio save to Supabase FAILED:', error.message);
+      } else {
+        console.info('[Sync] Portfolios saved to Supabase');
+      }
+    });
 }
 
-// Push settings to Supabase
-function pushSettingsToSupabase(userId, settings) {
-  if (!isSupabaseConfigured || !userId) return;
-  supabase
-    .from('user_settings')
-    .upsert({ user_id: userId, data: settings, updated_at: new Date().toISOString() })
-    .then(({ error }) => { if (error) console.warn('[Sync] Settings write error:', error.message); });
-}
-
-// Push a message to Supabase
+// Push a message to Supabase (best-effort — never blocks)
 function pushMessageToSupabase(msg) {
   if (!isSupabaseConfigured) return;
-  supabase
-    .from('messages')
-    .insert(msg)
-    .then(({ error }) => { if (error) console.warn('[Sync] Message write error:', error.message); });
+  supabase.from('messages').insert(msg)
+    .then(({ error }) => { if (error) console.warn('[Sync] Message write skipped:', error.message); });
 }
 
-// Push activity to Supabase
+// Push activity to Supabase (best-effort)
 function pushActivityToSupabase(entry) {
   if (!isSupabaseConfigured) return;
-  supabase
-    .from('activity_log')
-    .insert(entry)
-    .then(({ error }) => { if (error) console.warn('[Sync] Activity write error:', error.message); });
+  supabase.from('activity_log').insert(entry)
+    .then(({ error }) => { if (error) console.warn('[Sync] Activity write skipped:', error.message); });
 }
 
 // ─── Portfolio data helpers ───────────────────────────────────────────────────
 export function getPortfolios(userId) {
   const all = lsGet(LS.portfolios, []);
   const owned = all.filter((p) => p.owner === userId);
-  // Also include portfolios shared via invite (client → advisor's portfolios)
   const clientData = lsGet(LS.clients, {})[userId];
   if (clientData?.portfolio_ids) {
     const shared = all.filter(
@@ -325,7 +324,7 @@ export function logActivity(userId, entry) {
     ...entry,
   };
   log.unshift(record);
-  lsSet(LS.activity, log.slice(0, 500)); // cap at 500 entries
+  lsSet(LS.activity, log.slice(0, 500));
   pushActivityToSupabase(record);
 }
 
@@ -354,47 +353,48 @@ export function saveSettings(userId, partial) {
   const all = lsGet(LS.settings, {});
   all[userId] = { ...(all[userId] ?? DEFAULT_SETTINGS), ...partial };
   lsSet(LS.settings, all);
-  pushSettingsToSupabase(userId, all[userId]);
   return all[userId];
 }
 
 // ─── Share token helpers ───────────────────────────────────────────────────────
-// Creates a share token storing a full portfolio snapshot.
-// Works in both Supabase mode (share_tokens table) and mock mode (localStorage).
 export async function createShareToken(userId, portfolio) {
   const token = crypto.randomUUID().replace(/-/g, '');
   const snapshot = { ...portfolio, _sharedAt: new Date().toISOString() };
+
+  // Always store locally first
+  const shares = lsGet(LS.shares, {});
+  shares[token] = snapshot;
+  lsSet(LS.shares, shares);
+
+  // Try Supabase (best-effort)
   if (isSupabaseConfigured) {
-    const { error } = await supabase
-      .from('share_tokens')
-      .insert({ token, owner_id: userId, portfolio_snapshot: snapshot });
-    if (error) throw error;
-  } else {
-    const shares = lsGet(LS.shares, {});
-    shares[token] = snapshot;
-    lsSet(LS.shares, shares);
+    try {
+      await supabase.from('share_tokens')
+        .insert({ token, owner_id: userId, portfolio_snapshot: snapshot });
+    } catch { /* localStorage is the fallback */ }
   }
   return token;
 }
 
-// Retrieves the portfolio snapshot for a given share token (no auth required).
 export async function getSharedPortfolio(token) {
+  // Try Supabase first
   if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('share_tokens')
-      .select('portfolio_snapshot')
-      .eq('token', token)
-      .maybeSingle();
-    if (error || !data) return null;
-    return data.portfolio_snapshot;
-  } else {
-    const shares = lsGet(LS.shares, {});
-    return shares[token] ?? null;
+    try {
+      const { data, error } = await supabase
+        .from('share_tokens')
+        .select('portfolio_snapshot')
+        .eq('token', token)
+        .maybeSingle();
+      if (!error && data) return data.portfolio_snapshot;
+    } catch { /* fall through */ }
   }
+  const shares = lsGet(LS.shares, {});
+  return shares[token] ?? null;
 }
 
 // ─── Invite helpers ──────────────────────────────────────────────────────────
-// Creates an invite token that grants a client read-only access to portfolios.
+// Creates an invite token. ALWAYS stores in localStorage first (guaranteed).
+// Then tries Supabase as best-effort for cross-browser. Never throws.
 export async function inviteClient(advisorId, clientEmail, portfolioIds, snapshot) {
   const token = crypto.randomUUID().replace(/-/g, '');
   const invite = {
@@ -405,34 +405,43 @@ export async function inviteClient(advisorId, clientEmail, portfolioIds, snapsho
     portfolio_snapshot: snapshot,
     created_at: new Date().toISOString(),
   };
+
+  // ALWAYS store in localStorage first — this is guaranteed to work
+  const invites = lsGet(LS.invites, {});
+  invites[token] = invite;
+  lsSet(LS.invites, invites);
+
+  // Then TRY Supabase (best-effort, never fail)
   if (isSupabaseConfigured) {
-    const { error } = await supabase.from('invites').insert(invite);
-    if (error) throw error;
-  } else {
-    const invites = lsGet(LS.invites, {});
-    invites[token] = invite;
-    lsSet(LS.invites, invites);
+    try {
+      const { error } = await supabase.from('invites').insert(invite);
+      if (error) console.warn('[Invite] Supabase insert skipped:', error.message);
+      else console.info('[Invite] Saved to Supabase');
+    } catch (e) {
+      console.warn('[Invite] Supabase error (using local):', e.message);
+    }
   }
+
   return token;
 }
 
-// Retrieves an invite by token.
 export async function getInvite(token) {
+  // Try Supabase first
   if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('invites')
-      .select('*')
-      .eq('token', token)
-      .maybeSingle();
-    if (error || !data) return null;
-    return data;
-  } else {
-    const invites = lsGet(LS.invites, {});
-    return invites[token] ?? null;
+    try {
+      const { data, error } = await supabase
+        .from('invites')
+        .select('*')
+        .eq('token', token)
+        .maybeSingle();
+      if (!error && data) return data;
+    } catch { /* fall through */ }
   }
+  // Fallback to localStorage
+  const invites = lsGet(LS.invites, {});
+  return invites[token] ?? null;
 }
 
-// Accepts an invite: stores client relationship so role detection picks it up.
 export function acceptInvite(userId, invite) {
   const clients = lsGet(LS.clients, {});
   clients[userId] = {
@@ -444,7 +453,6 @@ export function acceptInvite(userId, invite) {
 }
 
 // ─── Message helpers ─────────────────────────────────────────────────────────
-// Advisor ↔ client messaging per portfolio.
 export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId)
@@ -464,7 +472,6 @@ export function sendMessage(message) {
   return msg;
 }
 
-// Returns the most recent approval or change_request for a portfolio.
 export function getLatestApproval(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId && (m.type === 'approval' || m.type === 'change_request'))

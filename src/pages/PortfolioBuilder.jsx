@@ -90,14 +90,16 @@ export default function PortfolioBuilder() {
     }
   }, [id, user, isNew]);
 
-  // Load + subscribe real-time prices whenever holdings change
+  // Load + subscribe real-time prices whenever holdings or benchmark change
   useEffect(() => {
-    if (!live || !holdings.length) return;
+    if (!live) return;
     const tickers = holdings.map((h) => h.ticker);
+    if (benchmark) tickers.push(benchmark);
+    if (!tickers.length) return;
     loadTickers(tickers);
     const unsub = subscribeTickers(tickers);
     return unsub;
-  }, [live, holdings, loadTickers, subscribeTickers]);
+  }, [live, holdings, benchmark, loadTickers, subscribeTickers]);
 
   // Fetch real performance returns from Finnhub candles (when configured)
   useEffect(() => {
