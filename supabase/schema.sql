@@ -136,7 +136,7 @@ create policy "Users can manage own settings" on public.user_settings
 create table if not exists public.activity_log (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  portfolio_id uuid references public.portfolios(id) on delete set null,
+  portfolio_id uuid,  -- no FK to portfolios; app uses user_portfolios JSONB blob
   portfolio_name text,
   action_type text not null check (action_type in ('Create', 'Update', 'Duplicate', 'Delete')),
   change_summary text,
