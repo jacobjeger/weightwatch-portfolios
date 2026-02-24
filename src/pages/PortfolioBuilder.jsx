@@ -43,6 +43,7 @@ export default function PortfolioBuilder() {
   const [weightHistory, setWeightHistory] = useState([]);      // log of weight changes
   const [historyOpen, setHistoryOpen]     = useState(false);   // history panel toggle
   const [pieOpen, setPieOpen]             = useState(true);    // allocation wheel toggle
+  const [wheelIdx, setWheelIdx]           = useState(-1);      // -1 = current, 0..N = history snapshots
   const [shareUrl, setShareUrl]           = useState(null);    // generated share link
   const [erOpen, setErOpen]               = useState(false);   // ER breakdown toggle
   const [yieldOpen, setYieldOpen]         = useState(false);   // yield breakdown toggle
@@ -822,7 +823,7 @@ export default function PortfolioBuilder() {
             />
           </div>
 
-          {/* Allocation Wheel (pie chart) */}
+          {/* Allocation Wheel (pie chart) — swipeable between current and historical snapshots */}
           {holdings.length > 0 && (
             <div className="card p-5">
               <button
@@ -832,7 +833,82 @@ export default function PortfolioBuilder() {
                 <h2 className="section-title">Allocation Wheel</h2>
                 <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${pieOpen ? 'rotate-180' : ''}`} />
               </button>
-              {pieOpen && <AllocationPieChart holdings={holdings} />}
+              {pieOpen && (() => {
+                // Build historical snapshots from weight history
+                const snapshots = [];
+                let running = {}; // ticker → weight_percent
+                for (const event of weightHistory) {
+                  // Apply changes
+                  for (const c of event.changes) {
+                    if (c.to != null) running[c.ticker] = c.to;
+                    else delete running[c.ticker];
+                  }
+                  const holdingsSnap = Object.entries(running)
+                    .filter(([, w]) => w > 0)
+                    .map(([ticker, weight_percent]) => ({
+                      ticker,
+                      weight_percent,
+                      name: holdings.find((h) => h.ticker === ticker)?.name ?? ticker,
+                    }));
+                  snapshots.push({
+                    date: event.date,
+                    type: event.type,
+                    holdings: holdingsSnap,
+                  });
+                }
+
+                // All slides: historical snapshots + current
+                const totalSlides = snapshots.length + 1;
+                const activeIdx = wheelIdx === -1 ? totalSlides - 1 : Math.min(wheelIdx, totalSlides - 1);
+                const isCurrentSlide = activeIdx === totalSlides - 1;
+                const displayHoldings = isCurrentSlide ? holdings : snapshots[activeIdx]?.holdings ?? [];
+                const displayDate = isCurrentSlide
+                  ? 'Current'
+                  : new Date(snapshots[activeIdx]?.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const displayType = isCurrentSlide ? null : snapshots[activeIdx]?.type;
+                const typeLabels = {
+                  created: 'Created', rebalance: 'Rebalanced', adjustment: 'Adjusted',
+                  holding_added: 'Added', holding_removed: 'Removed',
+                };
+
+                return (
+                  <div>
+                    {/* Navigation controls */}
+                    {snapshots.length > 0 && (
+                      <div className="flex items-center justify-between mb-2 px-2">
+                        <button
+                          className="text-slate-400 hover:text-slate-600 disabled:opacity-30 transition-colors p-1"
+                          disabled={activeIdx === 0}
+                          onClick={() => setWheelIdx(activeIdx - 1)}
+                          title="Previous snapshot"
+                        >
+                          ← Prev
+                        </button>
+                        <div className="text-center">
+                          <span className="text-xs font-medium text-slate-700">{displayDate}</span>
+                          {displayType && (
+                            <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                              {typeLabels[displayType] ?? displayType}
+                            </span>
+                          )}
+                          <div className="text-xs text-slate-400 mt-0.5">
+                            {activeIdx + 1} of {totalSlides}
+                          </div>
+                        </div>
+                        <button
+                          className="text-slate-400 hover:text-slate-600 disabled:opacity-30 transition-colors p-1"
+                          disabled={activeIdx === totalSlides - 1}
+                          onClick={() => setWheelIdx(activeIdx + 1 === totalSlides - 1 ? -1 : activeIdx + 1)}
+                          title="Next snapshot"
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    )}
+                    <AllocationPieChart holdings={displayHoldings} />
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -864,7 +940,7 @@ export default function PortfolioBuilder() {
                           {holdings.length > 0 ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
                         </div>
                         {benchRet !== null && (
-                          <div className="text-xs text-slate-400 mt-0.5">{benchmark}: {benchRet > 0 ? '+' : ''}{benchRet.toFixed(2)}%</div>
+                          <div className="text-xs text-slate-400 mt-0.5">{BENCHMARK_META[benchmark]?.label ?? benchmark}: {benchRet > 0 ? '+' : ''}{benchRet.toFixed(2)}%</div>
                         )}
                         {outperf !== null && holdings.length > 0 && (
                           <div className={`text-xs mt-1 font-medium ${outperf > 0 ? 'text-green-600' : outperf < 0 ? 'text-red-500' : 'text-slate-400'}`}>
