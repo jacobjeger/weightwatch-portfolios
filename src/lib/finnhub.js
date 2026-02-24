@@ -193,6 +193,50 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
   });
 }
 
+// ── Individual Holdings chart data ───────────────────────────────────────────
+// Returns: [{ date, AAPL: +5.3, MSFT: +2.1, ... }, ...]
+// Each holding is its own key with % return from start of range.
+const HOLDINGS_RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'Max': 1095 };
+
+export async function getRealHoldingsChartData(holdings, range = '6M') {
+  if (!holdings.length || !isConfigured()) return null;
+
+  const days     = HOLDINGS_RANGE_DAYS[range] ?? 180;
+  const toDate   = new Date().toISOString().slice(0, 10);
+  const fromDate = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
+  const tickers = holdings.map(h => h.ticker);
+  const candleResults = await staggeredCandles(tickers, fromDate, toDate);
+
+  // Find the longest candle set for date alignment
+  const longest = candleResults.reduce((best, c) => c.length > best.length ? c : best, []);
+  const dates = longest.map(d => d.date);
+  if (!dates.length) return null;
+
+  // Build price lookup maps
+  const priceMaps = candleResults.map(candles => {
+    const m = {};
+    candles.forEach(d => { m[d.date] = d.price; });
+    return m;
+  });
+
+  const startPrices = candleResults.map(c => c[0]?.price ?? null);
+
+  return dates.map(date => {
+    const entry = { date };
+    holdings.forEach((h, i) => {
+      const start = startPrices[i];
+      if (start && start > 0) {
+        const current = priceMaps[i][date] ?? start;
+        entry[h.ticker] = parseFloat(((current / start - 1) * 100).toFixed(2));
+      } else {
+        entry[h.ticker] = 0;
+      }
+    });
+    return entry;
+  });
+}
+
 // ── Staggered fetch helper ──────────────────────────────────────────────────
 // Stagger requests to stay within rate limits.  Uses getHistoricalCandles
 // which auto-falls-back from Finnhub to Yahoo Finance.

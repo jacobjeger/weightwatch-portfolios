@@ -8,6 +8,7 @@ import { isConfigured, getRealPortfolioChartData } from '../lib/finnhub';
 import { BENCHMARK_META } from '../lib/mockData';
 
 const BASE_RANGES = ['1M', '3M', '6M', '1Y', 'Max'];
+const RANGE_CALENDAR_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'Max': 1095 };
 
 // Cash earns an approximate 5% annualized return (fed-funds proxy)
 const CASH_DAILY_RETURN = 0.05 / 252;
@@ -31,7 +32,7 @@ function CustomTooltip({ active, payload, label, createdAt }) {
     <div className="bg-white border border-slate-200 rounded shadow-lg px-3 py-2 text-sm">
       <p className="font-medium text-slate-700 mb-1">{label}</p>
       {isBacktested && (
-        <p className="text-xs text-amber-600 mb-1 font-medium">Backtested</p>
+        <p className="text-xs text-amber-600 mb-1 font-medium">Backtested (before account start)</p>
       )}
       {payload.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2">
@@ -83,6 +84,7 @@ export default function PerformanceChart({
   const [range, setRange]     = useState(defaultRange ?? '1Y');
   const [data, setData]       = useState([]);
   const [loading, setLoading] = useState(false);
+  const [dataIsReal, setDataIsReal] = useState(false);
   const usingReal = isConfigured();
 
   // Clamp range to valid set when createdAt changes
@@ -90,22 +92,12 @@ export default function PerformanceChart({
     if (!ranges.includes(range)) setRange('1Y');
   }, [ranges]);
 
-  // Compute numDays for "Since" range
-  const numDays = useMemo(() => {
-    if (range === 'Since' && createdAt) {
-      const msAge = Date.now() - new Date(createdAt).getTime();
-      return Math.max(2, Math.ceil(msAge / 86_400_000 * (252 / 365)));
-    }
-    const MAP = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, 'Max': 504 };
-    return MAP[range] ?? 252;
-  }, [range, createdAt]);
-
   // Fetch (real or mock) whenever inputs change
   useEffect(() => {
     let cancelled = false;
 
     async function fetchData() {
-      if (!holdings?.length) { setData([]); return; }
+      if (!holdings?.length) { setData([]); setDataIsReal(false); return; }
 
       // Map 'Since' to equivalent API range string
       const apiRange = range === 'Since' ? 'Max' : range;
@@ -115,13 +107,20 @@ export default function PerformanceChart({
         try {
           const real = await getRealPortfolioChartData(holdings, benchmarkTicker ?? null, apiRange);
           if (!cancelled) {
-            const raw = real.length ? real : getPortfolioChartData(holdings, benchmarkTicker, range);
-            setData(applyCashAndDrip(raw, cashPercent, drip, raw.length));
+            if (real.length) {
+              setData(applyCashAndDrip(real, cashPercent, drip, real.length));
+              setDataIsReal(true);
+            } else {
+              const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
+              setData(applyCashAndDrip(raw, cashPercent, drip, raw.length));
+              setDataIsReal(false);
+            }
           }
         } catch {
           if (!cancelled) {
             const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
             setData(applyCashAndDrip(raw, cashPercent, drip, raw.length));
+            setDataIsReal(false);
           }
         } finally {
           if (!cancelled) setLoading(false);
@@ -129,6 +128,7 @@ export default function PerformanceChart({
       } else {
         const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
         setData(applyCashAndDrip(raw, cashPercent, drip, raw.length));
+        setDataIsReal(false);
       }
     }
 
@@ -152,9 +152,8 @@ export default function PerformanceChart({
   // Find the backtest boundary in the data
   const backtestBoundary = useMemo(() => {
     if (!accountStartDate || !data.length) return null;
-    // Find the first date >= accountStartDate
     const idx = data.findIndex((d) => d.date >= accountStartDate);
-    if (idx <= 0 || idx >= data.length) return null; // all data is before or after
+    if (idx <= 0 || idx >= data.length) return null;
     return data[idx].date;
   }, [accountStartDate, data]);
 
@@ -164,17 +163,28 @@ export default function PerformanceChart({
     return Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
   }, [createdAt]);
 
-  // Data source label
+  // Determine if the selected range exceeds the actual account history
+  const rangeExceedsHistory = useMemo(() => {
+    if (!createdAt) return true; // no creation date = everything is simulated
+    if (range === 'Since') return false; // "Since creation" is always within history
+    const rangeDays = RANGE_CALENDAR_DAYS[range] ?? 365;
+    return rangeDays > historyDays;
+  }, [createdAt, range, historyDays]);
+
+  // Data source label — only say "Live" when data is real AND range fits within account history
   const dataSourceLabel = useMemo(() => {
-    if (usingReal) {
-      return 'Live market data';
+    if (dataIsReal && !rangeExceedsHistory) {
+      return 'Live data';
+    }
+    if (dataIsReal && rangeExceedsHistory) {
+      return `Live data · includes backtest before account start`;
     }
     if (!createdAt) return 'Simulated data';
     if (historyDays <= 1) return `${historyDays} day of history · Simulated`;
     if (historyDays < 30) return `${historyDays} days of history · Simulated`;
     if (historyDays < 365) return `${Math.floor(historyDays / 30)}mo of history · Simulated`;
     return `${(historyDays / 365).toFixed(1)}yr of history · Simulated`;
-  }, [usingReal, createdAt, historyDays]);
+  }, [dataIsReal, rangeExceedsHistory, createdAt, historyDays]);
 
   return (
     <div>
@@ -196,7 +206,7 @@ export default function PerformanceChart({
           </button>
         ))}
         <span className="ml-auto text-xs text-slate-400">
-          {usingReal && <span className="text-green-500 mr-1">●</span>}
+          {dataIsReal && <span className="text-green-500 mr-1">●</span>}
           {dataSourceLabel}
         </span>
       </div>
