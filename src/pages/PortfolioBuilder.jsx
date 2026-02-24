@@ -94,7 +94,10 @@ export default function PortfolioBuilder() {
     let cancelled = false;
     getRealPerformanceReturns(holdings, benchmark || null).then((data) => {
       if (!cancelled && data) setRealReturns(data);
-    }).catch(() => {});
+      else if (!cancelled) console.warn('[Finnhub] getRealPerformanceReturns returned null — check API key & rate limits');
+    }).catch((err) => {
+      console.warn('[Finnhub] Performance fetch error:', err.message);
+    });
     return () => { cancelled = true; };
   }, [live, holdings, benchmark]);
 
@@ -928,8 +931,10 @@ export default function PortfolioBuilder() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="section-title">Performance Summary</h2>
-              <span className="text-xs text-slate-400 italic">
-                {realReturns ? '● Live · real market data' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated')}
+              <span className={`text-xs italic ${realReturns ? 'text-green-500' : 'text-slate-400'}`}>
+                {realReturns
+                  ? `● Live · Finnhub real data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
+                  : (live ? 'Loading real data…' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated'))}
               </span>
             </div>
             {(() => {
@@ -969,12 +974,12 @@ export default function PortfolioBuilder() {
                             Real
                           </div>
                         )}
-                        {isBacktested && holdings.length > 0 && (
+                        {!hasReal && holdings.length > 0 && (
                           <div
                             className="text-xs text-slate-400 italic mt-1 cursor-help"
-                            title="Return is simulated — connect Finnhub API for real market data"
+                            title={realReturns ? 'Candle data unavailable for this timeframe' : 'Return is simulated — connect Finnhub API for real market data'}
                           >
-                            Simulated
+                            {realReturns ? 'Est.' : (isBacktested ? 'Simulated' : '')}
                           </div>
                         )}
                       </div>

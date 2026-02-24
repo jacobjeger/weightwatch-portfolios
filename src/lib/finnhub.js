@@ -161,9 +161,71 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
   });
 }
 
+// ── Staggered fetch helper ──────────────────────────────────────────────────
+// Finnhub free tier: 60 calls/min.  Stagger by 200 ms to stay well within.
+async function staggeredCandles(tickers, fromDate, toDate) {
+  const results = [];
+  for (let i = 0; i < tickers.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 200));
+    try {
+      const data = await getCandles(tickers[i], fromDate, toDate);
+      results.push(data);
+    } catch (err) {
+      console.warn(`[Finnhub] Candle fetch failed for ${tickers[i]}:`, err.message);
+      results.push([]);
+    }
+  }
+  return results;
+}
+
+// ── Quote-based 1-day returns (always works on free tier) ──────────────────
+// Falls back to quote endpoint (price vs prevClose) when candle data is empty.
+async function getQuoteBasedReturns(holdings, benchmarkTicker) {
+  const tickers = holdings.map(h => h.ticker);
+  const allTickers = benchmarkTicker ? [...tickers, benchmarkTicker] : tickers;
+
+  const quotes = {};
+  for (let i = 0; i < allTickers.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 150));
+    try {
+      quotes[allTickers[i]] = await getQuote(allTickers[i]);
+    } catch {
+      // skip
+    }
+  }
+
+  let portfolioRet = 0;
+  let validWeight  = 0;
+  holdings.forEach(h => {
+    const q = quotes[h.ticker];
+    if (q?.prevClose && q.prevClose > 0 && q.price) {
+      const ret = ((q.price / q.prevClose) - 1) * 100;
+      portfolioRet += ret * (h.weight_percent / 100);
+      validWeight  += h.weight_percent;
+    }
+  });
+  if (validWeight > 0 && validWeight < 100) {
+    portfolioRet = portfolioRet * (100 / validWeight);
+  }
+
+  let benchRet = null;
+  if (benchmarkTicker && quotes[benchmarkTicker]) {
+    const q = quotes[benchmarkTicker];
+    if (q.prevClose && q.prevClose > 0 && q.price) {
+      benchRet = ((q.price / q.prevClose) - 1) * 100;
+    }
+  }
+
+  return {
+    portfolio: validWeight > 0 ? parseFloat(portfolioRet.toFixed(2)) : null,
+    benchmark: benchRet != null ? parseFloat(benchRet.toFixed(2)) : null,
+  };
+}
+
 // ── Performance summary returns (real candle data) ──────────────────────────
 // Fetches 1Y of daily candles for all holdings + benchmark, then computes
 // weighted portfolio returns for each standard timeframe.
+// Falls back to quote-based 1D returns if candle data is unavailable.
 // Returns: { portfolio: { '1D': 0.45, '7D': 1.2, ... }, benchmark: { '1D': 0.1, ... } | null }
 const PERF_DAYS = { '1D': 1, '7D': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
 
@@ -173,16 +235,19 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
   const toDate   = new Date().toISOString().slice(0, 10);
   const fromDate = new Date(Date.now() - 370 * 86_400_000).toISOString().slice(0, 10); // 370 days to cover weekends
 
-  // Fetch all candles in parallel (rate-staggered via cache)
+  // Fetch candles with staggering to respect rate limits
   const tickers = holdings.map(h => h.ticker);
   const allTickers = benchmarkTicker ? [...tickers, benchmarkTicker] : tickers;
 
-  const candleResults = await Promise.all(
-    allTickers.map(t => getCandles(t, fromDate, toDate).catch(() => []))
-  );
+  console.info('[Finnhub] Fetching candles for', allTickers.length, 'tickers…');
+  const candleResults = await staggeredCandles(allTickers, fromDate, toDate);
 
   const holdingCandles = candleResults.slice(0, tickers.length);
   const benchCandles   = benchmarkTicker ? candleResults[candleResults.length - 1] : [];
+
+  // Log how many tickers got data
+  const withData = holdingCandles.filter(c => c.length > 0).length;
+  console.info(`[Finnhub] Candle data: ${withData}/${tickers.length} holdings, benchmark: ${benchCandles.length > 0 ? 'yes' : 'no'}`);
 
   // Build price lookup maps
   const priceMaps = holdingCandles.map(candles => {
@@ -195,7 +260,24 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
 
   // Get all trading dates (sorted), use the longest candle set
   const allDates = holdingCandles.reduce((best, c) => c.length > best.length ? c : best, []).map(d => d.date);
-  if (!allDates.length) return null;
+
+  // If no candle data at all, fall back to quote-based 1D returns only
+  if (!allDates.length) {
+    console.warn('[Finnhub] No candle data available — falling back to quote-based 1D returns');
+    const quoteRet = await getQuoteBasedReturns(holdings, benchmarkTicker);
+    const result = { portfolio: {}, benchmark: {} };
+    for (const label of Object.keys(PERF_DAYS)) {
+      if (label === '1D') {
+        result.portfolio[label] = quoteRet.portfolio;
+        result.benchmark[label] = quoteRet.benchmark;
+      } else {
+        result.portfolio[label] = null;
+        result.benchmark[label] = null;
+      }
+    }
+    // Only return if we got at least 1D data
+    return quoteRet.portfolio != null ? result : null;
+  }
 
   const latestDate = allDates[allDates.length - 1];
 
@@ -246,6 +328,13 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
     const r = computeReturn(days);
     result.portfolio[label] = r.portfolio;
     result.benchmark[label] = r.benchmark;
+  }
+
+  // If candle-based 1D is null (no recent candle), supplement with quote data
+  if (result.portfolio['1D'] == null) {
+    const quoteRet = await getQuoteBasedReturns(holdings, benchmarkTicker);
+    result.portfolio['1D'] = quoteRet.portfolio;
+    result.benchmark['1D'] = quoteRet.benchmark;
   }
 
   return result;
