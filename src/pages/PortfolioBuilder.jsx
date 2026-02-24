@@ -4,6 +4,7 @@ import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, Doll
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn } from '../lib/mockData';
+import { getRealPerformanceReturns } from '../lib/finnhub';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
@@ -56,6 +57,7 @@ export default function PortfolioBuilder() {
   const [showRebalance, setShowRebalance]   = useState(false);
   const [saving, setSaving]                 = useState(false);
   const [weightErrors, setWeightErrors]     = useState({});
+  const [realReturns, setRealReturns]       = useState(null);   // real Finnhub candle-based returns
 
   // Load existing portfolio
   useEffect(() => {
@@ -85,6 +87,16 @@ export default function PortfolioBuilder() {
     const unsub = subscribeTickers(tickers);
     return unsub;
   }, [live, holdings, loadTickers, subscribeTickers]);
+
+  // Fetch real performance returns from Finnhub candles (when configured)
+  useEffect(() => {
+    if (!live || !holdings.length) return;
+    let cancelled = false;
+    getRealPerformanceReturns(holdings, benchmark || null).then((data) => {
+      if (!cancelled && data) setRealReturns(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [live, holdings, benchmark]);
 
   // Derived
   const totalWeight = holdings.reduce((s, h) => s + parseFloat(h.weight_percent || 0), 0);
@@ -917,7 +929,7 @@ export default function PortfolioBuilder() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="section-title">Performance Summary</h2>
               <span className="text-xs text-slate-400 italic">
-                {createdAt ? 'Real since start date · simulated before' : 'All figures backtested / simulated'}
+                {realReturns ? '● Live · real market data' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated')}
               </span>
             </div>
             {(() => {
@@ -928,13 +940,18 @@ export default function PortfolioBuilder() {
               return (
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                   {TIMEFRAMES.map(({ label, days }) => {
-                    const portfolioRet = parseFloat(getPortfolioReturn(holdings, days));
-                    const benchRet = benchmark ? parseFloat(getReturn(benchmark, days)) : null;
+                    // Prefer real Finnhub data, fall back to mock
+                    const hasReal = realReturns?.portfolio?.[label] != null;
+                    const portfolioRet = hasReal
+                      ? realReturns.portfolio[label]
+                      : parseFloat(getPortfolioReturn(holdings, days));
+                    const benchRet = hasReal && realReturns.benchmark?.[label] != null
+                      ? realReturns.benchmark[label]
+                      : (benchmark ? parseFloat(getReturn(benchmark, days)) : null);
                     const outperf = benchRet !== null ? portfolioRet - benchRet : null;
-                    // Backtested = portfolio hasn't existed long enough to have real data for this window
-                    const isBacktested = !createdAt || portfolioAgeTradingDays < days;
+                    const isBacktested = !hasReal && (!createdAt || portfolioAgeTradingDays < days);
                     return (
-                      <div key={label} className={`rounded p-3 text-center ${isBacktested ? 'bg-slate-50/60' : 'bg-slate-50'}`}>
+                      <div key={label} className={`rounded p-3 text-center ${hasReal ? 'bg-green-50/50' : isBacktested ? 'bg-slate-50/60' : 'bg-slate-50'}`}>
                         <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
                         <div className={`text-sm font-bold ${portfolioRet > 0 ? 'text-green-600' : portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
                           {holdings.length > 0 ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
@@ -947,12 +964,17 @@ export default function PortfolioBuilder() {
                             {outperf > 0 ? '▲' : outperf < 0 ? '▼' : '='} {Math.abs(outperf).toFixed(2)}%
                           </div>
                         )}
+                        {hasReal && (
+                          <div className="text-xs text-green-500 mt-1 font-medium" title="Returns calculated from real market closing prices via Finnhub">
+                            Real
+                          </div>
+                        )}
                         {isBacktested && holdings.length > 0 && (
                           <div
                             className="text-xs text-slate-400 italic mt-1 cursor-help"
-                            title="Return is simulated from historical data; portfolio did not exist for this full period"
+                            title="Return is simulated — connect Finnhub API for real market data"
                           >
-                            Backtested
+                            Simulated
                           </div>
                         )}
                       </div>

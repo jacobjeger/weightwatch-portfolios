@@ -161,6 +161,96 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
   });
 }
 
+// ── Performance summary returns (real candle data) ──────────────────────────
+// Fetches 1Y of daily candles for all holdings + benchmark, then computes
+// weighted portfolio returns for each standard timeframe.
+// Returns: { portfolio: { '1D': 0.45, '7D': 1.2, ... }, benchmark: { '1D': 0.1, ... } | null }
+const PERF_DAYS = { '1D': 1, '7D': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+
+export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
+  if (!holdings.length || !isConfigured()) return null;
+
+  const toDate   = new Date().toISOString().slice(0, 10);
+  const fromDate = new Date(Date.now() - 370 * 86_400_000).toISOString().slice(0, 10); // 370 days to cover weekends
+
+  // Fetch all candles in parallel (rate-staggered via cache)
+  const tickers = holdings.map(h => h.ticker);
+  const allTickers = benchmarkTicker ? [...tickers, benchmarkTicker] : tickers;
+
+  const candleResults = await Promise.all(
+    allTickers.map(t => getCandles(t, fromDate, toDate).catch(() => []))
+  );
+
+  const holdingCandles = candleResults.slice(0, tickers.length);
+  const benchCandles   = benchmarkTicker ? candleResults[candleResults.length - 1] : [];
+
+  // Build price lookup maps
+  const priceMaps = holdingCandles.map(candles => {
+    const m = {};
+    candles.forEach(d => { m[d.date] = d.price; });
+    return m;
+  });
+  const benchMap = {};
+  benchCandles.forEach(d => { benchMap[d.date] = d.price; });
+
+  // Get all trading dates (sorted), use the longest candle set
+  const allDates = holdingCandles.reduce((best, c) => c.length > best.length ? c : best, []).map(d => d.date);
+  if (!allDates.length) return null;
+
+  const latestDate = allDates[allDates.length - 1];
+
+  function computeReturn(daysBack) {
+    // Find the date approximately N calendar days ago
+    const targetDate = new Date(Date.now() - daysBack * 86_400_000).toISOString().slice(0, 10);
+    // Find the closest trading date >= targetDate
+    const startIdx = allDates.findIndex(d => d >= targetDate);
+    if (startIdx < 0 || startIdx >= allDates.length) return { portfolio: null, benchmark: null };
+    const startDate = allDates[startIdx];
+
+    // Portfolio weighted return
+    let portfolioRet = 0;
+    let validWeight = 0;
+    holdings.forEach((h, i) => {
+      const startPrice = priceMaps[i][startDate];
+      const endPrice   = priceMaps[i][latestDate];
+      if (startPrice && endPrice && startPrice > 0) {
+        const ret = ((endPrice / startPrice) - 1) * 100;
+        portfolioRet += ret * (h.weight_percent / 100);
+        validWeight += h.weight_percent;
+      }
+    });
+
+    // Scale up if some holdings had no data
+    if (validWeight > 0 && validWeight < 100) {
+      portfolioRet = portfolioRet * (100 / validWeight);
+    }
+
+    // Benchmark return
+    let benchRet = null;
+    if (benchmarkTicker) {
+      const startB = benchMap[startDate];
+      const endB   = benchMap[latestDate];
+      if (startB && endB && startB > 0) {
+        benchRet = ((endB / startB) - 1) * 100;
+      }
+    }
+
+    return {
+      portfolio: validWeight > 0 ? parseFloat(portfolioRet.toFixed(2)) : null,
+      benchmark: benchRet != null ? parseFloat(benchRet.toFixed(2)) : null,
+    };
+  }
+
+  const result = { portfolio: {}, benchmark: {} };
+  for (const [label, days] of Object.entries(PERF_DAYS)) {
+    const r = computeReturn(days);
+    result.portfolio[label] = r.portfolio;
+    result.benchmark[label] = r.benchmark;
+  }
+
+  return result;
+}
+
 // ── WebSocket — real-time trade feed ─────────────────────────────────────────
 let ws             = null;
 const wsSubscribed  = new Set();
