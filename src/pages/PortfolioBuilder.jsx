@@ -4,7 +4,7 @@ import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, Doll
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
-import { getRealPerformanceReturns } from '../lib/finnhub';
+import { getRealPerformanceReturns, clearMarketCaches } from '../lib/finnhub';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
@@ -108,7 +108,10 @@ export default function PortfolioBuilder() {
   const [lastPerfRefresh, setLastPerfRefresh] = useState(null);
   const [perfRefreshKey, setPerfRefreshKey]   = useState(0); // bump to force re-fetch
 
-  const refreshPerformance = useCallback(() => setPerfRefreshKey((k) => k + 1), []);
+  const refreshPerformance = useCallback(() => {
+    clearMarketCaches();
+    setPerfRefreshKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     if (!live || !holdings.length) return;

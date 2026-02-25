@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getYTDReturn } from '../lib/mockData';
+import { getRealPerformanceReturns, getRealHoldingsChartData, isConfigured } from '../lib/finnhub';
+import { useMarketData } from '../context/MarketDataContext';
 import { useToast } from '../context/ToastContext';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
@@ -35,10 +37,47 @@ function PctCell({ val }) {
 export default function Benchmarks() {
   const { user } = useAuth();
   const toast    = useToast();
+  const { live } = useMarketData();
   const [settings, setSettings] = useState(() => user ? getSettings(user.id) : {});
   const [chartRange, setChartRange] = useState('1Y');
 
-  // Build multi-line chart data for all 6 benchmarks
+  // Real benchmark returns: { SPY: { '1D': 0.45, 'YTD': ... }, ... }
+  const [realBenchReturns, setRealBenchReturns] = useState({});
+  const [realChartData, setRealChartData]       = useState(null);
+
+  // Fetch real returns for each benchmark ticker
+  useEffect(() => {
+    if (!live) return;
+    let cancelled = false;
+    async function fetchAll() {
+      const results = {};
+      for (const ticker of BENCHMARKS) {
+        try {
+          const data = await getRealPerformanceReturns([{ ticker, weight_percent: 100 }], null);
+          if (data?.portfolio) results[ticker] = data.portfolio;
+        } catch { /* skip, fall back to mock */ }
+      }
+      if (!cancelled) setRealBenchReturns(results);
+    }
+    fetchAll();
+    return () => { cancelled = true; };
+  }, [live]);
+
+  // Fetch real chart data for benchmark comparison
+  useEffect(() => {
+    if (!isConfigured()) return;
+    let cancelled = false;
+    const pseudoHoldings = BENCHMARKS.map(ticker => ({ ticker, weight_percent: 100 / BENCHMARKS.length }));
+    getRealHoldingsChartData(pseudoHoldings, chartRange === 'Max' ? 'Max' : chartRange).then((data) => {
+      if (!cancelled && data?.length) setRealChartData(data);
+      else if (!cancelled) setRealChartData(null);
+    }).catch(() => { if (!cancelled) setRealChartData(null); });
+    return () => { cancelled = true; };
+  }, [chartRange]);
+
+  const hasRealReturns = Object.keys(realBenchReturns).length > 0;
+
+  // Build multi-line chart data for all 6 benchmarks (mock fallback)
   const multiChartData = (() => {
     const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, 'Max': 504 };
     const numDays = RANGE_DAYS[chartRange] ?? 252;
@@ -81,7 +120,9 @@ export default function Benchmarks() {
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100">
           <h2 className="section-title">Benchmark Performance</h2>
-          <p className="text-xs text-slate-400">Simulated returns — not real market data</p>
+          <p className="text-xs text-slate-400">
+            {hasRealReturns ? '● Real market data' : 'Simulated returns — not real market data'}
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100">
@@ -103,7 +144,10 @@ export default function Benchmarks() {
                     </td>
                     <td className="td text-slate-600">{meta?.label ?? inst?.name ?? ticker}</td>
                     {TIMEFRAMES.map((tf) => {
-                      const ret = tf.label === 'YTD' ? getYTDReturn(ticker) : getReturn(ticker, tf.days);
+                      const realRet = realBenchReturns[ticker]?.[tf.label];
+                      const ret = realRet != null
+                        ? realRet.toFixed(2)
+                        : (tf.label === 'YTD' ? getYTDReturn(ticker) : getReturn(ticker, tf.days));
                       return (
                         <td key={tf.label} className="td text-right">
                           <PctCell val={ret} />
@@ -137,7 +181,7 @@ export default function Benchmarks() {
           </div>
         </div>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={multiChartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+          <LineChart data={realChartData ?? multiChartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="date"

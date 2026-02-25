@@ -8,6 +8,9 @@
 const yahooCache = new Map();
 const CACHE_TTL  = 300_000; // 5 min — same as Finnhub candle cache
 
+/** Clear the Yahoo candle cache (called by clearMarketCaches). */
+export function clearYahooCache() { yahooCache.clear(); }
+
 /**
  * Fetch daily closing prices for a ticker from Yahoo Finance.
  * @param {string} ticker  — e.g. 'AAPL', 'SPY'
