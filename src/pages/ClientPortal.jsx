@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart3, MessageCircle, CheckCircle, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useAuth, getPortfolios, getMessages, getLatestApproval } from '../context/AuthContext';
 import { BENCHMARK_META, getPortfolioReturn, getPortfolioYTDReturn, getReturn, getYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
+import { getRealPerformanceReturns } from '../lib/finnhub';
+import { useMarketData } from '../context/MarketDataContext';
 import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
@@ -13,6 +15,8 @@ export default function ClientPortal() {
   const navigate = useNavigate();
   const [portfolios, setPortfolios] = useState([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const { live, prices, loadTickers, subscribeTickers } = useMarketData();
+  const [realReturns, setRealReturns] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -23,6 +27,29 @@ export default function ClientPortal() {
 
   const portfolio = portfolios[selectedIdx] || null;
   const approval = portfolio ? getLatestApproval(portfolio.id) : null;
+  const holdings = portfolio?.holdings ?? [];
+  const benchmark = portfolio?.primary_benchmark;
+
+  // Load + subscribe real-time prices
+  useEffect(() => {
+    if (!live || !portfolio) return;
+    const tickers = holdings.map((h) => h.ticker);
+    if (benchmark) tickers.push(benchmark);
+    if (!tickers.length) return;
+    loadTickers(tickers);
+    const unsub = subscribeTickers(tickers);
+    return unsub;
+  }, [live, holdings, benchmark, loadTickers, subscribeTickers, portfolio]);
+
+  // Fetch real candle-based returns
+  useEffect(() => {
+    if (!live || !holdings.length) return;
+    let cancelled = false;
+    getRealPerformanceReturns(holdings, benchmark || null).then((data) => {
+      if (!cancelled && data) setRealReturns(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [live, holdings, benchmark]);
 
   if (!user || role !== 'client') {
     return (
@@ -45,15 +72,47 @@ export default function ClientPortal() {
     );
   }
 
-  const holdings = portfolio?.holdings ?? [];
-  const benchmark = portfolio?.primary_benchmark;
   const benchLabel = benchmark ? (BENCHMARK_META[benchmark]?.label ?? benchmark) : null;
 
-  // Compute performance metrics
-  const ytdReturn = holdings.length ? parseFloat(getPortfolioYTDReturn(holdings)) : null;
+  // Compute performance metrics — prefer real data, fall back to mock
+  const ytdReturn = realReturns?.portfolio?.['YTD'] != null
+    ? realReturns.portfolio['YTD']
+    : (holdings.length ? parseFloat(getPortfolioYTDReturn(holdings)) : null);
   const sinceReturn = portfolio?.created_at && holdings.length ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at)) : null;
-  const oneYearReturn = holdings.length ? parseFloat(getPortfolioReturn(holdings, 252)) : null;
-  const benchYtd = benchmark ? parseFloat(getYTDReturn(benchmark)) : null;
+  const oneYearReturn = realReturns?.portfolio?.['1Y'] != null
+    ? realReturns.portfolio['1Y']
+    : (holdings.length ? parseFloat(getPortfolioReturn(holdings, 252)) : null);
+  const benchYtd = realReturns?.benchmark?.['YTD'] != null
+    ? realReturns.benchmark['YTD']
+    : (benchmark ? parseFloat(getYTDReturn(benchmark)) : null);
+
+  // Drifted weights using live prices (same logic as PortfolioBuilder)
+  const currentWeights = useMemo(() => {
+    if (!holdings.length) return {};
+    const rows = holdings.map((h) => {
+      const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
+      const entryPrice = h.entry_price ?? h.last_price;
+      const ratio = (entryPrice && entryPrice > 0) ? currentPrice / entryPrice : 1;
+      return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
+    });
+    const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
+    if (!denom) return {};
+    return Object.fromEntries(rows.map((r) => [r.ticker, {
+      driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
+      ratio: r.ratio,
+    }]));
+  }, [holdings, prices, live]);
+
+  const cashPercent = portfolio?.cash_percent ?? 0;
+  const currentPortfolioValue = useMemo(() => {
+    const sv = portfolio?.starting_value ?? 0;
+    if (!holdings.length || !sv) return sv;
+    const investedFrac = 1 - cashPercent / 100;
+    const growthFactor = holdings.reduce(
+      (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
+    );
+    return sv * (growthFactor * investedFrac + cashPercent / 100);
+  }, [holdings, currentWeights, portfolio, cashPercent]);
 
   const totalWeight = holdings.reduce((s, h) => s + (h.weight_percent || 0), 0);
   const isFullyAllocated = Math.abs(totalWeight - 100) < 0.01;
@@ -146,9 +205,11 @@ export default function ClientPortal() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <p className="text-xs font-medium text-slate-500 mb-1">Portfolio Value</p>
             <p className="text-xl font-bold text-slate-800">
-              {portfolio?.starting_value ? `$${Math.round(portfolio.starting_value).toLocaleString()}` : '--'}
+              {currentPortfolioValue ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
             </p>
-            <p className="text-xs text-slate-400 mt-1">{holdings.length} holdings</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {holdings.length} holdings{live && realReturns ? ' · live' : ''}
+            </p>
           </div>
         </div>
 

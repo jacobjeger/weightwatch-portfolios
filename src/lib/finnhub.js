@@ -6,7 +6,7 @@
 // automatically falls back to Yahoo Finance (via /api/yahoo-chart proxy) for
 // all subsequent requests.  This gives us free unlimited historical data.
 
-import { getYahooCandles } from './yahoo';
+import { getYahooCandles, clearYahooCache } from './yahoo';
 
 const BASE = 'https://finnhub.io/api/v1';
 const KEY  = import.meta.env.VITE_FINNHUB_API_KEY;
@@ -23,6 +23,14 @@ const searchCache = new Map(); // query    → { data, ts }
 const QUOTE_TTL   = 30_000;   // 30 s  — refresh quotes every 30 s
 const CANDLE_TTL  = 300_000;  // 5 min — candles don't change intraday
 const SEARCH_TTL  = 60_000;   // 1 min — search results are stable
+
+/** Bust all in-memory market-data caches (Finnhub + Yahoo). */
+export function clearMarketCaches() {
+  quoteCache.clear();
+  candleCache.clear();
+  searchCache.clear();
+  clearYahooCache();
+}
 
 // ── Quote (current price + daily change) ─────────────────────────────────────
 // Returns: { price, change, changePercent, prevClose, high, low, open }
@@ -408,6 +416,14 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
     const r = computeReturn(days);
     result.portfolio[label] = r.portfolio;
     result.benchmark[label] = r.benchmark;
+  }
+
+  // YTD: compute from Jan 1 of the current year
+  const ytdDays = Math.floor((Date.now() - new Date(`${new Date().getFullYear()}-01-01`).getTime()) / 86_400_000);
+  if (ytdDays > 0) {
+    const ytdR = computeReturn(ytdDays);
+    result.portfolio['YTD'] = ytdR.portfolio;
+    result.benchmark['YTD'] = ytdR.benchmark;
   }
 
   // If candle-based 1D is null (no recent candle), supplement with quote data
