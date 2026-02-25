@@ -78,7 +78,19 @@ export default function ClientPortal() {
   const ytdReturn = realReturns?.portfolio?.['YTD'] != null
     ? realReturns.portfolio['YTD']
     : (holdings.length ? parseFloat(getPortfolioYTDReturn(holdings)) : null);
-  const sinceReturn = portfolio?.created_at && holdings.length ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at)) : null;
+  const sinceReturn = useMemo(() => {
+    // Use live price ratios (entry → current) when available
+    if (live && holdings.length && Object.keys(currentWeights).length) {
+      const growthFactor = holdings.reduce(
+        (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
+      );
+      return parseFloat(((growthFactor - 1) * 100).toFixed(2));
+    }
+    // Fall back to mock
+    return portfolio?.created_at && holdings.length
+      ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at))
+      : null;
+  }, [live, holdings, currentWeights, portfolio]);
   const oneYearReturn = realReturns?.portfolio?.['1Y'] != null
     ? realReturns.portfolio['1Y']
     : (holdings.length ? parseFloat(getPortfolioReturn(holdings, 252)) : null);
@@ -214,7 +226,7 @@ export default function ClientPortal() {
         </div>
 
         {/* Performance chart */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5">
           <h2 className="text-sm font-semibold text-slate-700 mb-4">Portfolio vs Benchmark Performance</h2>
           <PerformanceChart
             holdings={holdings}
@@ -227,7 +239,7 @@ export default function ClientPortal() {
 
         {/* Individual holdings chart */}
         {holdings.length > 1 && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-4">Individual Holdings Performance</h2>
             <HoldingsPerformanceChart holdings={holdings} />
           </div>
@@ -236,15 +248,15 @@ export default function ClientPortal() {
         {/* Holdings + Allocation */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {/* Holdings table */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-4">Your Holdings</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr>
                     <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Ticker</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Name</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Role</th>
+                    <th className="hidden sm:table-cell text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Name</th>
+                    <th className="hidden sm:table-cell text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Role</th>
                     <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2">Weight</th>
                   </tr>
                 </thead>
@@ -252,8 +264,8 @@ export default function ClientPortal() {
                   {holdings.map((h) => (
                     <tr key={h.ticker} className="border-t border-slate-100">
                       <td className="py-2 pr-4 font-mono font-semibold text-slate-800">{h.ticker}</td>
-                      <td className="py-2 pr-4 text-slate-600">{h.name}</td>
-                      <td className="py-2 pr-4">
+                      <td className="hidden sm:table-cell py-2 pr-4 text-slate-600">{h.name}</td>
+                      <td className="hidden sm:table-cell py-2 pr-4">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                           (h.category || 'Core') === 'Core' ? 'bg-blue-50 text-blue-700'
                             : (h.category || 'Core') === 'Tilt' ? 'bg-violet-50 text-violet-700'
@@ -271,7 +283,7 @@ export default function ClientPortal() {
           </div>
 
           {/* Allocation breakdown */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-3">Allocation Wheel</h2>
             <AllocationPieChart holdings={holdings} />
             <div className="mt-4 space-y-2">

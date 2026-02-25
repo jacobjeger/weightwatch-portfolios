@@ -167,7 +167,8 @@ export default function HoldingsPerformanceChart({ holdings }) {
           Select holdings above to compare
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={240} className="sm:[&]:h-[300px]">
+        <div className="h-[240px] sm:h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
@@ -210,6 +211,7 @@ export default function HoldingsPerformanceChart({ holdings }) {
             })}
           </LineChart>
         </ResponsiveContainer>
+        </div>
       )}
     </div>
   );

@@ -20,6 +20,15 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
     if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, open]);
 
+  // Poll for new messages every 5 seconds while panel is open
+  useEffect(() => {
+    if (!open || !portfolioId) return;
+    const interval = setInterval(() => {
+      setMessages(getMessages(portfolioId));
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [open, portfolioId]);
+
   function handleSend(type = 'comment') {
     if (!text.trim() && type === 'comment') return;
     const msg = sendMessage({

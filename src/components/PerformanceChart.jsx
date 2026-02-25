@@ -245,15 +245,16 @@ export default function PerformanceChart({
       )}
 
       {loading ? (
-        <div className="h-48 flex items-center justify-center text-sm text-slate-400 animate-pulse">
+        <div className="h-[220px] sm:h-[260px] flex items-center justify-center text-sm text-slate-400 animate-pulse">
           Loading chart data…
         </div>
       ) : data.length === 0 ? (
-        <div className="h-48 flex items-center justify-center text-sm text-slate-400">
+        <div className="h-[220px] sm:h-[260px] flex items-center justify-center text-sm text-slate-400">
           Add holdings to see performance
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={220} className="sm:[&]:h-[260px]">
+        <div className="h-[220px] sm:h-[260px]">
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
 
@@ -330,6 +331,7 @@ export default function PerformanceChart({
             )}
           </LineChart>
         </ResponsiveContainer>
+        </div>
       )}
     </div>
   );
