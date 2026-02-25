@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval } from '../context/AuthContext';
+import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw } from 'lucide-react';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
 import { getRealPerformanceReturns } from '../lib/finnhub';
@@ -29,7 +29,7 @@ export default function PortfolioBuilder() {
   const navigate = useNavigate();
   const { user, role } = useAuth();
   const toast = useToast();
-  const { live, prices, loadTickers, subscribeTickers } = useMarketData();
+  const { live, prices, priceVersion, loadTickers, subscribeTickers } = useMarketData();
 
   const isNew = id === 'new';
 
@@ -101,18 +101,43 @@ export default function PortfolioBuilder() {
     return unsub;
   }, [live, holdings, benchmark, loadTickers, subscribeTickers]);
 
-  // Fetch real performance returns from Finnhub candles (when configured)
+  // ── Performance auto-refresh ────────────────────────────────────────────────
+  // Fetches real candle-based returns on mount + on a user-configurable interval.
+  // Also exposes a manual trigger via refreshPerformance().
+  const [perfRefreshing, setPerfRefreshing] = useState(false);
+  const [lastPerfRefresh, setLastPerfRefresh] = useState(null);
+  const [perfRefreshKey, setPerfRefreshKey]   = useState(0); // bump to force re-fetch
+
+  const refreshPerformance = useCallback(() => setPerfRefreshKey((k) => k + 1), []);
+
   useEffect(() => {
     if (!live || !holdings.length) return;
     let cancelled = false;
+    setPerfRefreshing(true);
     getRealPerformanceReturns(holdings, benchmark || null).then((data) => {
-      if (!cancelled && data) setRealReturns(data);
-      else if (!cancelled) console.warn('[Finnhub] getRealPerformanceReturns returned null — check API key & rate limits');
+      if (cancelled) return;
+      if (data) {
+        setRealReturns(data);
+        setLastPerfRefresh(new Date());
+      } else {
+        console.warn('[Finnhub] getRealPerformanceReturns returned null — check API key & rate limits');
+      }
     }).catch((err) => {
       console.warn('[Finnhub] Performance fetch error:', err.message);
+    }).finally(() => {
+      if (!cancelled) setPerfRefreshing(false);
     });
     return () => { cancelled = true; };
-  }, [live, holdings, benchmark]);
+  }, [live, holdings, benchmark, perfRefreshKey]);
+
+  // Interval-based auto-refresh driven by snapshot_refresh_interval setting
+  useEffect(() => {
+    if (!live || !holdings.length) return;
+    const intervalSec = user ? getSettings(user.id).snapshot_refresh_interval : 60;
+    if (!intervalSec || intervalSec <= 0) return; // 0 = Manual only
+    const id = setInterval(refreshPerformance, intervalSec * 1000);
+    return () => clearInterval(id);
+  }, [live, holdings.length, user, refreshPerformance]);
 
   // Derived
   const totalWeight = holdings.reduce((s, h) => s + parseFloat(h.weight_percent || 0), 0);
@@ -1026,6 +1051,16 @@ export default function PortfolioBuilder() {
                     ? `● Live · real market data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
                     : (live ? 'Loading real data…' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated'))}
                 </span>
+                {live && (
+                  <button
+                    className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 disabled:opacity-40"
+                    disabled={perfRefreshing}
+                    onClick={(e) => { e.stopPropagation(); refreshPerformance(); }}
+                    title={lastPerfRefresh ? `Last refresh: ${lastPerfRefresh.toLocaleTimeString()}` : 'Refresh performance data'}
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${perfRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
                 <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${perfSummaryOpen ? 'rotate-180' : ''}`} />
               </div>
             </button>
@@ -1215,8 +1250,25 @@ export default function PortfolioBuilder() {
                     Live
                   </span>
                 )}
+                {live && lastPerfRefresh && (
+                  <span className="text-xs text-slate-400">
+                    Updated {lastPerfRefresh.toLocaleTimeString()}
+                  </span>
+                )}
               </div>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${liveSnapOpen ? 'rotate-180' : ''}`} />
+              <div className="flex items-center gap-1">
+                {live && (
+                  <button
+                    className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 disabled:opacity-40"
+                    disabled={perfRefreshing}
+                    onClick={(e) => { e.stopPropagation(); refreshPerformance(); }}
+                    title="Refresh prices & performance"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${perfRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${liveSnapOpen ? 'rotate-180' : ''}`} />
+              </div>
             </button>
             {liveSnapOpen && <>
             <p className="text-xs text-slate-400 mb-4 mt-2">
