@@ -119,14 +119,14 @@ export default function Dashboard() {
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">My Portfolios</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">My Portfolios</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {selected.size > 0 && (
             <button
               className="btn-danger"
@@ -138,13 +138,14 @@ export default function Dashboard() {
           )}
           <button className="btn-primary" onClick={() => setShowNew(true)}>
             <Plus className="w-4 h-4" />
-            New Portfolio
+            <span className="hidden xs:inline">New Portfolio</span>
+            <span className="xs:hidden">New</span>
           </button>
         </div>
       </div>
 
       {/* Performance timeframe selector */}
-      <div className="flex items-center gap-1 mb-3">
+      <div className="flex flex-wrap items-center gap-1 mb-3">
         <span className="text-xs text-slate-500 mr-2">Performance:</span>
         {Object.keys(TIMEFRAME_DAYS).map((tf) => (
           <button

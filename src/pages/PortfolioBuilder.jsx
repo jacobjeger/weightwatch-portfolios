@@ -504,28 +504,28 @@ export default function PortfolioBuilder() {
   }, 0) * investedFraction;
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8">
+    <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
       {/* Top toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-slate-900">Portfolio Builder</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900">Portfolio Builder</h1>
           <StatusBadge status={status} totalWeight={totalWeight} />
         </div>
-        <div className="flex items-center gap-2">
-          <button className="btn-ghost" onClick={() => navigate('/')}>← Dashboard</button>
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <button className="btn-ghost" onClick={() => navigate('/')}>← <span className="hidden sm:inline">Dashboard</span></button>
           <button className="btn-secondary flex items-center gap-1.5" onClick={handleShare} disabled={isNew}>
-            <Share2 className="w-4 h-4" />Share
+            <Share2 className="w-4 h-4" /><span className="hidden sm:inline">Share</span>
           </button>
           {role !== 'client' && (
             <button className="btn-secondary flex items-center gap-1.5" onClick={() => { setShowInvite(true); setInviteUrl(null); setInviteEmail(''); }} disabled={isNew}>
-              <Plus className="w-4 h-4" />Invite Client
+              <Plus className="w-4 h-4" /><span className="hidden sm:inline">Invite Client</span>
             </button>
           )}
           <button className="btn-secondary" onClick={handleDuplicate} disabled={isNew}>
-            <Copy className="w-4 h-4" />Duplicate
+            <Copy className="w-4 h-4" /><span className="hidden sm:inline">Duplicate</span>
           </button>
           <button className="btn-danger" onClick={() => setShowDelete(true)} disabled={isNew}>
-            <Trash2 className="w-4 h-4" />Delete
+            <Trash2 className="w-4 h-4" /><span className="hidden sm:inline">Delete</span>
           </button>
           <button
             className="btn-primary"
@@ -549,9 +549,9 @@ export default function PortfolioBuilder() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
         {/* Main column */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-4 sm:space-y-6">
 
           {/* Portfolio meta */}
           <div className="card p-5 space-y-4">
@@ -716,13 +716,13 @@ export default function PortfolioBuilder() {
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="th pl-0">Symbol</th>
-                        <th className="th">Name</th>
-                        <th className="th">Type</th>
-                        <th className="th">Role</th>
-                        <th className="th text-right">Last Price</th>
+                        <th className="th hidden md:table-cell">Name</th>
+                        <th className="th hidden lg:table-cell">Type</th>
+                        <th className="th hidden lg:table-cell">Role</th>
+                        <th className="th text-right hidden sm:table-cell">Last Price</th>
                         <th className="th text-right">Target %</th>
-                        <th className="th text-right">Current %</th>
-                        <th className="th text-right">Est. Value</th>
+                        <th className="th text-right hidden sm:table-cell">Current %</th>
+                        <th className="th text-right hidden sm:table-cell">Est. Value</th>
                         <th className="th w-10" />
                       </tr>
                     </thead>
@@ -730,13 +730,13 @@ export default function PortfolioBuilder() {
                       {holdings.map((h) => (
                         <tr key={h.ticker} className="group">
                           <td className="td pl-0 font-semibold text-slate-900">{h.ticker}</td>
-                          <td className="td text-slate-600 max-w-xs truncate">{h.name}</td>
-                          <td className="td">
+                          <td className="td text-slate-600 max-w-xs truncate hidden md:table-cell">{h.name}</td>
+                          <td className="td hidden lg:table-cell">
                             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                               h.type === 'ETF' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                             }`}>{h.type}</span>
                           </td>
-                          <td className="td">
+                          <td className="td hidden lg:table-cell">
                             <div className="flex items-center gap-1">
                               {['Core', 'Tilt', 'Satellite'].map((cat) => {
                                 const active = (h.category || 'Core') === cat;
@@ -758,7 +758,7 @@ export default function PortfolioBuilder() {
                               })}
                             </div>
                           </td>
-                          <td className="td text-right font-mono text-slate-700">
+                          <td className="td text-right font-mono text-slate-700 hidden sm:table-cell">
                             {(() => {
                               const lp = live && prices[h.ticker]?.price
                                 ? prices[h.ticker].price
@@ -801,7 +801,7 @@ export default function PortfolioBuilder() {
                             )}
                           </td>
                           {/* Current (drifted) weight — read-only, color-coded vs target */}
-                          <td className="td text-right">
+                          <td className="td text-right hidden sm:table-cell">
                             {(() => {
                               const drifted = currentWeights[h.ticker]?.driftedWeight;
                               if (drifted == null) return <span className="text-slate-300 text-xs">—</span>;
@@ -819,7 +819,7 @@ export default function PortfolioBuilder() {
                               );
                             })()}
                           </td>
-                          <td className="td text-right">
+                          <td className="td text-right hidden sm:table-cell">
                             {(() => {
                               const drifted = currentWeights[h.ticker]?.driftedWeight;
                               if (drifted == null) return <span className="text-slate-300 text-xs">--</span>;
@@ -845,14 +845,18 @@ export default function PortfolioBuilder() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-slate-200">
-                        <td colSpan={5} className="td font-semibold text-slate-700">Total Weight</td>
-                        <td className={`td text-right font-semibold font-mono text-lg ${
+                        <td className="td font-semibold text-slate-700">Total</td>
+                        <td className="td hidden md:table-cell" />
+                        <td className="td hidden lg:table-cell" />
+                        <td className="td hidden lg:table-cell" />
+                        <td className="td hidden sm:table-cell" />
+                        <td className={`td text-right font-semibold font-mono text-base sm:text-lg ${
                           isFullyAllocated ? 'text-green-600' : Math.abs(totalWeight - 100) < 5 ? 'text-yellow-600' : 'text-red-500'
                         }`}>
                           {totalWeight.toFixed(2)}%
                         </td>
-                        <td />{/* Current % — no total needed */}
-                        <td className="td text-right font-semibold font-mono text-sm text-slate-700">
+                        <td className="hidden sm:table-cell" />{/* Current % — no total needed */}
+                        <td className="td text-right font-semibold font-mono text-sm text-slate-700 hidden sm:table-cell">
                           ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                         </td>
                         <td />{/* Delete button column */}
@@ -1087,7 +1091,7 @@ export default function PortfolioBuilder() {
               })() : null;
 
               return (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                   {TIMEFRAMES.map(({ label, days }) => {
                     // Prefer real Finnhub data, fall back to mock
                     const hasReal = realReturns?.portfolio?.[label] != null;

@@ -121,8 +121,8 @@ export default function ClientPortal() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Branded header */}
       <header className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-screen-xl mx-auto px-4 py-5">
-          <div className="flex items-center justify-between">
+        <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-4 sm:py-5">
+          <div className="flex flex-wrap items-start sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs font-semibold">
@@ -142,12 +142,12 @@ export default function ClientPortal() {
                   </span>
                 )}
               </div>
-              <h1 className="text-2xl font-bold text-slate-900">{portfolio?.name || 'Portfolio'}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{portfolio?.name || 'Portfolio'}</h1>
               {portfolio?.description && (
                 <p className="text-sm text-slate-500 mt-0.5">{portfolio.description}</p>
               )}
             </div>
-            <div className="text-right text-sm text-slate-500">
+            <div className="text-right text-sm text-slate-500 hidden sm:block">
               <p className="font-medium text-slate-700">{user.email}</p>
               {portfolio?.created_at && (
                 <p className="text-xs text-slate-400">Portfolio since {new Date(portfolio.created_at).toLocaleDateString()}</p>
@@ -176,12 +176,12 @@ export default function ClientPortal() {
         </div>
       </header>
 
-      <main className="max-w-screen-xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 space-y-4 sm:space-y-6">
         {/* Performance summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4">
             <p className="text-xs font-medium text-slate-500 mb-1">Year-to-Date</p>
-            <p className={`text-xl font-bold ${ytdReturn > 0 ? 'text-green-600' : ytdReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+            <p className={`text-lg sm:text-xl font-bold ${ytdReturn > 0 ? 'text-green-600' : ytdReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
               {ytdReturn != null ? `${ytdReturn > 0 ? '+' : ''}${ytdReturn.toFixed(2)}%` : '--'}
             </p>
             {benchYtd != null && (
@@ -190,21 +190,21 @@ export default function ClientPortal() {
               </p>
             )}
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4">
             <p className="text-xs font-medium text-purple-600 mb-1">Since Creation</p>
-            <p className={`text-xl font-bold ${sinceReturn > 0 ? 'text-green-600' : sinceReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+            <p className={`text-lg sm:text-xl font-bold ${sinceReturn > 0 ? 'text-green-600' : sinceReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
               {sinceReturn != null ? `${sinceReturn > 0 ? '+' : ''}${sinceReturn.toFixed(2)}%` : '--'}
             </p>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4">
             <p className="text-xs font-medium text-slate-500 mb-1">1-Year Return</p>
-            <p className={`text-xl font-bold ${oneYearReturn > 0 ? 'text-green-600' : oneYearReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+            <p className={`text-lg sm:text-xl font-bold ${oneYearReturn > 0 ? 'text-green-600' : oneYearReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
               {oneYearReturn != null ? `${oneYearReturn > 0 ? '+' : ''}${oneYearReturn.toFixed(2)}%` : '--'}
             </p>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4">
             <p className="text-xs font-medium text-slate-500 mb-1">Portfolio Value</p>
-            <p className="text-xl font-bold text-slate-800">
+            <p className="text-lg sm:text-xl font-bold text-slate-800">
               {currentPortfolioValue ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
             </p>
             <p className="text-xs text-slate-400 mt-1">
@@ -234,7 +234,7 @@ export default function ClientPortal() {
         )}
 
         {/* Holdings + Allocation */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {/* Holdings table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-4">Your Holdings</h2>

@@ -113,8 +113,8 @@ export default function Benchmarks() {
   }
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8 space-y-8">
-      <h1 className="text-2xl font-bold text-slate-900">Benchmarks</h1>
+    <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 space-y-6 sm:space-y-8">
+      <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Benchmarks</h1>
 
       {/* Performance table */}
       <div className="card overflow-hidden">
@@ -180,7 +180,7 @@ export default function Benchmarks() {
             ))}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height={250} className="sm:[&]:h-[300px]">
           <LineChart data={realChartData ?? multiChartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
@@ -225,7 +225,7 @@ export default function Benchmarks() {
       {/* Account Default Benchmarks */}
       <div className="card p-5">
         <h2 className="section-title mb-4">Account Default Benchmarks</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Primary Benchmark</label>
             <select
