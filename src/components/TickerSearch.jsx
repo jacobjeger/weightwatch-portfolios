@@ -106,7 +106,7 @@ export default function TickerSearch({ existingTickers = [], onAdd }) {
           : <Search  className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         }
         <input
-          className="input pl-8 w-64"
+          className="input pl-8 w-full sm:w-64"
           placeholder={useLive ? 'Search any ticker or name…' : 'Search ticker or name…'}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
@@ -120,7 +120,7 @@ export default function TickerSearch({ existingTickers = [], onAdd }) {
       {open && results.length > 0 && (
         <div
           ref={listRef}
-          className="absolute z-40 mt-1 w-96 bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-y-auto"
+          className="absolute z-40 mt-1 w-[calc(100vw-2rem)] sm:w-96 bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-y-auto"
           role="listbox"
         >
           {results.map((inst, idx) => {
@@ -162,7 +162,7 @@ export default function TickerSearch({ existingTickers = [], onAdd }) {
       )}
 
       {open && query.trim().length > 0 && results.length === 0 && !searching && (
-        <div className="absolute z-40 mt-1 w-72 bg-white border border-slate-200 rounded-lg shadow-lg px-4 py-3 text-sm text-slate-500">
+        <div className="absolute z-40 mt-1 w-full sm:w-72 bg-white border border-slate-200 rounded-lg shadow-lg px-4 py-3 text-sm text-slate-500">
           No instruments found for &ldquo;{query}&rdquo;
         </div>
       )}

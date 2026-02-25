@@ -109,12 +109,12 @@ export default function HoldingsPerformanceChart({ holdings }) {
   return (
     <div>
       {/* Range selector */}
-      <div className="flex items-center gap-1 mb-3">
+      <div className="flex flex-wrap items-center gap-1 mb-3">
         {RANGES.map((r) => (
           <button
             key={r}
             onClick={() => setRange(r)}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            className={`px-2 sm:px-2.5 py-1 rounded text-xs font-medium transition-colors ${
               range === r
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -123,8 +123,8 @@ export default function HoldingsPerformanceChart({ holdings }) {
             {r}
           </button>
         ))}
-        <span className="ml-auto text-xs text-slate-400">
-          {loading ? 'Loading...' : realData ? '● Live data' : 'Simulated'} · % return per holding
+        <span className="ml-auto text-[10px] sm:text-xs text-slate-400">
+          {loading ? 'Loading...' : realData ? '● Live' : 'Simulated'}
         </span>
       </div>
 
@@ -159,15 +159,15 @@ export default function HoldingsPerformanceChart({ holdings }) {
       </div>
 
       {loading ? (
-        <div className="h-[300px] flex items-center justify-center text-sm text-slate-400 animate-pulse">
+        <div className="h-[240px] sm:h-[300px] flex items-center justify-center text-sm text-slate-400 animate-pulse">
           Loading real market data…
         </div>
       ) : visibleHoldings.length === 0 ? (
-        <div className="h-[300px] flex items-center justify-center text-sm text-slate-400">
+        <div className="h-[240px] sm:h-[300px] flex items-center justify-center text-sm text-slate-400">
           Select holdings above to compare
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height={240} className="sm:[&]:h-[300px]">
           <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis

@@ -74,9 +74,9 @@ export default function History() {
   }
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">History</h1>
+    <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">History</h1>
         {activeTab === 0 && (
           <button className="btn-secondary text-xs" onClick={exportCSV}>
             <Download className="w-3.5 h-3.5" />Export CSV
@@ -85,12 +85,12 @@ export default function History() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-200">
+      <div className="flex gap-1 mb-4 sm:mb-6 border-b border-slate-200 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
         {TABS.map((tab, i) => (
           <button
             key={tab}
             onClick={() => setActiveTab(i)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === i
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -114,7 +114,7 @@ export default function History() {
                     <th className="th">Date</th>
                     <th className="th">Portfolio</th>
                     <th className="th">Action</th>
-                    <th className="th">Summary</th>
+                    <th className="th hidden sm:table-cell">Summary</th>
                     <th className="th w-10" />
                   </tr>
                 </thead>
@@ -135,7 +135,7 @@ export default function History() {
                           {entry.action_type}
                         </span>
                       </td>
-                      <td className="td text-slate-600 text-xs max-w-sm">{entry.change_summary}</td>
+                      <td className="td text-slate-600 text-xs max-w-[200px] sm:max-w-sm truncate hidden sm:table-cell">{entry.change_summary}</td>
                       <td className="td">
                         {entry.portfolio_id && entry.action_type !== 'Delete' && (
                           <button
@@ -167,26 +167,26 @@ export default function History() {
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="th">Portfolio</th>
-                    <th className="th">Date</th>
+                    <th className="th hidden sm:table-cell">Date</th>
                     <th className="th">Timeframe</th>
                     <th className="th text-right">Return</th>
-                    <th className="th text-right">Benchmark</th>
+                    <th className="th text-right hidden sm:table-cell">Benchmark</th>
                     <th className="th text-right">Alpha</th>
-                    <th className="th">Benchmark Used</th>
+                    <th className="th hidden md:table-cell">Benchmark Used</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {snapshots.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50">
                       <td className="td font-medium text-slate-900">{s.portfolio_name}</td>
-                      <td className="td text-slate-500 text-xs">{s.snapshot_date}</td>
+                      <td className="td text-slate-500 text-xs hidden sm:table-cell">{s.snapshot_date}</td>
                       <td className="td">
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">{s.timeframe}</span>
                       </td>
                       <td className={`td text-right font-mono font-medium ${s.portfolio_return_pct > 0 ? 'text-green-600' : s.portfolio_return_pct < 0 ? 'text-red-500' : 'text-slate-500'}`}>
                         {s.portfolio_return_pct > 0 ? '+' : ''}{s.portfolio_return_pct.toFixed(2)}%
                       </td>
-                      <td className="td text-right font-mono text-slate-500">
+                      <td className="td text-right font-mono text-slate-500 hidden sm:table-cell">
                         {s.benchmark_return_pct !== null ? `${s.benchmark_return_pct > 0 ? '+' : ''}${s.benchmark_return_pct.toFixed(2)}%` : '—'}
                       </td>
                       <td className={`td text-right font-mono font-medium ${
@@ -197,7 +197,7 @@ export default function History() {
                           ? `${s.outperformance_pct > 0 ? '+' : ''}${s.outperformance_pct.toFixed(2)}%`
                           : '—'}
                       </td>
-                      <td className="td text-slate-500 text-xs">{s.benchmark_used ?? '—'}</td>
+                      <td className="td text-slate-500 text-xs hidden md:table-cell">{s.benchmark_used ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -240,7 +240,7 @@ export default function History() {
           </div>
 
           {selectedPortfolio && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               {[compareA, compareB].map((tf) => {
                 const days = TIMEFRAME_DAYS[tf];
                 const pRet = parseFloat(getPortfolioReturn(selectedPortfolio.holdings, days));

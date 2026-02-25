@@ -155,17 +155,17 @@ export default function HelpTour() {
   const navigate = useNavigate();
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-3 mb-2">
-        <BookOpen className="w-7 h-7 text-blue-600" />
-        <h1 className="text-2xl font-bold text-slate-900">Help &amp; Tour</h1>
+    <div className="max-w-3xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+      <div className="flex items-center gap-2 sm:gap-3 mb-2">
+        <BookOpen className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600 flex-shrink-0" />
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Help &amp; Tour</h1>
       </div>
-      <p className="text-slate-500 mb-8">
-        Everything you need to know about WeightWatch Portfolios — portfolio simulation with optional real market data.
+      <p className="text-sm sm:text-base text-slate-500 mb-6 sm:mb-8">
+        Everything you need to know about WeightWatch Portfolios.
       </p>
 
       {/* Quick action buttons */}
-      <div className="flex flex-wrap gap-3 mb-8">
+      <div className="flex flex-wrap gap-2 sm:gap-3 mb-6 sm:mb-8">
         <button className="btn-primary" onClick={() => navigate('/portfolio/new')}>
           <BarChart3 className="w-4 h-4" />
           New Portfolio
@@ -185,11 +185,11 @@ export default function HelpTour() {
       </div>
 
       {/* Sections */}
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {SECTIONS.map((section) => (
-          <div key={section.title} className="card p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 flex-shrink-0">
+          <div key={section.title} className="card p-4 sm:p-6">
+            <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 flex-shrink-0">
                 {section.icon}
               </div>
               <h2 className="text-base font-semibold text-slate-900">{section.title}</h2>
