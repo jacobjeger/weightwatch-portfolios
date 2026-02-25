@@ -96,10 +96,25 @@ export default function PerformanceChart({
   useEffect(() => {
     let cancelled = false;
 
+    // Clip chart data to only include dates >= createdAt when "Since" is selected
+    function clipToCreation(series) {
+      if (range !== 'Since' || !createdAt || !series.length) return series;
+      const startDate = createdAt.slice(0, 10);
+      const filtered = series.filter((d) => d.date >= startDate);
+      if (!filtered.length) return series;
+      // Re-normalize so the first point is 0% return
+      const base = filtered[0];
+      return filtered.map((d) => ({
+        ...d,
+        portfolio: parseFloat((d.portfolio - base.portfolio).toFixed(2)),
+        ...(d.benchmark != null ? { benchmark: parseFloat((d.benchmark - base.benchmark).toFixed(2)) } : {}),
+      }));
+    }
+
     async function fetchData() {
       if (!holdings?.length) { setData([]); setDataIsReal(false); return; }
 
-      // Map 'Since' to equivalent API range string
+      // For 'Since', fetch Max then clip to createdAt
       const apiRange = range === 'Since' ? 'Max' : range;
 
       if (usingReal) {
@@ -108,18 +123,21 @@ export default function PerformanceChart({
           const real = await getRealPortfolioChartData(holdings, benchmarkTicker ?? null, apiRange);
           if (!cancelled) {
             if (real.length) {
-              setData(applyCashAndDrip(real, cashPercent, drip, real.length));
+              const clipped = clipToCreation(real);
+              setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
               setDataIsReal(true);
             } else {
               const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
-              setData(applyCashAndDrip(raw, cashPercent, drip, raw.length));
+              const clipped = clipToCreation(raw);
+              setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
               setDataIsReal(false);
             }
           }
         } catch {
           if (!cancelled) {
             const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
-            setData(applyCashAndDrip(raw, cashPercent, drip, raw.length));
+            const clipped = clipToCreation(raw);
+            setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
             setDataIsReal(false);
           }
         } finally {
@@ -127,7 +145,8 @@ export default function PerformanceChart({
         }
       } else {
         const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
-        setData(applyCashAndDrip(raw, cashPercent, drip, raw.length));
+        const clipped = clipToCreation(raw);
+        setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
         setDataIsReal(false);
       }
     }

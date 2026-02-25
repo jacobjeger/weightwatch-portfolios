@@ -29,6 +29,36 @@ export default function HoldingsPerformanceChart({ holdings }) {
   const [loading, setLoading] = useState(false);
   const usingReal = isConfigured();
 
+  // Track which holdings are visible (all visible by default)
+  const [hiddenTickers, setHiddenTickers] = useState(new Set());
+
+  // Reset hidden tickers when holdings change
+  useEffect(() => {
+    setHiddenTickers(new Set());
+  }, [holdings.length]);
+
+  const visibleHoldings = useMemo(
+    () => holdings.filter((h) => !hiddenTickers.has(h.ticker)),
+    [holdings, hiddenTickers]
+  );
+
+  function toggleTicker(ticker) {
+    setHiddenTickers((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  }
+
+  function showAll() {
+    setHiddenTickers(new Set());
+  }
+
+  function hideAll() {
+    setHiddenTickers(new Set(holdings.map((h) => h.ticker)));
+  }
+
   // Fetch real data when available
   useEffect(() => {
     if (!usingReal || !holdings?.length) return;
@@ -98,9 +128,43 @@ export default function HoldingsPerformanceChart({ holdings }) {
         </span>
       </div>
 
+      {/* Holdings toggle chips */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        <span className="text-xs text-slate-400 mr-1">Show:</span>
+        {holdings.map((h, i) => {
+          const isVisible = !hiddenTickers.has(h.ticker);
+          const color = HOLDING_COLORS[i % HOLDING_COLORS.length];
+          return (
+            <button
+              key={h.ticker}
+              onClick={() => toggleTicker(h.ticker)}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all border ${
+                isVisible
+                  ? 'border-transparent text-white'
+                  : 'border-slate-200 text-slate-400 bg-white'
+              }`}
+              style={isVisible ? { backgroundColor: color } : {}}
+            >
+              {h.ticker}
+            </button>
+          );
+        })}
+        {holdings.length > 2 && (
+          <span className="ml-1 flex items-center gap-1">
+            <button onClick={showAll} className="text-xs text-blue-500 hover:underline">All</button>
+            <span className="text-slate-300">|</span>
+            <button onClick={hideAll} className="text-xs text-blue-500 hover:underline">None</button>
+          </span>
+        )}
+      </div>
+
       {loading ? (
         <div className="h-[300px] flex items-center justify-center text-sm text-slate-400 animate-pulse">
           Loading real market data…
+        </div>
+      ) : visibleHoldings.length === 0 ? (
+        <div className="h-[300px] flex items-center justify-center text-sm text-slate-400">
+          Select holdings above to compare
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
@@ -129,17 +193,21 @@ export default function HoldingsPerformanceChart({ holdings }) {
               contentStyle={{ fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-            {holdings.map((h, i) => (
-              <Line
-                key={h.ticker}
-                type="monotone"
-                dataKey={h.ticker}
-                stroke={HOLDING_COLORS[i % HOLDING_COLORS.length]}
-                dot={false}
-                strokeWidth={1.5}
-                name={`${h.ticker} (${h.weight_percent.toFixed(1)}%)`}
-              />
-            ))}
+            {holdings.map((h, i) => {
+              const isVisible = !hiddenTickers.has(h.ticker);
+              if (!isVisible) return null;
+              return (
+                <Line
+                  key={h.ticker}
+                  type="monotone"
+                  dataKey={h.ticker}
+                  stroke={HOLDING_COLORS[i % HOLDING_COLORS.length]}
+                  dot={false}
+                  strokeWidth={1.5}
+                  name={`${h.ticker} (${h.weight_percent.toFixed(1)}%)`}
+                />
+              );
+            })}
           </LineChart>
         </ResponsiveContainer>
       )}

@@ -12,6 +12,10 @@ export function MarketDataProvider({ children }) {
   const [prices, setPrices] = useState({});
   const loadedRef = useRef(new Set()); // tickers already fetched
 
+  // Monotonically increasing counter bumped on every WebSocket trade.
+  // Components can depend on this to know "prices changed" without deep-comparing the prices object.
+  const [priceVersion, setPriceVersion] = useState(0);
+
   // Fetch REST quotes for new tickers (deduped, staggered to stay within rate limit)
   const loadTickers = useCallback(async (tickers) => {
     if (!live) return;
@@ -50,11 +54,12 @@ export function MarketDataProvider({ children }) {
           [ticker]: { ...existing, price, changePercent },
         };
       });
+      setPriceVersion((v) => v + 1);
     });
   }, [live]);
 
   return (
-    <MarketDataContext.Provider value={{ live, prices, loadTickers, subscribeTickers }}>
+    <MarketDataContext.Provider value={{ live, prices, priceVersion, loadTickers, subscribeTickers }}>
       {children}
     </MarketDataContext.Provider>
   );
