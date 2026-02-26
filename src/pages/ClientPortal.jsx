@@ -563,7 +563,7 @@ export default function ClientPortal() {
 
         <div className="text-center py-4">
           <p className="text-xs text-slate-400">
-            Managed by your advisor · Powered by <span className="font-semibold text-emerald-600">WeightWatch Portfolios</span>
+            Managed by your advisor · Powered by <span className="font-semibold text-emerald-600">AJA Wealth Management</span>
           </p>
         </div>
       </main>

@@ -3,12 +3,12 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
-import { getPortfolioChartData } from '../lib/mockData';
+import { getPortfolioChartData, getPortfolioDrawdownData } from '../lib/mockData';
 import { isConfigured, getRealPortfolioChartData } from '../lib/finnhub';
 import { BENCHMARK_META } from '../lib/mockData';
 
-const BASE_RANGES = ['1M', '3M', '6M', '1Y', 'Max'];
-const RANGE_CALENDAR_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'Max': 1095 };
+const BASE_RANGES = ['1M', '3M', '6M', '1Y', '2Y', 'Max'];
+const RANGE_CALENDAR_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '2Y': 730, 'Max': 1095 };
 
 // Cash earns an approximate 5% annualized return (fed-funds proxy)
 const CASH_DAILY_RETURN = 0.05 / 252;
@@ -205,6 +205,14 @@ export default function PerformanceChart({
     return `${(historyDays / 365).toFixed(1)}yr of history · Simulated`;
   }, [dataIsReal, rangeExceedsHistory, createdAt, historyDays]);
 
+  const [showDrawdown, setShowDrawdown] = useState(false);
+
+  // Drawdown chart data (mock fallback)
+  const drawdownData = useMemo(() => {
+    if (!showDrawdown || !holdings?.length) return [];
+    return getPortfolioDrawdownData(holdings, benchmarkTicker, range === 'Since' ? 'Max' : range);
+  }, [showDrawdown, holdings, benchmarkTicker, range]);
+
   return (
     <div>
       {/* Range selector */}
@@ -224,6 +232,17 @@ export default function PerformanceChart({
             {r === 'Since' ? 'Since' : r}
           </button>
         ))}
+        <button
+          onClick={() => setShowDrawdown(!showDrawdown)}
+          className={`px-2 sm:px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            showDrawdown
+              ? 'bg-red-500 text-white'
+              : 'text-slate-500 hover:bg-red-50 border border-red-200'
+          }`}
+          title="Toggle drawdown chart"
+        >
+          DD
+        </button>
         <span className="ml-auto text-[10px] sm:text-xs text-slate-400 max-w-[50%] text-right truncate">
           {dataIsReal && <span className="text-green-500 mr-1">●</span>}
           {dataSourceLabel}
@@ -331,6 +350,65 @@ export default function PerformanceChart({
             )}
           </LineChart>
         </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Drawdown chart */}
+      {showDrawdown && drawdownData.length > 0 && (
+        <div className="mt-3">
+          <div className="text-xs text-slate-500 mb-1 font-medium">Drawdown from Peak</div>
+          <div className="h-[100px] sm:h-[120px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={drawdownData} margin={{ top: 2, right: 12, left: 0, bottom: 2 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => {
+                    const d = new Date(v);
+                    return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                  }}
+                  interval={Math.max(1, Math.floor(drawdownData.length / 5) - 1)}
+                />
+                <YAxis
+                  tickFormatter={(v) => `${v.toFixed(0)}%`}
+                  tick={{ fontSize: 9, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                  domain={['auto', 0]}
+                  width={40}
+                />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
+                <Tooltip
+                  formatter={(v, name) => [`${v.toFixed(2)}%`, name === 'portfolio' ? 'Portfolio DD' : 'Benchmark DD']}
+                  labelFormatter={(l) => new Date(l).toLocaleDateString('en-US', { dateStyle: 'medium' })}
+                  contentStyle={{ fontSize: 11 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="portfolio"
+                  stroke="#ef4444"
+                  fill="#fecaca"
+                  dot={false}
+                  strokeWidth={1.5}
+                  name="Portfolio DD"
+                />
+                {hasBenchmark && drawdownData[0]?.benchmark != null && (
+                  <Line
+                    type="monotone"
+                    dataKey="benchmark"
+                    stroke="#f59e0b"
+                    dot={false}
+                    strokeWidth={1}
+                    strokeDasharray="4 2"
+                    name="Benchmark DD"
+                  />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>

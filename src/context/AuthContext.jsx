@@ -743,9 +743,9 @@ export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteU
   if (result.sent) return { sent: true, method: 'resend' };
 
   // 2) Fallback: open the user's email client with a pre-filled mailto: link
-  const subject = encodeURIComponent(`You've been invited to view "${portfolioName}" on WeightWatch Portfolios`);
+  const subject = encodeURIComponent(`You've been invited to view "${portfolioName}" on AJA Wealth Management`);
   const body = encodeURIComponent(
-    `Hi,\n\nYou've been invited to view the portfolio "${portfolioName}" on WeightWatch Portfolios.\n\n` +
+    `Hi,\n\nYou've been invited to view the portfolio "${portfolioName}" on AJA Wealth Management.\n\n` +
     `Click the link below to access your personalized client portal:\n${inviteUrl}\n\n` +
     `This link is unique to you. Once you sign up or log in, the portfolio will be synced to your account.\n\n` +
     `Best regards,\n${advisorEmail}`

@@ -7,7 +7,7 @@
 //   1. Get an API key from https://resend.com
 //   2. Verify your sending domain in the Resend dashboard
 //   3. Set the secret:  supabase secrets set RESEND_API_KEY=re_xxxxx
-//   4. Set sender:      supabase secrets set RESEND_FROM="WeightWatch Portfolios <noreply@yourdomain.com>"
+//   4. Set sender:      supabase secrets set RESEND_FROM="AJA Wealth Management <noreply@yourdomain.com>"
 //   5. Deploy:          supabase functions deploy send-email
 //
 // Usage from client:
@@ -30,16 +30,16 @@ const templates: Record<string, (data: Record<string, string>) => { subject: str
 
   // Client invite email
   invite: (data) => ({
-    subject: `You've been invited to view "${data.portfolio_name}" on WeightWatch Portfolios`,
+    subject: `You've been invited to view "${data.portfolio_name}" on AJA Wealth Management`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px;">
         <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="color: #1e293b; font-size: 22px; margin: 0;">WeightWatch Portfolios</h1>
+          <h1 style="color: #1e293b; font-size: 22px; margin: 0;">AJA Wealth Management</h1>
         </div>
         <p style="color: #334155; font-size: 15px; line-height: 1.6;">Hi,</p>
         <p style="color: #334155; font-size: 15px; line-height: 1.6;">
           <strong>${data.advisor_email}</strong> has invited you to view the portfolio
-          <strong>"${data.portfolio_name}"</strong> on WeightWatch Portfolios.
+          <strong>"${data.portfolio_name}"</strong> on AJA Wealth Management.
         </p>
         <div style="text-align: center; margin: 28px 0;">
           <a href="${data.invite_url}"
@@ -53,7 +53,7 @@ const templates: Record<string, (data: Record<string, string>) => { subject: str
         </p>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
         <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-          WeightWatch Portfolios &middot; Portfolio management for advisors and their clients
+          AJA Wealth Management &middot; Portfolio management for advisors and their clients
         </p>
       </div>
     `,
@@ -61,11 +61,11 @@ const templates: Record<string, (data: Record<string, string>) => { subject: str
 
   // Welcome email (for future use)
   welcome: (data) => ({
-    subject: 'Welcome to WeightWatch Portfolios',
+    subject: 'Welcome to AJA Wealth Management',
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px;">
         <div style="text-align: center; margin-bottom: 32px;">
-          <h1 style="color: #1e293b; font-size: 22px; margin: 0;">Welcome to WeightWatch Portfolios</h1>
+          <h1 style="color: #1e293b; font-size: 22px; margin: 0;">Welcome to AJA Wealth Management</h1>
         </div>
         <p style="color: #334155; font-size: 15px; line-height: 1.6;">
           Hi ${data.email},
@@ -84,7 +84,7 @@ const templates: Record<string, (data: Record<string, string>) => { subject: str
         </div>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
         <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-          WeightWatch Portfolios &middot; Portfolio management for advisors and their clients
+          AJA Wealth Management &middot; Portfolio management for advisors and their clients
         </p>
       </div>
     `,
@@ -113,7 +113,7 @@ const templates: Record<string, (data: Record<string, string>) => { subject: str
         </div>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
         <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-          WeightWatch Portfolios &middot; Portfolio management for advisors and their clients
+          AJA Wealth Management &middot; Portfolio management for advisors and their clients
         </p>
       </div>
     `,
@@ -144,7 +144,7 @@ const templates: Record<string, (data: Record<string, string>) => { subject: str
         </div>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />
         <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-          WeightWatch Portfolios &middot; Portfolio management for advisors and their clients
+          AJA Wealth Management &middot; Portfolio management for advisors and their clients
         </p>
       </div>
     `,
@@ -161,7 +161,7 @@ serve(async (req: Request) => {
 
   try {
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    const RESEND_FROM = Deno.env.get('RESEND_FROM') || 'WeightWatch Portfolios <onboarding@resend.dev>';
+    const RESEND_FROM = Deno.env.get('RESEND_FROM') || 'AJA Wealth Management <onboarding@resend.dev>';
 
     if (!RESEND_API_KEY) {
       return new Response(

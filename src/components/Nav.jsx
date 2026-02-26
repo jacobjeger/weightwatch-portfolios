@@ -73,8 +73,8 @@ export default function Nav() {
             <NavLink to="/" className="flex items-center gap-2 flex-shrink-0">
               <BarChart3 className="w-5 h-5 text-blue-400" />
               <span className="font-bold text-white text-sm leading-tight">
-                WeightWatch<br />
-                <span className="font-normal text-slate-400 text-xs">Portfolios</span>
+                AJA<br />
+                <span className="font-normal text-slate-400 text-xs">Wealth Management</span>
               </span>
             </NavLink>
 

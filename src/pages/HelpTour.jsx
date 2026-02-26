@@ -87,7 +87,7 @@ const SECTIONS = [
     icon: <History className="w-5 h-5" />,
     title: 'Weight History & Rebalancing',
     content: [
-      'Every time you save, WeightWatch logs what changed: weights adjusted, holdings added/removed.',
+      'Every time you save, AJA logs what changed: weights adjusted, holdings added/removed.',
       'The Weight History panel shows a timeline of all changes with before/after values.',
       'Current % in the holdings table shows drift — how each holding\'s weight has shifted due to price movements.',
       'When drift exceeds 0.5%, a Rebalance button appears to reset all holdings to their target weights.',
@@ -161,7 +161,7 @@ export default function HelpTour() {
         <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Help &amp; Tour</h1>
       </div>
       <p className="text-sm sm:text-base text-slate-500 mb-6 sm:mb-8">
-        Everything you need to know about WeightWatch Portfolios.
+        Everything you need to know about AJA Wealth Management.
       </p>
 
       {/* Quick action buttons */}
@@ -208,7 +208,7 @@ export default function HelpTour() {
 
       {/* Footer note */}
       <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-        <strong>About data sources:</strong> When a Finnhub API key is configured, WeightWatch uses real market data
+        <strong>About data sources:</strong> When a Finnhub API key is configured, AJA uses real market data
         for prices, charts, and performance returns. Without it, the app runs in simulation mode with realistic
         modeled data. No real trades are ever placed — this is a portfolio planning and visualization tool.
       </div>

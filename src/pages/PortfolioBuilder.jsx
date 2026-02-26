@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, sendInviteEmail } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
-import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
-import { getRealPerformanceReturns, clearMarketCaches } from '../lib/finnhub';
+import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn, getPortfolioRiskMetrics, getRiskMetrics } from '../lib/mockData';
+import { getRealPerformanceReturns, getRealRiskMetrics, clearMarketCaches } from '../lib/finnhub';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
@@ -22,6 +22,7 @@ const TIMEFRAMES = [
   { label: '6M', days: 126 },
   { label: 'YTD', days: null },
   { label: '1Y', days: 252 },
+  { label: '2Y', days: 504 },
 ];
 
 export default function PortfolioBuilder() {
@@ -70,6 +71,7 @@ export default function PortfolioBuilder() {
   const [saving, setSaving]                 = useState(false);
   const [weightErrors, setWeightErrors]     = useState({});
   const [realReturns, setRealReturns]       = useState(null);   // real Finnhub candle-based returns
+  const [realRiskMetrics, setRealRiskMetrics] = useState(null); // real candle-based risk metrics
 
   // Load existing portfolio
   useEffect(() => {
@@ -124,7 +126,10 @@ export default function PortfolioBuilder() {
     if (!live || !holdings.length) return;
     let cancelled = false;
     setPerfRefreshing(true);
-    getRealPerformanceReturns(holdings, benchmark || null).then((data) => {
+    Promise.all([
+      getRealPerformanceReturns(holdings, benchmark || null),
+      getRealRiskMetrics(holdings, benchmark || null, '1Y'),
+    ]).then(([data, riskData]) => {
       if (cancelled) return;
       if (data) {
         setRealReturns(data);
@@ -132,6 +137,7 @@ export default function PortfolioBuilder() {
       } else {
         console.warn('[Finnhub] getRealPerformanceReturns returned null — check API key & rate limits');
       }
+      if (riskData) setRealRiskMetrics(riskData);
     }).catch((err) => {
       console.warn('[Finnhub] Performance fetch error:', err.message);
     }).finally(() => {
@@ -311,7 +317,7 @@ export default function PortfolioBuilder() {
   }
 
   // ── Duplicate ───────────────────────────────────────────────────────────────
-  // Copies only weights/structure — resets all historical values, gains, and dates.
+  // Copies weights, structure, and all settings — resets historical values, gains, and dates.
   function handleDuplicate() {
     const newId = crypto.randomUUID();
     const dup = {
@@ -321,9 +327,9 @@ export default function PortfolioBuilder() {
       description,
       primary_benchmark: benchmark || null,
       secondary_benchmarks: [],
-      starting_value: 100_000,
-      cash_percent: 0,
-      drip_enabled: true,
+      starting_value: startingValue,       // preserve starting value
+      cash_percent: cashPercent,            // preserve cash allocation
+      drip_enabled: drip,                   // preserve DRIP setting
       holdings: holdings.map((h) => {
         const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
         return {
@@ -331,7 +337,7 @@ export default function PortfolioBuilder() {
           name: h.name,
           type: h.type,
           exchange: h.exchange,
-          category: h.category,
+          category: h.category || 'Core',   // ensure role is always copied
           weight_percent: h.weight_percent,
           last_price: currentPrice,
           entry_price: currentPrice,  // Reset entry to current live price
@@ -581,9 +587,9 @@ export default function PortfolioBuilder() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
-        {/* Main column */}
-        <div className="xl:col-span-2 space-y-4 sm:space-y-6">
+      <div className="space-y-4 sm:space-y-6">
+        {/* Main column — full width so holdings table is never squeezed */}
+        <div className="space-y-4 sm:space-y-6">
 
           {/* Portfolio meta */}
           <div className="card p-5 space-y-4">
@@ -1123,6 +1129,7 @@ export default function PortfolioBuilder() {
               })() : null;
 
               return (
+                <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                   {TIMEFRAMES.map(({ label, days }) => {
                     // Prefer real Finnhub data, fall back to mock
@@ -1189,6 +1196,60 @@ export default function PortfolioBuilder() {
                     </div>
                   )}
                 </div>
+
+                {/* Risk Metrics */}
+                {holdings.length > 0 && (() => {
+                  const metrics = realRiskMetrics?.portfolio ?? getPortfolioRiskMetrics(holdings, 252);
+                  const benchMetrics = realRiskMetrics?.benchmark ?? (benchmark ? getRiskMetrics(benchmark, 252) : null);
+                  const isReal = !!realRiskMetrics;
+                  return (
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk Metrics (1Y)</h3>
+                        <span className={`text-xs ${isReal ? 'text-green-500' : 'text-slate-400'}`}>
+                          {isReal ? '● Real' : 'Simulated'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="rounded p-3 bg-slate-50 text-center">
+                          <div className="text-xs text-slate-500 mb-1">Volatility</div>
+                          <div className="text-sm font-bold text-slate-700">{metrics.volatility.toFixed(1)}%</div>
+                          {benchMetrics && (
+                            <div className="text-xs text-slate-400 mt-0.5">Bench: {benchMetrics.volatility.toFixed(1)}%</div>
+                          )}
+                        </div>
+                        <div className="rounded p-3 bg-slate-50 text-center">
+                          <div className="text-xs text-slate-500 mb-1">Max Drawdown</div>
+                          <div className={`text-sm font-bold ${metrics.maxDrawdown < -10 ? 'text-red-500' : metrics.maxDrawdown < -5 ? 'text-amber-600' : 'text-slate-700'}`}>
+                            {metrics.maxDrawdown.toFixed(1)}%
+                          </div>
+                          {benchMetrics && (
+                            <div className="text-xs text-slate-400 mt-0.5">Bench: {benchMetrics.maxDrawdown.toFixed(1)}%</div>
+                          )}
+                        </div>
+                        <div className="rounded p-3 bg-slate-50 text-center">
+                          <div className="text-xs text-slate-500 mb-1">Sharpe Ratio</div>
+                          <div className={`text-sm font-bold ${metrics.sharpe > 1 ? 'text-green-600' : metrics.sharpe > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                            {metrics.sharpe.toFixed(2)}
+                          </div>
+                          {benchMetrics && (
+                            <div className="text-xs text-slate-400 mt-0.5">Bench: {benchMetrics.sharpe.toFixed(2)}</div>
+                          )}
+                        </div>
+                        <div className="rounded p-3 bg-slate-50 text-center">
+                          <div className="text-xs text-slate-500 mb-1">Sortino Ratio</div>
+                          <div className={`text-sm font-bold ${metrics.sortino > 1.5 ? 'text-green-600' : metrics.sortino > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                            {metrics.sortino >= 99 ? '>99' : metrics.sortino.toFixed(2)}
+                          </div>
+                          {benchMetrics && (
+                            <div className="text-xs text-slate-400 mt-0.5">Bench: {benchMetrics.sortino >= 99 ? '>99' : benchMetrics.sortino.toFixed(2)}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                </>
               );
             })()}
           </div>}
@@ -1258,8 +1319,8 @@ export default function PortfolioBuilder() {
           )}
         </div>
 
-        {/* Sidebar: live snapshot */}
-        <div className="space-y-6">
+        {/* Live Snapshot & Allocation — displayed below holdings for full-width layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {/* Client approval status badge */}
           {!isNew && (() => {
             const approval = getLatestApproval(portfolioId);
