@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   try {
     const resp = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; WeightWatch/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; AJAWealth/1.0)',
       },
     });
 

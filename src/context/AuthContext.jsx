@@ -37,10 +37,12 @@ function mockSignUp(email, password, accountType = 'advisor') {
   lsSet(LS.session, user);
 
   if (accountType === 'client') {
-    // Mark as client with no advisor yet — they'll get linked when they accept an invite
+    // Mark as client with no advisor yet
     const clients = lsGet(LS.clients, {});
     clients[user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
     lsSet(LS.clients, clients);
+    // Auto-accept any pending invites for this email
+    autoLinkInvites(user.id, email);
   } else {
     // Seed demo portfolios for advisors only
     const existing = lsGet(LS.portfolios, []);
@@ -51,12 +53,58 @@ function mockSignUp(email, password, accountType = 'advisor') {
   return user;
 }
 
+// Auto-accept any pending invites that match this user's email.
+// Called during sign-in and sign-up so localStorage has the right data
+// before React state updates trigger child component renders.
+function autoLinkInvites(userId, email) {
+  const invites = lsGet(LS.invites, {});
+  const clients = lsGet(LS.clients, {});
+  if (!clients[userId]) return; // not a client account
+
+  let changed = false;
+  Object.values(invites).forEach((inv) => {
+    if (
+      inv.client_email?.toLowerCase() === email?.toLowerCase() &&
+      !inv.accepted_by
+    ) {
+      const existing = clients[userId];
+      const existingPids = existing?.portfolio_ids ?? [];
+      const newPids = inv.portfolio_ids ?? [];
+      const merged = [...new Set([...existingPids, ...newPids])];
+      clients[userId] = {
+        advisor_id: inv.advisor_id ?? existing?.advisor_id ?? null,
+        portfolio_ids: merged,
+        accepted_at: existing?.accepted_at ?? new Date().toISOString(),
+      };
+      inv.accepted_by = userId;
+      inv.accepted_at = inv.accepted_at ?? new Date().toISOString();
+
+      // Store portfolio snapshot so getPortfolios can find it
+      if (inv.portfolio_snapshot) {
+        const all = lsGet(LS.portfolios, []);
+        const snap = inv.portfolio_snapshot;
+        const idx = all.findIndex((p) => p.id === snap.id);
+        if (idx >= 0) all[idx] = { ...all[idx], ...snap };
+        else all.push(snap);
+        lsSet(LS.portfolios, all);
+      }
+      changed = true;
+    }
+  });
+  if (changed) {
+    lsSet(LS.clients, clients);
+    lsSet(LS.invites, invites);
+  }
+}
+
 function mockSignIn(email, password) {
   const users = lsGet(LS.users, {});
   const stored = users[email];
   if (!stored || stored.password !== password) throw new Error('Invalid email or password.');
   const user = { id: stored.id, email: stored.email };
   lsSet(LS.session, user);
+  // Auto-accept any pending invites for this email
+  autoLinkInvites(user.id, email);
   return user;
 }
 
@@ -130,6 +178,8 @@ export function AuthProvider({ children }) {
       return () => subscription.unsubscribe();
     } else {
       const stored = lsGet(LS.session);
+      // Auto-link any new invites on session restore (e.g. advisor invited after client signed up)
+      if (stored) autoLinkInvites(stored.id, stored.email);
       setUser(stored ?? null);
       setLoading(false);
     }
@@ -306,8 +356,14 @@ export async function syncFromSupabase(userId, userEmail) {
       .maybeSingle();
     if (!error && data) {
       if (data.data) {
-        lsSet(LS.portfolios, data.data);
-        console.info('[Sync] Portfolios loaded from Supabase (' + data.data.length + ' portfolios)');
+        // Merge instead of overwrite — preserve portfolio snapshots stored by acceptInvite
+        const existing = lsGet(LS.portfolios, []);
+        const synced = data.data;
+        const syncedIds = new Set(synced.map((p) => p.id));
+        // Keep local portfolios that aren't in the Supabase set (e.g. shared snapshots)
+        const kept = existing.filter((p) => !syncedIds.has(p.id));
+        lsSet(LS.portfolios, [...synced, ...kept]);
+        console.info('[Sync] Portfolios loaded from Supabase (' + synced.length + ' synced, ' + kept.length + ' local kept)');
       }
       if (data.settings) {
         const allSettings = lsGet(LS.settings, {});
@@ -327,24 +383,36 @@ export async function syncFromSupabase(userId, userEmail) {
     const invites = lsGet(LS.invites, {});
     const clients = lsGet(LS.clients, {});
 
+    // Helper: merge an invite's portfolio_ids into the client entry
+    function mergeInvite(inv) {
+      invites[inv.token] = inv;
+      const existing = clients[userId];
+      const existingPids = existing?.portfolio_ids ?? [];
+      const newPids = inv.portfolio_ids ?? [];
+      const merged = [...new Set([...existingPids, ...newPids])];
+      clients[userId] = {
+        advisor_id: inv.advisor_id ?? existing?.advisor_id ?? null,
+        portfolio_ids: merged,
+        accepted_at: existing?.accepted_at ?? inv.accepted_at ?? new Date().toISOString(),
+      };
+      // Also store portfolio snapshot if present so getPortfolios can find it
+      if (inv.portfolio_snapshot) {
+        const all = lsGet(LS.portfolios, []);
+        const snap = inv.portfolio_snapshot;
+        const idx = all.findIndex((p) => p.id === snap.id);
+        if (idx >= 0) all[idx] = { ...all[idx], ...snap };
+        else all.push(snap);
+        lsSet(LS.portfolios, all);
+      }
+    }
+
     // Fetch invites where this user's email was invited
     if (userEmail) {
       const { data: invData } = await supabase
         .from('invites')
         .select('*')
         .eq('client_email', userEmail);
-      if (invData?.length) {
-        invData.forEach((inv) => {
-          invites[inv.token] = inv;
-          if (!clients[userId]) {
-            clients[userId] = {
-              advisor_id: inv.advisor_id,
-              portfolio_ids: inv.portfolio_ids,
-              accepted_at: inv.accepted_at || new Date().toISOString(),
-            };
-          }
-        });
-      }
+      if (invData?.length) invData.forEach(mergeInvite);
     }
 
     // Also fetch invites this user already accepted (by user ID)
@@ -352,18 +420,7 @@ export async function syncFromSupabase(userId, userEmail) {
       .from('invites')
       .select('*')
       .eq('accepted_by', userId);
-    if (acceptedInvs?.length) {
-      acceptedInvs.forEach((inv) => {
-        invites[inv.token] = inv;
-        if (!clients[userId]) {
-          clients[userId] = {
-            advisor_id: inv.advisor_id,
-            portfolio_ids: inv.portfolio_ids,
-            accepted_at: inv.accepted_at || new Date().toISOString(),
-          };
-        }
-      });
-    }
+    if (acceptedInvs?.length) acceptedInvs.forEach(mergeInvite);
 
     lsSet(LS.invites, invites);
     lsSet(LS.clients, clients);
@@ -799,21 +856,26 @@ export function sendMessage(message) {
 }
 
 // Look up the client email linked to a portfolio (from invites)
+// Returns { email, accepted } or null
 export async function getLinkedClient(portfolioId) {
   // Check localStorage first
   const invites = Object.values(lsGet(LS.invites, {}));
   const match = invites.find((inv) => inv.portfolio_ids?.includes(portfolioId));
-  if (match?.client_email) return match.client_email;
+  if (match?.client_email) {
+    return { email: match.client_email, accepted: !!match.accepted_at };
+  }
 
   // Try Supabase
   if (isSupabaseConfigured) {
     try {
       const { data } = await supabase
         .from('invites')
-        .select('client_email')
+        .select('client_email, accepted_at')
         .contains('portfolio_ids', [portfolioId])
         .maybeSingle();
-      if (data?.client_email) return data.client_email;
+      if (data?.client_email) {
+        return { email: data.client_email, accepted: !!data.accepted_at };
+      }
     } catch { /* fall through */ }
   }
   return null;
