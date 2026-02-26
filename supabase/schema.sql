@@ -212,6 +212,11 @@ alter table public.messages enable row level security;
 create policy "Users can read messages for their portfolios"
   on public.messages for select using (
     auth.uid() = sender_id
+    or exists (
+      select 1 from public.invites i
+      where i.portfolio_ids @> array[messages.portfolio_id]
+        and (i.advisor_id = auth.uid() or i.accepted_by = auth.uid())
+    )
   );
 
 create policy "Users can send messages"
@@ -227,6 +232,8 @@ create table if not exists public.invites (
   client_email       text,
   portfolio_ids      uuid[],
   portfolio_snapshot jsonb,
+  accepted_by        uuid references auth.users(id) on delete set null,
+  accepted_at        timestamptz,
   created_at         timestamptz not null default now()
 );
 

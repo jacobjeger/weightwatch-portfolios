@@ -88,6 +88,9 @@ export function AuthProvider({ children }) {
         setUser(u);
         if (u) syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
         else setLoading(false);
+      }).catch((err) => {
+        console.error('[Auth] Session fetch failed:', err);
+        setLoading(false);
       });
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         const u = session?.user ?? null;
@@ -241,8 +244,8 @@ export async function syncFromSupabase(userId, userEmail) {
 
     lsSet(LS.invites, invites);
     lsSet(LS.clients, clients);
-  } catch {
-    // Table may not exist — silently skip
+  } catch (e) {
+    console.warn('[Sync] Invites fetch failed:', e.message);
   }
 
   // 3) Messages
@@ -258,8 +261,8 @@ export async function syncFromSupabase(userId, userEmail) {
       const merged = [...existing, ...msgData.filter((m) => !existingIds.has(m.id))];
       lsSet(LS.messages, merged);
     }
-  } catch {
-    // Table may not exist — silently skip
+  } catch (e) {
+    console.warn('[Sync] Messages fetch failed:', e.message);
   }
 
   // 4) Activity log
@@ -276,8 +279,8 @@ export async function syncFromSupabase(userId, userEmail) {
       const merged = [...actData.filter((a) => !existingIds.has(a.id)), ...existing].slice(0, 500);
       lsSet(LS.activity, merged);
     }
-  } catch {
-    // Table may not exist — silently skip
+  } catch (e) {
+    console.warn('[Sync] Activity log fetch failed:', e.message);
   }
 }
 
@@ -294,21 +297,24 @@ function pushToSupabase(userId, all) {
       } else {
         console.info('[Sync] Portfolios saved to Supabase');
       }
-    });
+    })
+    .catch((err) => console.error('[Sync] Portfolio save rejected:', err.message));
 }
 
 // Push a message to Supabase (best-effort — never blocks)
 function pushMessageToSupabase(msg) {
   if (!isSupabaseConfigured) return;
   supabase.from('messages').insert(msg)
-    .then(({ error }) => { if (error) console.warn('[Sync] Message write skipped:', error.message); });
+    .then(({ error }) => { if (error) console.warn('[Sync] Message write skipped:', error.message); })
+    .catch((err) => console.warn('[Sync] Message write rejected:', err.message));
 }
 
 // Push activity to Supabase (best-effort)
 function pushActivityToSupabase(entry) {
   if (!isSupabaseConfigured) return;
   supabase.from('activity_log').insert(entry)
-    .then(({ error }) => { if (error) console.warn('[Sync] Activity write skipped:', error.message); });
+    .then(({ error }) => { if (error) console.warn('[Sync] Activity write skipped:', error.message); })
+    .catch((err) => console.warn('[Sync] Activity write rejected:', err.message));
 }
 
 // ─── Portfolio data helpers ───────────────────────────────────────────────────
@@ -403,8 +409,10 @@ function pushSettingsToSupabase(userId, settings) {
         .then(({ error }) => {
           if (error) console.warn('[Sync] Settings save skipped:', error.message);
           else console.info('[Sync] Settings saved to Supabase');
-        });
-    });
+        })
+        .catch((err) => console.warn('[Sync] Settings save rejected:', err.message));
+    })
+    .catch((err) => console.warn('[Sync] Settings fetch rejected:', err.message));
 }
 
 // ─── Share token helpers ───────────────────────────────────────────────────────
