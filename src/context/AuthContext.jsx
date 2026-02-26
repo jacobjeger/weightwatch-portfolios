@@ -86,7 +86,7 @@ export function AuthProvider({ children }) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         const u = session?.user ?? null;
         setUser(u);
-        if (u) syncFromSupabase(u.id).finally(() => setLoading(false));
+        if (u) syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
         else setLoading(false);
       });
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -95,9 +95,9 @@ export function AuthProvider({ children }) {
         if (u) {
           if (_event === 'SIGNED_IN') {
             setLoading(true);
-            syncFromSupabase(u.id).finally(() => setLoading(false));
+            syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
           } else {
-            syncFromSupabase(u.id);
+            syncFromSupabase(u.id, u.email);
           }
         }
       });
@@ -168,19 +168,27 @@ export function useAuth() {
 // All other tables may not exist or may have schema mismatches, so each is
 // wrapped in try/catch and failures are non-fatal.
 
-export async function syncFromSupabase(userId) {
+export async function syncFromSupabase(userId, userEmail) {
   if (!isSupabaseConfigured || !userId) return;
 
-  // 1) Portfolios — the critical sync path (user_portfolios table with JSONB)
+  // 1) Portfolios + settings — the critical sync path (user_portfolios table with JSONB)
   try {
     const { data, error } = await supabase
       .from('user_portfolios')
-      .select('data')
+      .select('data, settings')
       .eq('user_id', userId)
       .maybeSingle();
-    if (!error && data?.data) {
-      lsSet(LS.portfolios, data.data);
-      console.info('[Sync] Portfolios loaded from Supabase (' + data.data.length + ' portfolios)');
+    if (!error && data) {
+      if (data.data) {
+        lsSet(LS.portfolios, data.data);
+        console.info('[Sync] Portfolios loaded from Supabase (' + data.data.length + ' portfolios)');
+      }
+      if (data.settings) {
+        const allSettings = lsGet(LS.settings, {});
+        allSettings[userId] = { ...DEFAULT_SETTINGS, ...data.settings };
+        lsSet(LS.settings, allSettings);
+        console.info('[Sync] Settings loaded from Supabase');
+      }
     } else if (error) {
       console.warn('[Sync] Portfolio fetch error:', error.message);
     }
@@ -188,16 +196,38 @@ export async function syncFromSupabase(userId) {
     console.warn('[Sync] Portfolio fetch failed:', e.message);
   }
 
-  // 2) Invites — pull any invites where this user email was invited
+  // 2) Invites — pull by client email AND by accepted_by user ID
   try {
-    const { data: invData } = await supabase
+    const invites = lsGet(LS.invites, {});
+    const clients = lsGet(LS.clients, {});
+
+    // Fetch invites where this user's email was invited
+    if (userEmail) {
+      const { data: invData } = await supabase
+        .from('invites')
+        .select('*')
+        .eq('client_email', userEmail);
+      if (invData?.length) {
+        invData.forEach((inv) => {
+          invites[inv.token] = inv;
+          if (!clients[userId]) {
+            clients[userId] = {
+              advisor_id: inv.advisor_id,
+              portfolio_ids: inv.portfolio_ids,
+              accepted_at: inv.accepted_at || new Date().toISOString(),
+            };
+          }
+        });
+      }
+    }
+
+    // Also fetch invites this user already accepted (by user ID)
+    const { data: acceptedInvs } = await supabase
       .from('invites')
       .select('*')
-      .eq('client_email', userId);
-    if (invData?.length) {
-      const invites = lsGet(LS.invites, {});
-      const clients = lsGet(LS.clients, {});
-      invData.forEach((inv) => {
+      .eq('accepted_by', userId);
+    if (acceptedInvs?.length) {
+      acceptedInvs.forEach((inv) => {
         invites[inv.token] = inv;
         if (!clients[userId]) {
           clients[userId] = {
@@ -207,9 +237,10 @@ export async function syncFromSupabase(userId) {
           };
         }
       });
-      lsSet(LS.invites, invites);
-      lsSet(LS.clients, clients);
     }
+
+    lsSet(LS.invites, invites);
+    lsSet(LS.clients, clients);
   } catch {
     // Table may not exist — silently skip
   }
@@ -353,7 +384,27 @@ export function saveSettings(userId, partial) {
   const all = lsGet(LS.settings, {});
   all[userId] = { ...(all[userId] ?? DEFAULT_SETTINGS), ...partial };
   lsSet(LS.settings, all);
+  pushSettingsToSupabase(userId, all[userId]);
   return all[userId];
+}
+
+function pushSettingsToSupabase(userId, settings) {
+  if (!isSupabaseConfigured) return;
+  supabase
+    .from('user_portfolios')
+    .select('data')
+    .eq('user_id', userId)
+    .maybeSingle()
+    .then(({ data }) => {
+      const blob = data?.data || [];
+      supabase
+        .from('user_portfolios')
+        .upsert({ user_id: userId, data: blob, settings, updated_at: new Date().toISOString() })
+        .then(({ error }) => {
+          if (error) console.warn('[Sync] Settings save skipped:', error.message);
+          else console.info('[Sync] Settings saved to Supabase');
+        });
+    });
 }
 
 // ─── Share token helpers ───────────────────────────────────────────────────────
@@ -443,13 +494,26 @@ export async function getInvite(token) {
 }
 
 export function acceptInvite(userId, invite) {
+  const acceptedAt = new Date().toISOString();
   const clients = lsGet(LS.clients, {});
   clients[userId] = {
     advisor_id: invite.advisor_id,
     portfolio_ids: invite.portfolio_ids,
-    accepted_at: new Date().toISOString(),
+    accepted_at: acceptedAt,
   };
   lsSet(LS.clients, clients);
+
+  // Persist to Supabase so it survives browser changes
+  if (isSupabaseConfigured && invite.token) {
+    supabase
+      .from('invites')
+      .update({ accepted_by: userId, accepted_at: acceptedAt })
+      .eq('token', invite.token)
+      .then(({ error }) => {
+        if (error) console.warn('[Invite] Accept sync skipped:', error.message);
+        else console.info('[Invite] Acceptance saved to Supabase');
+      });
+  }
 }
 
 // ─── Message helpers ─────────────────────────────────────────────────────────
@@ -457,6 +521,29 @@ export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId)
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+}
+
+// Fetch messages from Supabase for cross-browser sync. Returns sorted array or null on failure.
+export async function fetchMessagesFromSupabase(portfolioId) {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('portfolio_id', portfolioId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    if (data?.length) {
+      // Merge into localStorage for offline access
+      const existing = lsGet(LS.messages, []);
+      const existingIds = new Set(existing.map((m) => m.id));
+      const newMsgs = data.filter((m) => !existingIds.has(m.id));
+      if (newMsgs.length) lsSet(LS.messages, [...existing, ...newMsgs]);
+    }
+    return data || [];
+  } catch {
+    return null; // Fall back to localStorage via getMessages()
+  }
 }
 
 export function sendMessage(message) {
@@ -470,6 +557,27 @@ export function sendMessage(message) {
   lsSet(LS.messages, all);
   pushMessageToSupabase(msg);
   return msg;
+}
+
+// Look up the client email linked to a portfolio (from invites)
+export async function getLinkedClient(portfolioId) {
+  // Check localStorage first
+  const invites = Object.values(lsGet(LS.invites, {}));
+  const match = invites.find((inv) => inv.portfolio_ids?.includes(portfolioId));
+  if (match?.client_email) return match.client_email;
+
+  // Try Supabase
+  if (isSupabaseConfigured) {
+    try {
+      const { data } = await supabase
+        .from('invites')
+        .select('client_email')
+        .contains('portfolio_ids', [portfolioId])
+        .maybeSingle();
+      if (data?.client_email) return data.client_email;
+    } catch { /* fall through */ }
+  }
+  return null;
 }
 
 export function getLatestApproval(portfolioId) {

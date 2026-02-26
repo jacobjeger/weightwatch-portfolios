@@ -57,13 +57,15 @@ export default function InviteView() {
     });
   }, [token, searchParams]);
 
-  // Auto-accept when user is logged in
+  // Auto-accept when user is logged in, then redirect to full Client Portal
   useEffect(() => {
     if (user && invite && !accepted) {
       acceptInvite(user.id, invite);
       setAccepted(true);
+      // Give the user a moment to see the "Invite accepted" banner, then redirect
+      setTimeout(() => navigate('/client-portal'), 1500);
     }
-  }, [user, invite, accepted]);
+  }, [user, invite, accepted, navigate]);
 
   async function handleAuth(e) {
     e.preventDefault();

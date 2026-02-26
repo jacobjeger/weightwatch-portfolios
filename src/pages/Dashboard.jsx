@@ -116,6 +116,21 @@ export default function Dashboard() {
     return parseFloat(getPortfolioReturn(holdings, days));
   }
 
+  // Compute current portfolio value using live prices when available
+  function computeValue(p) {
+    const sv = p.starting_value || 0;
+    if (!(p.holdings?.length) || !sv) return sv;
+    const cashPct = p.cash_percent ?? 0;
+    const investedFrac = 1 - cashPct / 100;
+    const growthFactor = p.holdings.reduce((s, h) => {
+      const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
+      const entryPrice = h.entry_price ?? h.last_price;
+      const ratio = entryPrice > 0 ? currentPrice / entryPrice : 1;
+      return s + (h.weight_percent / 100) * ratio;
+    }, 0);
+    return sv * (growthFactor * investedFrac + cashPct / 100);
+  }
+
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
       {/* Header */}
@@ -214,7 +229,7 @@ export default function Dashboard() {
                       {ret != null ? `${ret > 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
                     </div>
                     <div className="text-xs text-slate-400">
-                      {p.starting_value ? `$${(p.starting_value / 1000).toFixed(0)}K · ` : ''}{p.holdings?.length ?? 0} holdings
+                      {p.starting_value ? `$${Math.round(computeValue(p)).toLocaleString()} · ` : ''}{p.holdings?.length ?? 0} holdings
                     </div>
                   </div>
                 </div>
@@ -298,7 +313,7 @@ export default function Dashboard() {
                         </td>
                         <td className="td text-right font-mono text-slate-700 text-sm">
                           {p.starting_value
-                            ? `$${(p.starting_value / 1000).toFixed(0)}K`
+                            ? `$${Math.round(computeValue(p)).toLocaleString()}`
                             : '—'}
                         </td>
                         <td className="td">

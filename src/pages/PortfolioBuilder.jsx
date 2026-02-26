@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings } from '../context/AuthContext';
+import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User } from 'lucide-react';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
 import { getRealPerformanceReturns, clearMarketCaches } from '../lib/finnhub';
@@ -53,6 +53,7 @@ export default function PortfolioBuilder() {
   const [showInvite, setShowInvite]       = useState(false);   // invite client modal
   const [inviteEmail, setInviteEmail]     = useState('');
   const [inviteUrl, setInviteUrl]         = useState(null);
+  const [linkedClient, setLinkedClient]   = useState(null);  // client email linked via invite
 
   // Collapsible section toggles
   const [holdingsOpen, setHoldingsOpen]     = useState(true);
@@ -89,6 +90,12 @@ export default function PortfolioBuilder() {
       }
     }
   }, [id, user, isNew]);
+
+  // Look up which client is linked to this portfolio (for advisor display)
+  useEffect(() => {
+    if (isNew || !portfolioId || role === 'client') return;
+    getLinkedClient(portfolioId).then((email) => { if (email) setLinkedClient(email); });
+  }, [portfolioId, isNew, role]);
 
   // Load + subscribe real-time prices whenever holdings or benchmark change
   useEffect(() => {
@@ -313,7 +320,15 @@ export default function PortfolioBuilder() {
       description,
       primary_benchmark: benchmark || null,
       secondary_benchmarks: [],
-      holdings: [...holdings],
+      starting_value: 100_000,
+      cash_percent: 0,
+      drip_enabled: true,
+      holdings: holdings.map((h) => ({
+        ...h,
+        entry_price: h.last_price,  // Reset entry to current price
+      })),
+      weight_history: [],
+      created_at: new Date().toISOString(),
     };
     savePortfolio(dup);
     logActivity(user.id, {
@@ -507,9 +522,14 @@ export default function PortfolioBuilder() {
     <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
       {/* Top toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6">
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <h1 className="text-lg sm:text-xl font-bold text-slate-900">Portfolio Builder</h1>
           <StatusBadge status={status} totalWeight={totalWeight} />
+          {linkedClient && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+              <User className="w-3 h-3" /> {linkedClient}
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <button className="btn-ghost" onClick={() => navigate('/')}>← <span className="hidden sm:inline">Dashboard</span></button>

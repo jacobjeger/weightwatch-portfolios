@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, ChevronDown, CheckCircle, AlertTriangle } from 'lucide-react';
-import { getMessages, sendMessage } from '../context/AuthContext';
+import { getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
 
 export default function MessagePanel({ portfolioId, userId, userEmail, userRole, showApprovalActions = false }) {
   const [open, setOpen] = useState(false);
@@ -10,9 +10,11 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
 
   // Load messages whenever panel opens or portfolioId changes
   useEffect(() => {
-    if (open && portfolioId) {
-      setMessages(getMessages(portfolioId));
-    }
+    if (!open || !portfolioId) return;
+    // Try Supabase first for cross-browser sync, fall back to localStorage
+    fetchMessagesFromSupabase(portfolioId).then((msgs) => {
+      setMessages(msgs ?? getMessages(portfolioId));
+    });
   }, [open, portfolioId]);
 
   // Auto-scroll to bottom on new messages
@@ -20,11 +22,12 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
     if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, open]);
 
-  // Poll for new messages every 5 seconds while panel is open
+  // Poll for new messages every 5 seconds while panel is open (from Supabase when available)
   useEffect(() => {
     if (!open || !portfolioId) return;
-    const interval = setInterval(() => {
-      setMessages(getMessages(portfolioId));
+    const interval = setInterval(async () => {
+      const msgs = await fetchMessagesFromSupabase(portfolioId);
+      setMessages(msgs ?? getMessages(portfolioId));
     }, 5000);
     return () => clearInterval(interval);
   }, [open, portfolioId]);

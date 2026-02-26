@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, CheckCircle, AlertTriangle, User } from 'lucide-react';
-import { useAuth, getPortfolios, getMessages, sendMessage } from '../context/AuthContext';
+import { useAuth, getPortfolios, getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
 
 export default function Messages() {
   const { user, role } = useAuth();
@@ -21,11 +21,12 @@ export default function Messages() {
     }
   }, [user]);
 
-  // Load messages for selected portfolio
+  // Load messages for selected portfolio (from Supabase when available)
   useEffect(() => {
-    if (selectedPortfolioId) {
-      setMessages(getMessages(selectedPortfolioId));
-    }
+    if (!selectedPortfolioId) return;
+    fetchMessagesFromSupabase(selectedPortfolioId).then((msgs) => {
+      setMessages(msgs ?? getMessages(selectedPortfolioId));
+    });
   }, [selectedPortfolioId]);
 
   // Auto-scroll
@@ -33,11 +34,12 @@ export default function Messages() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Poll for new messages every 5 seconds
+  // Poll for new messages every 5 seconds (from Supabase when available)
   useEffect(() => {
     if (!selectedPortfolioId) return;
-    const interval = setInterval(() => {
-      setMessages(getMessages(selectedPortfolioId));
+    const interval = setInterval(async () => {
+      const msgs = await fetchMessagesFromSupabase(selectedPortfolioId);
+      setMessages(msgs ?? getMessages(selectedPortfolioId));
     }, 5000);
     return () => clearInterval(interval);
   }, [selectedPortfolioId]);
