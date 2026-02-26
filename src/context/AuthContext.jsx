@@ -32,7 +32,7 @@ function mockSignUp(email, password, accountType = 'advisor') {
   const users = lsGet(LS.users, {});
   if (users[email]) throw new Error('An account with this email already exists.');
   const user = { id: crypto.randomUUID(), email };
-  users[email] = { ...user, password };
+  users[email] = { ...user, password, accountType };
   lsSet(LS.users, users);
   lsSet(LS.session, user);
 
@@ -103,6 +103,14 @@ function mockSignIn(email, password) {
   if (!stored || stored.password !== password) throw new Error('Invalid email or password.');
   const user = { id: stored.id, email: stored.email };
   lsSet(LS.session, user);
+  // Restore client entry if this was a client account (in case localStorage was partially cleared)
+  if (stored.accountType === 'client') {
+    const clients = lsGet(LS.clients, {});
+    if (!clients[user.id]) {
+      clients[user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
+      lsSet(LS.clients, clients);
+    }
+  }
   // Auto-accept any pending invites for this email
   autoLinkInvites(user.id, email);
   return user;
@@ -125,8 +133,9 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('advisor'); // 'advisor' | 'client'
+  const [roleCheckTrigger, setRoleCheckTrigger] = useState(0);
 
-  // Detect role when user changes.
+  // Detect role when user changes or after sync completes.
   // An account is only a "client" if it was explicitly created as one AND does
   // not own any portfolios.  Advisors who test their own invite links get an
   // entry in the clients map but should still behave as advisors.
@@ -149,15 +158,29 @@ export function AuthProvider({ children }) {
     } else {
       setRole('advisor');
     }
-  }, [user]);
+  }, [user, roleCheckTrigger]);
 
   // Initialise session
   useEffect(() => {
     if (isSupabaseConfigured) {
+      // Helper: restore the client entry from Supabase user metadata so the
+      // role effect can detect them as a client even before syncFromSupabase
+      // finishes pulling invites.
+      function restoreClientEntry(u) {
+        if (u?.user_metadata?.account_type === 'client') {
+          const clients = lsGet(LS.clients, {});
+          if (!clients[u.id]) {
+            clients[u.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
+            lsSet(LS.clients, clients);
+          }
+        }
+      }
+
       supabase.auth.getSession().then(({ data: { session } }) => {
         const u = session?.user ?? null;
+        if (u) restoreClientEntry(u);
         setUser(u);
-        if (u) syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
+        if (u) syncFromSupabase(u.id, u.email).then(() => setRoleCheckTrigger((v) => v + 1)).finally(() => setLoading(false));
         else setLoading(false);
       }).catch((err) => {
         console.error('[Auth] Session fetch failed:', err);
@@ -165,13 +188,14 @@ export function AuthProvider({ children }) {
       });
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         const u = session?.user ?? null;
+        if (u) restoreClientEntry(u);
         setUser(u);
         if (u) {
           if (_event === 'SIGNED_IN') {
             setLoading(true);
-            syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
+            syncFromSupabase(u.id, u.email).then(() => setRoleCheckTrigger((v) => v + 1)).finally(() => setLoading(false));
           } else {
-            syncFromSupabase(u.id, u.email);
+            syncFromSupabase(u.id, u.email).then(() => setRoleCheckTrigger((v) => v + 1));
           }
         }
       });

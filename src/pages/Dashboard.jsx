@@ -23,6 +23,13 @@ export default function Dashboard() {
   const [showDelete, setShowDelete] = useState(false);
   const [perfTimeframe, setPerfTimeframe] = useState('YTD');
 
+  // Auto-redirect clients to their portal
+  useEffect(() => {
+    if (isClient) {
+      navigate('/client-portal', { replace: true });
+    }
+  }, [isClient, navigate]);
+
   function load() {
     if (user) setPortfolios(getPortfolios(user.id));
   }
@@ -134,22 +141,6 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
-      {/* Redirect clients to Client Portal */}
-      {isClient && portfolios.length > 0 && (
-        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-emerald-800">Welcome to your Client Portal</p>
-            <p className="text-xs text-emerald-600">View your managed portfolios and communicate with your advisor.</p>
-          </div>
-          <button
-            onClick={() => navigate('/client-portal')}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            Open Portal
-          </button>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
