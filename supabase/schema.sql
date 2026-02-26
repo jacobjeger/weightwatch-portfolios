@@ -97,6 +97,7 @@ create table if not exists public.performance_snapshots (
   benchmark_return_pct numeric(10,4),
   outperformance_pct numeric(10,4),
   benchmark_used text,
+  data_source text not null default 'historical' check (data_source in ('historical', 'backtest')),
   created_at timestamptz default now()
 );
 
@@ -156,6 +157,7 @@ create policy "Users can manage own activity log" on public.activity_log
 create table if not exists public.user_portfolios (
   user_id    uuid primary key references auth.users(id) on delete cascade,
   data       jsonb not null default '[]',
+  settings   jsonb not null default '{}',
   updated_at timestamptz not null default now()
 );
 
