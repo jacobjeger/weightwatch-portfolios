@@ -78,11 +78,26 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('advisor'); // 'advisor' | 'client'
 
-  // Detect role when user changes
+  // Detect role when user changes.
+  // An account is only a "client" if it was explicitly created as one AND does
+  // not own any portfolios.  Advisors who test their own invite links get an
+  // entry in the clients map but should still behave as advisors.
   useEffect(() => {
     if (user) {
       const clients = lsGet(LS.clients, {});
-      setRole(clients[user.id] ? 'client' : 'advisor');
+      const clientEntry = clients[user.id];
+      const portfolios = lsGet(LS.portfolios, []);
+      const ownsPortfolios = portfolios.some((p) => p.owner === user.id);
+
+      // If the user owns portfolios, they are an advisor regardless of
+      // whether they also appear in the clients map.
+      if (ownsPortfolios) {
+        setRole('advisor');
+      } else if (clientEntry) {
+        setRole('client');
+      } else {
+        setRole('advisor');
+      }
     } else {
       setRole('advisor');
     }
