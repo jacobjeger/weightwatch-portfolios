@@ -691,23 +691,56 @@ export function acceptInvite(userId, invite) {
 }
 
 // ─── Email helpers ────────────────────────────────────────────────────────────
-// Sends an invite email via Supabase Edge Function or falls back to mailto: link.
-// For production, set up a Supabase Edge Function or an email API.
-export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteUrl }) {
-  // 1) Try Supabase Edge Function (if deployed)
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase.functions.invoke('send-invite-email', {
-        body: { to, advisor_email: advisorEmail, portfolio_name: portfolioName, invite_url: inviteUrl },
-      });
-      if (!error && data?.success) {
-        console.info('[Email] Invite email sent via Supabase Edge Function');
-        return { sent: true, method: 'supabase' };
-      }
-    } catch (e) {
-      console.warn('[Email] Supabase function not available:', e.message);
-    }
+// Generic email sender via Supabase Edge Function (send-email) backed by Resend.
+// Falls back gracefully when the Edge Function isn't deployed.
+//
+// Usage:  await sendEmail('invite', 'client@example.com', { portfolio_name: '...', invite_url: '...' })
+//
+// Supported types (defined in supabase/functions/send-email/index.ts):
+//   'invite'           — Client invite with portfolio link
+//   'welcome'          — Welcome email after signup
+//   'portfolio_update' — Notify client of portfolio changes
+//   'new_message'      — Notify of new message on portfolio
+
+export async function sendEmail(type, to, data = {}) {
+  if (!isSupabaseConfigured) {
+    console.warn('[Email] Supabase not configured — skipping email');
+    return { sent: false, reason: 'supabase_not_configured' };
   }
+
+  try {
+    const { data: result, error } = await supabase.functions.invoke('send-email', {
+      body: { type, to, data },
+    });
+
+    if (error) {
+      console.warn(`[Email] Edge Function error for "${type}":`, error.message);
+      return { sent: false, reason: 'edge_function_error', error: error.message };
+    }
+
+    if (result?.success) {
+      console.info(`[Email] Sent "${type}" email to ${to} (id: ${result.id})`);
+      return { sent: true, id: result.id };
+    }
+
+    console.warn(`[Email] Edge Function returned failure for "${type}":`, result?.error);
+    return { sent: false, reason: 'send_failed', error: result?.error };
+  } catch (e) {
+    console.warn(`[Email] Edge Function not available for "${type}":`, e.message);
+    return { sent: false, reason: 'not_deployed', error: e.message };
+  }
+}
+
+// Sends an invite email via Resend (Edge Function) or falls back to mailto: link.
+export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteUrl }) {
+  // 1) Try sending via Resend Edge Function
+  const result = await sendEmail('invite', to, {
+    advisor_email: advisorEmail,
+    portfolio_name: portfolioName,
+    invite_url: inviteUrl,
+  });
+
+  if (result.sent) return { sent: true, method: 'resend' };
 
   // 2) Fallback: open the user's email client with a pre-filled mailto: link
   const subject = encodeURIComponent(`You've been invited to view "${portfolioName}" on WeightWatch Portfolios`);
