@@ -218,8 +218,65 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
+  // Delete all account data and the account itself
+  async function deleteAccount() {
+    if (!user) return;
+    const userId = user.id;
+    const email = user.email;
+
+    // 1) Delete from Supabase tables (best-effort)
+    if (isSupabaseConfigured) {
+      try { await supabase.from('user_portfolios').delete().eq('user_id', userId); } catch {}
+      try { await supabase.from('invites').delete().or(`advisor_id.eq.${userId},accepted_by.eq.${userId}`); } catch {}
+      try { await supabase.from('messages').delete().eq('sender_id', userId); } catch {}
+      try { await supabase.from('activity_log').delete().eq('user_id', userId); } catch {}
+      try { await supabase.from('share_tokens').delete().eq('owner_id', userId); } catch {}
+    }
+
+    // 2) Clear all localStorage data for this user
+    const portfolios = lsGet(LS.portfolios, []).filter((p) => p.owner !== userId);
+    lsSet(LS.portfolios, portfolios);
+
+    const settings = lsGet(LS.settings, {});
+    delete settings[userId];
+    lsSet(LS.settings, settings);
+
+    const clients = lsGet(LS.clients, {});
+    delete clients[userId];
+    lsSet(LS.clients, clients);
+
+    const activity = lsGet(LS.activity, []).filter((a) => a.user_id !== userId);
+    lsSet(LS.activity, activity);
+
+    const messages = lsGet(LS.messages, []).filter((m) => m.sender_id !== userId);
+    lsSet(LS.messages, messages);
+
+    // Remove invites created by or accepted by this user
+    const invites = lsGet(LS.invites, {});
+    for (const [token, inv] of Object.entries(invites)) {
+      if (inv.advisor_id === userId || inv.accepted_by === userId) delete invites[token];
+    }
+    lsSet(LS.invites, invites);
+
+    // Remove mock user entry
+    const users = lsGet(LS.users, {});
+    if (email && users[email]) {
+      delete users[email];
+      lsSet(LS.users, users);
+    }
+
+    // 3) Sign out
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    } else {
+      mockSignOut();
+    }
+    setUser(null);
+    localStorage.removeItem(LS.session);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, isMockMode: !isSupabaseConfigured }}>
+    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, deleteAccount, isMockMode: !isSupabaseConfigured }}>
       {children}
     </AuthContext.Provider>
   );

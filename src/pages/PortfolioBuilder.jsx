@@ -311,6 +311,7 @@ export default function PortfolioBuilder() {
   }
 
   // ── Duplicate ───────────────────────────────────────────────────────────────
+  // Copies only weights/structure — resets all historical values, gains, and dates.
   function handleDuplicate() {
     const newId = crypto.randomUUID();
     const dup = {
@@ -323,10 +324,21 @@ export default function PortfolioBuilder() {
       starting_value: 100_000,
       cash_percent: 0,
       drip_enabled: true,
-      holdings: holdings.map((h) => ({
-        ...h,
-        entry_price: h.last_price,  // Reset entry to current price
-      })),
+      holdings: holdings.map((h) => {
+        const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
+        return {
+          ticker: h.ticker,
+          name: h.name,
+          type: h.type,
+          exchange: h.exchange,
+          category: h.category,
+          weight_percent: h.weight_percent,
+          last_price: currentPrice,
+          entry_price: currentPrice,  // Reset entry to current live price
+          expense_ratio: h.expense_ratio,
+          div_yield: h.div_yield,
+        };
+      }),
       weight_history: [],
       created_at: new Date().toISOString(),
     };
