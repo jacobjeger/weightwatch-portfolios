@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, ChevronDown, CheckCircle, AlertTriangle } from 'lucide-react';
 import { getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
 
-export default function MessagePanel({ portfolioId, userId, userEmail, userRole, showApprovalActions = false }) {
-  const [open, setOpen] = useState(false);
+export default function MessagePanel({ portfolioId, userId, userEmail, userRole, showApprovalActions = false, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const endRef = useRef(null);

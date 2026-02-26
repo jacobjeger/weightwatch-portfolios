@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient } from '../context/AuthContext';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, sendInviteEmail } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
 import { getRealPerformanceReturns, clearMarketCaches } from '../lib/finnhub';
@@ -1513,7 +1513,8 @@ export default function PortfolioBuilder() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Invite Client</h3>
             <p className="text-sm text-gray-500 mb-4">
-              Send a read-only invite link for <span className="font-medium text-gray-700">{name}</span> to a client.
+              Send a personalized invite link for <span className="font-medium text-gray-700">{name}</span> to a client.
+              The client will get view-only access to this portfolio.
             </p>
             <input
               type="email"
@@ -1525,14 +1526,34 @@ export default function PortfolioBuilder() {
             />
             {inviteUrl && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
-                <p className="text-xs text-green-700 mb-1 font-medium">Invite link (copied to clipboard):</p>
-                <p className="text-xs text-green-800 font-mono break-all">{inviteUrl}</p>
+                <p className="text-xs text-green-700 mb-1 font-medium">Invite link created (copied to clipboard):</p>
+                <p className="text-xs text-green-800 font-mono break-all select-all">{inviteUrl}</p>
               </div>
             )}
             <div className="flex justify-end gap-2">
               <button className="btn-secondary text-sm" onClick={() => setShowInvite(false)}>
                 {inviteUrl ? 'Done' : 'Cancel'}
               </button>
+              {inviteUrl && (
+                <button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1.5"
+                  onClick={async () => {
+                    const result = await sendInviteEmail({
+                      to: inviteEmail.trim(),
+                      advisorEmail: user.email,
+                      portfolioName: name,
+                      inviteUrl,
+                    });
+                    if (result.sent) {
+                      toast.success('Invite email sent successfully!');
+                    } else {
+                      toast.success('Opening your email client to send the invite...');
+                    }
+                  }}
+                >
+                  Send Email
+                </button>
+              )}
               {!inviteUrl && (
                 <button
                   className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"

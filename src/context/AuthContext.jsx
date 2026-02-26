@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { createDemoPortfolios } from '../lib/mockData';
 
@@ -11,7 +11,7 @@ const LS = {
   settings: 'wwp_settings',
   shares: 'wwp_shares',
   invites: 'wwp_invites',
-  clients: 'wwp_clients', // { [userId]: { advisor_id, portfolio_ids } }
+  clients: 'wwp_clients', // { [userId]: { advisor_id, portfolio_ids, accepted_at } }
   messages: 'wwp_messages',
 };
 
@@ -155,8 +155,38 @@ export function AuthProvider({ children }) {
     return mockResetPassword(email);
   }
 
+  // Refresh client portfolios by re-syncing from advisor's data in Supabase
+  const refreshClientPortfolios = useCallback(async () => {
+    if (!user) return;
+    const clientData = lsGet(LS.clients, {})[user.id];
+    if (!clientData?.advisor_id) return;
+
+    // Sync advisor's portfolios from Supabase to get latest changes
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('user_portfolios')
+          .select('data')
+          .eq('user_id', clientData.advisor_id)
+          .maybeSingle();
+        if (!error && data?.data) {
+          const advisorPortfolios = data.data;
+          const all = lsGet(LS.portfolios, []);
+          // Replace advisor's portfolios that are linked to this client
+          const linkedIds = new Set(clientData.portfolio_ids || []);
+          const withoutLinked = all.filter((p) => !linkedIds.has(p.id));
+          const linkedFromAdvisor = advisorPortfolios.filter((p) => linkedIds.has(p.id));
+          lsSet(LS.portfolios, [...withoutLinked, ...linkedFromAdvisor]);
+          console.info('[Sync] Client portfolios refreshed from advisor data');
+        }
+      } catch (e) {
+        console.warn('[Sync] Client portfolio refresh failed:', e.message);
+      }
+    }
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, isMockMode: !isSupabaseConfigured }}>
+    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, isMockMode: !isSupabaseConfigured }}>
       {children}
     </AuthContext.Provider>
   );
@@ -504,12 +534,31 @@ export async function getInvite(token) {
 export function acceptInvite(userId, invite) {
   const acceptedAt = new Date().toISOString();
   const clients = lsGet(LS.clients, {});
+  // Merge portfolio_ids if the client already has some from a previous invite
+  const existing = clients[userId];
+  const existingPortfolioIds = existing?.portfolio_ids ?? [];
+  const newPortfolioIds = invite.portfolio_ids ?? [];
+  const mergedPortfolioIds = [...new Set([...existingPortfolioIds, ...newPortfolioIds])];
+
   clients[userId] = {
     advisor_id: invite.advisor_id,
-    portfolio_ids: invite.portfolio_ids,
-    accepted_at: acceptedAt,
+    portfolio_ids: mergedPortfolioIds,
+    accepted_at: existing?.accepted_at ?? acceptedAt,
   };
   lsSet(LS.clients, clients);
+
+  // Also store the portfolio snapshot in local portfolios so it's immediately available
+  if (invite.portfolio_snapshot) {
+    const all = lsGet(LS.portfolios, []);
+    const snap = invite.portfolio_snapshot;
+    const idx = all.findIndex((p) => p.id === snap.id);
+    if (idx >= 0) {
+      all[idx] = { ...all[idx], ...snap };
+    } else {
+      all.push(snap);
+    }
+    lsSet(LS.portfolios, all);
+  }
 
   // Persist to Supabase so it survives browser changes
   if (isSupabaseConfigured && invite.token) {
@@ -520,8 +569,64 @@ export function acceptInvite(userId, invite) {
       .then(({ error }) => {
         if (error) console.warn('[Invite] Accept sync skipped:', error.message);
         else console.info('[Invite] Acceptance saved to Supabase');
-      });
+      })
+      .catch((err) => console.warn('[Invite] Accept sync rejected:', err.message));
   }
+
+  // Also try to pull the latest version of the portfolio from the advisor's data
+  if (isSupabaseConfigured && invite.advisor_id) {
+    supabase
+      .from('user_portfolios')
+      .select('data')
+      .eq('user_id', invite.advisor_id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data?.data) {
+          const advisorPortfolios = data.data;
+          const linkedIds = new Set(mergedPortfolioIds);
+          const all = lsGet(LS.portfolios, []);
+          const withoutLinked = all.filter((p) => !linkedIds.has(p.id));
+          const linkedFromAdvisor = advisorPortfolios.filter((p) => linkedIds.has(p.id));
+          if (linkedFromAdvisor.length) {
+            lsSet(LS.portfolios, [...withoutLinked, ...linkedFromAdvisor]);
+            console.info('[Invite] Synced latest portfolio data from advisor');
+          }
+        }
+      })
+      .catch((err) => console.warn('[Invite] Advisor portfolio sync failed:', err.message));
+  }
+}
+
+// ─── Email helpers ────────────────────────────────────────────────────────────
+// Sends an invite email via Supabase Edge Function or falls back to mailto: link.
+// For production, set up a Supabase Edge Function or an email API.
+export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteUrl }) {
+  // 1) Try Supabase Edge Function (if deployed)
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.functions.invoke('send-invite-email', {
+        body: { to, advisor_email: advisorEmail, portfolio_name: portfolioName, invite_url: inviteUrl },
+      });
+      if (!error && data?.success) {
+        console.info('[Email] Invite email sent via Supabase Edge Function');
+        return { sent: true, method: 'supabase' };
+      }
+    } catch (e) {
+      console.warn('[Email] Supabase function not available:', e.message);
+    }
+  }
+
+  // 2) Fallback: open the user's email client with a pre-filled mailto: link
+  const subject = encodeURIComponent(`You've been invited to view "${portfolioName}" on WeightWatch Portfolios`);
+  const body = encodeURIComponent(
+    `Hi,\n\nYou've been invited to view the portfolio "${portfolioName}" on WeightWatch Portfolios.\n\n` +
+    `Click the link below to access your personalized client portal:\n${inviteUrl}\n\n` +
+    `This link is unique to you. Once you sign up or log in, the portfolio will be synced to your account.\n\n` +
+    `Best regards,\n${advisorEmail}`
+  );
+  const mailtoUrl = `mailto:${to}?subject=${subject}&body=${body}`;
+  window.open(mailtoUrl, '_blank');
+  return { sent: false, method: 'mailto', mailtoUrl };
 }
 
 // ─── Message helpers ─────────────────────────────────────────────────────────

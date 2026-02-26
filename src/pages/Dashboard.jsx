@@ -12,9 +12,10 @@ import { useMarketData } from '../context/MarketDataContext';
 const TIMEFRAME_DAYS = { '1D': 1, '1M': 21, '3M': 63, 'YTD': null, '1Y': 252 };
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const { live, prices, loadTickers } = useMarketData();
+  const isClient = role === 'client';
 
   const [portfolios, setPortfolios] = useState([]);
   const [selected, setSelected] = useState(new Set());
@@ -133,16 +134,35 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
+      {/* Redirect clients to Client Portal */}
+      {isClient && portfolios.length > 0 && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-emerald-800">Welcome to your Client Portal</p>
+            <p className="text-xs text-emerald-600">View your managed portfolios and communicate with your advisor.</p>
+          </div>
+          <button
+            onClick={() => navigate('/client-portal')}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            Open Portal
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">My Portfolios</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+            {isClient ? 'My Managed Portfolios' : 'My Portfolios'}
+          </h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
+            {isClient && ' · managed by your advisor'}
           </p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          {selected.size > 0 && (
+          {!isClient && selected.size > 0 && (
             <button
               className="btn-danger"
               onClick={() => setShowDelete(true)}
@@ -151,11 +171,13 @@ export default function Dashboard() {
               Delete {selected.size}
             </button>
           )}
-          <button className="btn-primary" onClick={() => setShowNew(true)}>
-            <Plus className="w-4 h-4" />
-            <span className="hidden xs:inline">New Portfolio</span>
-            <span className="xs:hidden">New</span>
-          </button>
+          {!isClient && (
+            <button className="btn-primary" onClick={() => setShowNew(true)}>
+              <Plus className="w-4 h-4" />
+              <span className="hidden xs:inline">New Portfolio</span>
+              <span className="xs:hidden">New</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -184,12 +206,21 @@ export default function Dashboard() {
       {portfolios.length === 0 ? (
         <div className="card p-16 text-center">
           <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500 mb-2">No portfolios yet.</p>
-          <p className="text-sm text-slate-400 mb-6">Build your first portfolio to start tracking performance.</p>
-          <button className="btn-primary" onClick={() => setShowNew(true)}>
-            <Plus className="w-4 h-4" />
-            Build your first portfolio →
-          </button>
+          {isClient ? (
+            <>
+              <p className="text-slate-500 mb-2">No portfolios shared with you yet.</p>
+              <p className="text-sm text-slate-400 mb-6">Ask your advisor for an invite link to get started.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-500 mb-2">No portfolios yet.</p>
+              <p className="text-sm text-slate-400 mb-6">Build your first portfolio to start tracking performance.</p>
+              <button className="btn-primary" onClick={() => setShowNew(true)}>
+                <Plus className="w-4 h-4" />
+                Build your first portfolio →
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -204,16 +235,16 @@ export default function Dashboard() {
                 <div
                   key={p.id}
                   className="card p-4 flex items-center justify-between gap-3 cursor-pointer active:bg-slate-50"
-                  onClick={() => navigate(`/portfolio/${p.id}`)}
+                  onClick={() => navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <input
+                    {!isClient && <input
                       type="checkbox"
                       className="rounded border-slate-300 flex-shrink-0"
                       checked={selected.has(p.id)}
                       onChange={(e) => { e.stopPropagation(); toggleSelect(p.id); }}
                       onClick={(e) => e.stopPropagation()}
-                    />
+                    />}
                     <div className="min-w-0">
                       <div className="font-semibold text-slate-900 truncate">{p.name}</div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -272,15 +303,15 @@ export default function Dashboard() {
                       <tr
                         key={p.id}
                         className="hover:bg-slate-50 cursor-pointer"
-                        onClick={() => navigate(`/portfolio/${p.id}`)}
+                        onClick={() => navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`)}
                       >
                         <td className="td" onClick={(e) => e.stopPropagation()}>
-                          <input
+                          {!isClient && <input
                             type="checkbox"
                             className="rounded border-slate-300"
                             checked={selected.has(p.id)}
                             onChange={() => toggleSelect(p.id)}
-                          />
+                          />}
                         </td>
                         <td className="td">
                           <div className="font-semibold text-slate-900">{p.name}</div>

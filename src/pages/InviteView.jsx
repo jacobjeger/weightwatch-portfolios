@@ -62,8 +62,8 @@ export default function InviteView() {
     if (user && invite && !accepted) {
       acceptInvite(user.id, invite);
       setAccepted(true);
-      // Give the user a moment to see the "Invite accepted" banner, then redirect
-      setTimeout(() => navigate('/client-portal'), 1500);
+      // Give the user a moment to see the "Invite accepted" banner, then redirect to Client Portal
+      setTimeout(() => navigate('/client-portal', { replace: true }), 1200);
     }
   }, [user, invite, accepted, navigate]);
 
