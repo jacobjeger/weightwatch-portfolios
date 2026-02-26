@@ -54,7 +54,7 @@ export default function PortfolioBuilder() {
   const [showInvite, setShowInvite]       = useState(false);   // invite client modal
   const [inviteEmail, setInviteEmail]     = useState('');
   const [inviteUrl, setInviteUrl]         = useState(null);
-  const [linkedClient, setLinkedClient]   = useState(null);  // client email linked via invite
+  const [linkedClient, setLinkedClient]   = useState(null);  // { email, accepted } linked via invite
 
   // Collapsible section toggles
   const [holdingsOpen, setHoldingsOpen]     = useState(true);
@@ -96,7 +96,7 @@ export default function PortfolioBuilder() {
   // Look up which client is linked to this portfolio (for advisor display)
   useEffect(() => {
     if (isNew || !portfolioId || role === 'client') return;
-    getLinkedClient(portfolioId).then((email) => { if (email) setLinkedClient(email); });
+    getLinkedClient(portfolioId).then((info) => { if (info) setLinkedClient(info); });
   }, [portfolioId, isNew, role]);
 
   // Load + subscribe real-time prices whenever holdings or benchmark change
@@ -544,8 +544,15 @@ export default function PortfolioBuilder() {
           <h1 className="text-lg sm:text-xl font-bold text-slate-900">Portfolio Builder</h1>
           <StatusBadge status={status} totalWeight={totalWeight} />
           {linkedClient && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
-              <User className="w-3 h-3" /> {linkedClient}
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                linkedClient.accepted
+                  ? 'bg-green-50 text-green-700'
+                  : 'bg-red-50 text-red-700'
+              }`}
+              title={linkedClient.accepted ? 'Client account set up' : 'Client has not yet accepted invite'}
+            >
+              <User className="w-3 h-3" /> {linkedClient.email}
             </span>
           )}
         </div>

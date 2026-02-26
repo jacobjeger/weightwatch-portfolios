@@ -799,21 +799,26 @@ export function sendMessage(message) {
 }
 
 // Look up the client email linked to a portfolio (from invites)
+// Returns { email, accepted } or null
 export async function getLinkedClient(portfolioId) {
   // Check localStorage first
   const invites = Object.values(lsGet(LS.invites, {}));
   const match = invites.find((inv) => inv.portfolio_ids?.includes(portfolioId));
-  if (match?.client_email) return match.client_email;
+  if (match?.client_email) {
+    return { email: match.client_email, accepted: !!match.accepted_at };
+  }
 
   // Try Supabase
   if (isSupabaseConfigured) {
     try {
       const { data } = await supabase
         .from('invites')
-        .select('client_email')
+        .select('client_email, accepted_at')
         .contains('portfolio_ids', [portfolioId])
         .maybeSingle();
-      if (data?.client_email) return data.client_email;
+      if (data?.client_email) {
+        return { email: data.client_email, accepted: !!data.accepted_at };
+      }
     } catch { /* fall through */ }
   }
   return null;

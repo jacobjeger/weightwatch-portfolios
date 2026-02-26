@@ -26,7 +26,7 @@ function yahooFinanceProxy() {
 
         try {
           const resp = await fetch(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WeightWatch/1.0)' },
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AJAWealth/1.0)' },
           });
           const body = await resp.text();
           res.statusCode = resp.ok ? 200 : resp.status;
