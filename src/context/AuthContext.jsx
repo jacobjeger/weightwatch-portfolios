@@ -356,8 +356,14 @@ export async function syncFromSupabase(userId, userEmail) {
       .maybeSingle();
     if (!error && data) {
       if (data.data) {
-        lsSet(LS.portfolios, data.data);
-        console.info('[Sync] Portfolios loaded from Supabase (' + data.data.length + ' portfolios)');
+        // Merge instead of overwrite — preserve portfolio snapshots stored by acceptInvite
+        const existing = lsGet(LS.portfolios, []);
+        const synced = data.data;
+        const syncedIds = new Set(synced.map((p) => p.id));
+        // Keep local portfolios that aren't in the Supabase set (e.g. shared snapshots)
+        const kept = existing.filter((p) => !syncedIds.has(p.id));
+        lsSet(LS.portfolios, [...synced, ...kept]);
+        console.info('[Sync] Portfolios loaded from Supabase (' + synced.length + ' synced, ' + kept.length + ' local kept)');
       }
       if (data.settings) {
         const allSettings = lsGet(LS.settings, {});
@@ -377,24 +383,36 @@ export async function syncFromSupabase(userId, userEmail) {
     const invites = lsGet(LS.invites, {});
     const clients = lsGet(LS.clients, {});
 
+    // Helper: merge an invite's portfolio_ids into the client entry
+    function mergeInvite(inv) {
+      invites[inv.token] = inv;
+      const existing = clients[userId];
+      const existingPids = existing?.portfolio_ids ?? [];
+      const newPids = inv.portfolio_ids ?? [];
+      const merged = [...new Set([...existingPids, ...newPids])];
+      clients[userId] = {
+        advisor_id: inv.advisor_id ?? existing?.advisor_id ?? null,
+        portfolio_ids: merged,
+        accepted_at: existing?.accepted_at ?? inv.accepted_at ?? new Date().toISOString(),
+      };
+      // Also store portfolio snapshot if present so getPortfolios can find it
+      if (inv.portfolio_snapshot) {
+        const all = lsGet(LS.portfolios, []);
+        const snap = inv.portfolio_snapshot;
+        const idx = all.findIndex((p) => p.id === snap.id);
+        if (idx >= 0) all[idx] = { ...all[idx], ...snap };
+        else all.push(snap);
+        lsSet(LS.portfolios, all);
+      }
+    }
+
     // Fetch invites where this user's email was invited
     if (userEmail) {
       const { data: invData } = await supabase
         .from('invites')
         .select('*')
         .eq('client_email', userEmail);
-      if (invData?.length) {
-        invData.forEach((inv) => {
-          invites[inv.token] = inv;
-          if (!clients[userId]) {
-            clients[userId] = {
-              advisor_id: inv.advisor_id,
-              portfolio_ids: inv.portfolio_ids,
-              accepted_at: inv.accepted_at || new Date().toISOString(),
-            };
-          }
-        });
-      }
+      if (invData?.length) invData.forEach(mergeInvite);
     }
 
     // Also fetch invites this user already accepted (by user ID)
@@ -402,18 +420,7 @@ export async function syncFromSupabase(userId, userEmail) {
       .from('invites')
       .select('*')
       .eq('accepted_by', userId);
-    if (acceptedInvs?.length) {
-      acceptedInvs.forEach((inv) => {
-        invites[inv.token] = inv;
-        if (!clients[userId]) {
-          clients[userId] = {
-            advisor_id: inv.advisor_id,
-            portfolio_ids: inv.portfolio_ids,
-            accepted_at: inv.accepted_at || new Date().toISOString(),
-          };
-        }
-      });
-    }
+    if (acceptedInvs?.length) acceptedInvs.forEach(mergeInvite);
 
     lsSet(LS.invites, invites);
     lsSet(LS.clients, clients);
