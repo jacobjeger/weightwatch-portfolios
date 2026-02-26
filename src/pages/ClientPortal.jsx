@@ -74,6 +74,24 @@ export default function ClientPortal() {
 
   const benchLabel = benchmark ? (BENCHMARK_META[benchmark]?.label ?? benchmark) : null;
 
+  // Drifted weights using live prices (same logic as PortfolioBuilder)
+  // Must be computed before sinceReturn which depends on it
+  const currentWeights = useMemo(() => {
+    if (!holdings.length) return {};
+    const rows = holdings.map((h) => {
+      const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
+      const entryPrice = h.entry_price ?? h.last_price;
+      const ratio = (entryPrice && entryPrice > 0) ? currentPrice / entryPrice : 1;
+      return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
+    });
+    const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
+    if (!denom) return {};
+    return Object.fromEntries(rows.map((r) => [r.ticker, {
+      driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
+      ratio: r.ratio,
+    }]));
+  }, [holdings, prices, live]);
+
   // Compute performance metrics — prefer real data, fall back to mock
   const ytdReturn = realReturns?.portfolio?.['YTD'] != null
     ? realReturns.portfolio['YTD']
@@ -97,23 +115,6 @@ export default function ClientPortal() {
   const benchYtd = realReturns?.benchmark?.['YTD'] != null
     ? realReturns.benchmark['YTD']
     : (benchmark ? parseFloat(getYTDReturn(benchmark)) : null);
-
-  // Drifted weights using live prices (same logic as PortfolioBuilder)
-  const currentWeights = useMemo(() => {
-    if (!holdings.length) return {};
-    const rows = holdings.map((h) => {
-      const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
-      const entryPrice = h.entry_price ?? h.last_price;
-      const ratio = (entryPrice && entryPrice > 0) ? currentPrice / entryPrice : 1;
-      return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
-    });
-    const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
-    if (!denom) return {};
-    return Object.fromEntries(rows.map((r) => [r.ticker, {
-      driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
-      ratio: r.ratio,
-    }]));
-  }, [holdings, prices, live]);
 
   const cashPercent = portfolio?.cash_percent ?? 0;
   const currentPortfolioValue = useMemo(() => {
