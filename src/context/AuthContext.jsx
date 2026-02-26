@@ -37,10 +37,12 @@ function mockSignUp(email, password, accountType = 'advisor') {
   lsSet(LS.session, user);
 
   if (accountType === 'client') {
-    // Mark as client with no advisor yet — they'll get linked when they accept an invite
+    // Mark as client with no advisor yet
     const clients = lsGet(LS.clients, {});
     clients[user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
     lsSet(LS.clients, clients);
+    // Auto-accept any pending invites for this email
+    autoLinkInvites(user.id, email);
   } else {
     // Seed demo portfolios for advisors only
     const existing = lsGet(LS.portfolios, []);
@@ -51,12 +53,58 @@ function mockSignUp(email, password, accountType = 'advisor') {
   return user;
 }
 
+// Auto-accept any pending invites that match this user's email.
+// Called during sign-in and sign-up so localStorage has the right data
+// before React state updates trigger child component renders.
+function autoLinkInvites(userId, email) {
+  const invites = lsGet(LS.invites, {});
+  const clients = lsGet(LS.clients, {});
+  if (!clients[userId]) return; // not a client account
+
+  let changed = false;
+  Object.values(invites).forEach((inv) => {
+    if (
+      inv.client_email?.toLowerCase() === email?.toLowerCase() &&
+      !inv.accepted_by
+    ) {
+      const existing = clients[userId];
+      const existingPids = existing?.portfolio_ids ?? [];
+      const newPids = inv.portfolio_ids ?? [];
+      const merged = [...new Set([...existingPids, ...newPids])];
+      clients[userId] = {
+        advisor_id: inv.advisor_id ?? existing?.advisor_id ?? null,
+        portfolio_ids: merged,
+        accepted_at: existing?.accepted_at ?? new Date().toISOString(),
+      };
+      inv.accepted_by = userId;
+      inv.accepted_at = inv.accepted_at ?? new Date().toISOString();
+
+      // Store portfolio snapshot so getPortfolios can find it
+      if (inv.portfolio_snapshot) {
+        const all = lsGet(LS.portfolios, []);
+        const snap = inv.portfolio_snapshot;
+        const idx = all.findIndex((p) => p.id === snap.id);
+        if (idx >= 0) all[idx] = { ...all[idx], ...snap };
+        else all.push(snap);
+        lsSet(LS.portfolios, all);
+      }
+      changed = true;
+    }
+  });
+  if (changed) {
+    lsSet(LS.clients, clients);
+    lsSet(LS.invites, invites);
+  }
+}
+
 function mockSignIn(email, password) {
   const users = lsGet(LS.users, {});
   const stored = users[email];
   if (!stored || stored.password !== password) throw new Error('Invalid email or password.');
   const user = { id: stored.id, email: stored.email };
   lsSet(LS.session, user);
+  // Auto-accept any pending invites for this email
+  autoLinkInvites(user.id, email);
   return user;
 }
 
@@ -130,6 +178,8 @@ export function AuthProvider({ children }) {
       return () => subscription.unsubscribe();
     } else {
       const stored = lsGet(LS.session);
+      // Auto-link any new invites on session restore (e.g. advisor invited after client signed up)
+      if (stored) autoLinkInvites(stored.id, stored.email);
       setUser(stored ?? null);
       setLoading(false);
     }
