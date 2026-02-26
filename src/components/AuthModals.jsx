@@ -1,6 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+/** Detect rate-limit errors from Supabase and return a friendly message, or null. */
+function rateLimitMsg(err) {
+  const msg = (err?.message || '').toLowerCase();
+  if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('rate_limit')) {
+    return 'Too many attempts — please wait a minute and try again.';
+  }
+  return null;
+}
 
 function Field({ label, type, value, onChange, error }) {
   const [show, setShow] = useState(false);
@@ -38,6 +47,13 @@ export function LoginModal({ onClose, onSwitchToSignUp }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [cooldown > 0]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -47,11 +63,15 @@ export function LoginModal({ onClose, onSwitchToSignUp }) {
       await signIn(email, password);
       onClose();
     } catch (err) {
-      setError(err.message);
+      const friendly = rateLimitMsg(err);
+      if (friendly) { setError(friendly); setCooldown(60); }
+      else setError(err.message);
     } finally {
       setLoading(false);
     }
   }
+
+  const disabled = loading || cooldown > 0;
 
   return (
     <ModalShell title="Log In" onClose={onClose}>
@@ -59,8 +79,8 @@ export function LoginModal({ onClose, onSwitchToSignUp }) {
         <Field label="Email" type="email" value={email} onChange={setEmail} />
         <Field label="Password" type="password" value={password} onChange={setPassword} />
         {error && <p className="text-sm text-red-500">{error}</p>}
-        <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
-          {loading ? 'Logging in…' : 'Log In'}
+        <button type="submit" className="btn-primary w-full justify-center" disabled={disabled}>
+          {loading ? 'Logging in…' : cooldown > 0 ? `Try again in ${cooldown}s` : 'Log In'}
         </button>
         <p className="text-center text-sm text-slate-500">
           Don't have an account?{' '}
@@ -88,6 +108,20 @@ export function SignUpModal({ onClose, onSwitchToLogin }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [cooldown > 0]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setInterval(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [resendCooldown > 0]);
 
   function validate() {
     const errs = {};
@@ -107,9 +141,20 @@ export function SignUpModal({ onClose, onSwitchToLogin }) {
       await signUp(email, password, accountType);
       setSent(true);
     } catch (err) {
-      setErrors({ general: err.message });
+      const friendly = rateLimitMsg(err);
+      if (friendly) { setErrors({ general: friendly }); setCooldown(60); }
+      else setErrors({ general: err.message });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setResendCooldown(60);
+    try {
+      await signUp(email, password, accountType);
+    } catch {
+      // silently ignore — cooldown prevents spam
     }
   }
 
@@ -121,8 +166,24 @@ export function SignUpModal({ onClose, onSwitchToLogin }) {
             We sent a confirmation link to <span className="font-medium text-slate-900">{email}</span>.
             Click it to activate your account.
           </p>
-          <p className="text-xs text-slate-400">Don't see it? Check your spam folder.</p>
-          <button className="btn-primary w-full justify-center" onClick={onClose}>Done</button>
+          <p className="text-xs text-slate-400">Don't see it? Check your spam folder or try resending.</p>
+          <div className="flex gap-2">
+            <button
+              className="btn-primary flex-1 justify-center text-sm"
+              disabled={resendCooldown > 0}
+              onClick={handleResend}
+            >
+              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Email'}
+            </button>
+            <button className="btn-secondary flex-1 justify-center text-sm" onClick={onClose}>Done</button>
+          </div>
+          <button
+            type="button"
+            className="text-xs text-slate-500 hover:text-blue-600 hover:underline"
+            onClick={() => { setSent(false); setEmail(''); }}
+          >
+            Use a different email
+          </button>
         </div>
       </ModalShell>
     );
@@ -210,8 +271,8 @@ export function SignUpModal({ onClose, onSwitchToLogin }) {
         <Field label="Password" type="password" value={password} onChange={setPassword} error={errors.password} />
         <Field label="Confirm Password" type="password" value={confirm} onChange={setConfirm} error={errors.confirm} />
         {errors.general && <p className="text-sm text-red-500">{errors.general}</p>}
-        <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
-          {loading ? 'Creating account…' : 'Sign Up'}
+        <button type="submit" className="btn-primary w-full justify-center" disabled={loading || cooldown > 0}>
+          {loading ? 'Creating account…' : cooldown > 0 ? `Try again in ${cooldown}s` : 'Sign Up'}
         </button>
         <p className="text-center text-sm text-slate-500">
           Already have an account?{' '}

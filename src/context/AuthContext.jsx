@@ -141,7 +141,10 @@ export function AuthProvider({ children }) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { account_type: accountType } },
+        options: {
+          data: { account_type: accountType },
+          emailRedirectTo: window.location.origin,
+        },
       });
       if (error) throw error;
       // If client account, mark in clients mapping

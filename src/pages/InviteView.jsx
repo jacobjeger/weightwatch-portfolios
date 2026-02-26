@@ -21,6 +21,13 @@ export default function InviteView() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [cooldown > 0]);
 
   useEffect(() => {
     getInvite(token).then((inv) => {
@@ -80,9 +87,9 @@ export default function InviteView() {
       // acceptInvite is called by the useEffect above once user is set
     } catch (err) {
       const msg = err.message || 'Authentication failed';
-      // Provide a friendlier message for Supabase rate limits
-      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many')) {
-        setAuthError('Too many attempts. Please wait a minute and try again.');
+      if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many') || msg.toLowerCase().includes('rate_limit')) {
+        setAuthError('Too many attempts — please wait a minute and try again.');
+        setCooldown(60);
       } else {
         setAuthError(msg);
       }
@@ -169,10 +176,10 @@ export default function InviteView() {
               {authError && <p className="text-xs text-red-600">{authError}</p>}
               <button
                 type="submit"
-                disabled={authLoading}
+                disabled={authLoading || cooldown > 0}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-50"
               >
-                {authLoading ? 'Please wait…' : mode === 'signup' ? 'Create Client Account' : 'Log In'}
+                {authLoading ? 'Please wait…' : cooldown > 0 ? `Try again in ${cooldown}s` : mode === 'signup' ? 'Create Client Account' : 'Log In'}
               </button>
               <p className="text-xs text-slate-500 text-center">
                 {mode === 'signup' ? (
