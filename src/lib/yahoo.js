@@ -8,6 +8,22 @@
 const yahooCache = new Map();
 const CACHE_TTL  = 300_000; // 5 min — same as Finnhub candle cache
 
+// CBOE/Finnhub tickers → Yahoo Finance tickers for index data
+const YAHOO_TICKER_MAP = {
+  'SPX':  '^GSPC',
+  'NDX':  '^NDX',
+  'RUT':  '^RUT',
+  'DJI':  '^DJI',
+  'DJIA': '^DJI',
+  'VIX':  '^VIX',
+};
+
+function toYahooTicker(ticker) {
+  if (!ticker) return ticker;
+  const upper = ticker.toUpperCase();
+  return YAHOO_TICKER_MAP[upper] || ticker;
+}
+
 /** Clear the Yahoo candle cache (called by clearMarketCaches). */
 export function clearYahooCache() { yahooCache.clear(); }
 
@@ -19,6 +35,7 @@ export function clearYahooCache() { yahooCache.clear(); }
  * @returns {Promise<Array<{date: string, price: number}>>}
  */
 export async function getYahooCandles(ticker, fromDate, toDate) {
+  const yahooSymbol = toYahooTicker(ticker);
   const cacheKey = `yf:${ticker}:${fromDate}:${toDate}`;
   const cached = yahooCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
@@ -27,7 +44,7 @@ export async function getYahooCandles(ticker, fromDate, toDate) {
   const to   = Math.floor(new Date(toDate).getTime()   / 1000);
 
   const res = await fetch(
-    `/api/yahoo-chart?ticker=${encodeURIComponent(ticker)}&from=${from}&to=${to}`
+    `/api/yahoo-chart?ticker=${encodeURIComponent(yahooSymbol)}&from=${from}&to=${to}`
   );
 
   if (!res.ok) {

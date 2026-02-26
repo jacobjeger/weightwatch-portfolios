@@ -1,4 +1,4 @@
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 const PALETTE = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -38,13 +38,13 @@ export default function AllocationPieChart({ holdings }) {
   if (data.length === 0) return null;
 
   return (
-    <div className="flex justify-center">
-      <PieChart width={300} height={260}>
+    <ResponsiveContainer width="100%" height={260}>
+      <PieChart>
         <Pie
           data={data}
-          cx={150}
-          cy={125}
-          outerRadius={110}
+          cx="50%"
+          cy="50%"
+          outerRadius="85%"
           dataKey="value"
           labelLine={false}
           label={PctLabel}
@@ -55,6 +55,6 @@ export default function AllocationPieChart({ holdings }) {
         </Pie>
         <Tooltip formatter={(v, name) => [`${v.toFixed(1)}%`, name]} />
       </PieChart>
-    </div>
+    </ResponsiveContainer>
   );
 }

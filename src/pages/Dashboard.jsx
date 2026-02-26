@@ -12,9 +12,10 @@ import { useMarketData } from '../context/MarketDataContext';
 const TIMEFRAME_DAYS = { '1D': 1, '1M': 21, '3M': 63, 'YTD': null, '1Y': 252 };
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const { live, prices, loadTickers } = useMarketData();
+  const isClient = role === 'client';
 
   const [portfolios, setPortfolios] = useState([]);
   const [selected, setSelected] = useState(new Set());
@@ -116,18 +117,52 @@ export default function Dashboard() {
     return parseFloat(getPortfolioReturn(holdings, days));
   }
 
+  // Compute current portfolio value using live prices when available
+  function computeValue(p) {
+    const sv = p.starting_value || 0;
+    if (!(p.holdings?.length) || !sv) return sv;
+    const cashPct = p.cash_percent ?? 0;
+    const investedFrac = 1 - cashPct / 100;
+    const growthFactor = p.holdings.reduce((s, h) => {
+      const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
+      const entryPrice = h.entry_price ?? h.last_price;
+      const ratio = entryPrice > 0 ? currentPrice / entryPrice : 1;
+      return s + (h.weight_percent / 100) * ratio;
+    }, 0);
+    return sv * (growthFactor * investedFrac + cashPct / 100);
+  }
+
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
+      {/* Redirect clients to Client Portal */}
+      {isClient && portfolios.length > 0 && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-emerald-800">Welcome to your Client Portal</p>
+            <p className="text-xs text-emerald-600">View your managed portfolios and communicate with your advisor.</p>
+          </div>
+          <button
+            onClick={() => navigate('/client-portal')}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            Open Portal
+          </button>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">My Portfolios</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+            {isClient ? 'My Managed Portfolios' : 'My Portfolios'}
+          </h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
+            {isClient && ' · managed by your advisor'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {selected.size > 0 && (
+        <div className="flex items-center gap-2 sm:gap-3">
+          {!isClient && selected.size > 0 && (
             <button
               className="btn-danger"
               onClick={() => setShowDelete(true)}
@@ -136,15 +171,18 @@ export default function Dashboard() {
               Delete {selected.size}
             </button>
           )}
-          <button className="btn-primary" onClick={() => setShowNew(true)}>
-            <Plus className="w-4 h-4" />
-            New Portfolio
-          </button>
+          {!isClient && (
+            <button className="btn-primary" onClick={() => setShowNew(true)}>
+              <Plus className="w-4 h-4" />
+              <span className="hidden xs:inline">New Portfolio</span>
+              <span className="xs:hidden">New</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Performance timeframe selector */}
-      <div className="flex items-center gap-1 mb-3">
+      <div className="flex flex-wrap items-center gap-1 mb-3">
         <span className="text-xs text-slate-500 mr-2">Performance:</span>
         {Object.keys(TIMEFRAME_DAYS).map((tf) => (
           <button
@@ -168,12 +206,21 @@ export default function Dashboard() {
       {portfolios.length === 0 ? (
         <div className="card p-16 text-center">
           <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500 mb-2">No portfolios yet.</p>
-          <p className="text-sm text-slate-400 mb-6">Build your first portfolio to start tracking performance.</p>
-          <button className="btn-primary" onClick={() => setShowNew(true)}>
-            <Plus className="w-4 h-4" />
-            Build your first portfolio →
-          </button>
+          {isClient ? (
+            <>
+              <p className="text-slate-500 mb-2">No portfolios shared with you yet.</p>
+              <p className="text-sm text-slate-400 mb-6">Ask your advisor for an invite link to get started.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-500 mb-2">No portfolios yet.</p>
+              <p className="text-sm text-slate-400 mb-6">Build your first portfolio to start tracking performance.</p>
+              <button className="btn-primary" onClick={() => setShowNew(true)}>
+                <Plus className="w-4 h-4" />
+                Build your first portfolio →
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -188,16 +235,16 @@ export default function Dashboard() {
                 <div
                   key={p.id}
                   className="card p-4 flex items-center justify-between gap-3 cursor-pointer active:bg-slate-50"
-                  onClick={() => navigate(`/portfolio/${p.id}`)}
+                  onClick={() => navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <input
+                    {!isClient && <input
                       type="checkbox"
                       className="rounded border-slate-300 flex-shrink-0"
                       checked={selected.has(p.id)}
                       onChange={(e) => { e.stopPropagation(); toggleSelect(p.id); }}
                       onClick={(e) => e.stopPropagation()}
-                    />
+                    />}
                     <div className="min-w-0">
                       <div className="font-semibold text-slate-900 truncate">{p.name}</div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -213,7 +260,7 @@ export default function Dashboard() {
                       {ret != null ? `${ret > 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
                     </div>
                     <div className="text-xs text-slate-400">
-                      {p.starting_value ? `$${(p.starting_value / 1000).toFixed(0)}K · ` : ''}{p.holdings?.length ?? 0} holdings
+                      {p.starting_value ? `$${Math.round(computeValue(p)).toLocaleString()} · ` : ''}{p.holdings?.length ?? 0} holdings
                     </div>
                   </div>
                 </div>
@@ -256,15 +303,15 @@ export default function Dashboard() {
                       <tr
                         key={p.id}
                         className="hover:bg-slate-50 cursor-pointer"
-                        onClick={() => navigate(`/portfolio/${p.id}`)}
+                        onClick={() => navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`)}
                       >
                         <td className="td" onClick={(e) => e.stopPropagation()}>
-                          <input
+                          {!isClient && <input
                             type="checkbox"
                             className="rounded border-slate-300"
                             checked={selected.has(p.id)}
                             onChange={() => toggleSelect(p.id)}
-                          />
+                          />}
                         </td>
                         <td className="td">
                           <div className="font-semibold text-slate-900">{p.name}</div>
@@ -297,7 +344,7 @@ export default function Dashboard() {
                         </td>
                         <td className="td text-right font-mono text-slate-700 text-sm">
                           {p.starting_value
-                            ? `$${(p.starting_value / 1000).toFixed(0)}K`
+                            ? `$${Math.round(computeValue(p)).toLocaleString()}`
                             : '—'}
                         </td>
                         <td className="td">

@@ -173,15 +173,15 @@ export default function MeetingScheduler() {
     'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            <Calendar className="w-6 h-6 inline-block mr-2 text-blue-500" />
-            Meeting Scheduler
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+            <Calendar className="w-5 h-5 sm:w-6 sm:h-6 inline-block mr-2 text-blue-500" />
+            Meetings
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Schedule and manage meetings with {role === 'advisor' ? 'clients' : 'your advisor'}
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Schedule meetings with {role === 'advisor' ? 'clients' : 'your advisor'}
           </p>
         </div>
         <button
@@ -189,11 +189,12 @@ export default function MeetingScheduler() {
           onClick={() => { setShowNew(true); resetForm(); }}
         >
           <Plus className="w-4 h-4" />
-          New Meeting
+          <span className="hidden sm:inline">New Meeting</span>
+          <span className="sm:hidden">New</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Calendar view */}
         <div className="lg:col-span-2">
           <div className="card p-5">
@@ -225,32 +226,35 @@ export default function MeetingScheduler() {
 
             {/* Weekday headers */}
             <div className="grid grid-cols-7 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div key={d} className="text-center text-xs font-semibold text-slate-400 py-1">{d}</div>
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                <div key={i} className="text-center text-[10px] sm:text-xs font-semibold text-slate-400 py-1">
+                  <span className="sm:hidden">{d}</span>
+                  <span className="hidden sm:inline">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}</span>
+                </div>
               ))}
             </div>
 
             {/* Calendar grid */}
             <div className="grid grid-cols-7 gap-px">
               {calendarDays.map((day, i) => {
-                if (day === null) return <div key={`empty-${i}`} className="h-20" />;
+                if (day === null) return <div key={`empty-${i}`} className="h-14 sm:h-20" />;
                 const dateStr = `${viewMonth.year}-${(viewMonth.month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
                 const dayMeetings = meetingsByDate[dateStr] || [];
                 const isToday = dateStr === todayStr;
                 return (
                   <div
                     key={dateStr}
-                    className={`h-20 p-1 border border-slate-100 rounded ${
+                    className={`h-14 sm:h-20 p-0.5 sm:p-1 border border-slate-100 rounded ${
                       isToday ? 'bg-blue-50 border-blue-200' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className={`text-xs font-medium mb-0.5 ${isToday ? 'text-blue-600' : 'text-slate-600'}`}>
+                    <div className={`text-[10px] sm:text-xs font-medium mb-0.5 ${isToday ? 'text-blue-600' : 'text-slate-600'}`}>
                       {day}
                     </div>
                     {dayMeetings.slice(0, 2).map((m) => (
                       <div
                         key={m.id}
-                        className={`text-[10px] truncate rounded px-1 py-0.5 mb-0.5 ${
+                        className={`text-[10px] truncate rounded px-0.5 sm:px-1 py-0.5 mb-0.5 ${
                           m.status === 'cancelled' ? 'bg-slate-100 text-slate-400 line-through' :
                           m.type === 'video' ? 'bg-blue-100 text-blue-700' :
                           m.type === 'phone' ? 'bg-green-100 text-green-700' :

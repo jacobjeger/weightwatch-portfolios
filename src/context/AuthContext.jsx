@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { createDemoPortfolios } from '../lib/mockData';
 
@@ -11,7 +11,7 @@ const LS = {
   settings: 'wwp_settings',
   shares: 'wwp_shares',
   invites: 'wwp_invites',
-  clients: 'wwp_clients', // { [userId]: { advisor_id, portfolio_ids } }
+  clients: 'wwp_clients', // { [userId]: { advisor_id, portfolio_ids, accepted_at } }
   messages: 'wwp_messages',
 };
 
@@ -28,17 +28,25 @@ function lsSet(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function mockSignUp(email, password) {
+function mockSignUp(email, password, accountType = 'advisor') {
   const users = lsGet(LS.users, {});
   if (users[email]) throw new Error('An account with this email already exists.');
   const user = { id: crypto.randomUUID(), email };
   users[email] = { ...user, password };
   lsSet(LS.users, users);
   lsSet(LS.session, user);
-  // seed demo portfolios
-  const existing = lsGet(LS.portfolios, []);
-  if (!existing.find((p) => p.owner === user.id)) {
-    lsSet(LS.portfolios, [...existing, ...createDemoPortfolios(user.id)]);
+
+  if (accountType === 'client') {
+    // Mark as client with no advisor yet — they'll get linked when they accept an invite
+    const clients = lsGet(LS.clients, {});
+    clients[user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
+    lsSet(LS.clients, clients);
+  } else {
+    // Seed demo portfolios for advisors only
+    const existing = lsGet(LS.portfolios, []);
+    if (!existing.find((p) => p.owner === user.id)) {
+      lsSet(LS.portfolios, [...existing, ...createDemoPortfolios(user.id)]);
+    }
   }
   return user;
 }
@@ -70,11 +78,26 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('advisor'); // 'advisor' | 'client'
 
-  // Detect role when user changes
+  // Detect role when user changes.
+  // An account is only a "client" if it was explicitly created as one AND does
+  // not own any portfolios.  Advisors who test their own invite links get an
+  // entry in the clients map but should still behave as advisors.
   useEffect(() => {
     if (user) {
       const clients = lsGet(LS.clients, {});
-      setRole(clients[user.id] ? 'client' : 'advisor');
+      const clientEntry = clients[user.id];
+      const portfolios = lsGet(LS.portfolios, []);
+      const ownsPortfolios = portfolios.some((p) => p.owner === user.id);
+
+      // If the user owns portfolios, they are an advisor regardless of
+      // whether they also appear in the clients map.
+      if (ownsPortfolios) {
+        setRole('advisor');
+      } else if (clientEntry) {
+        setRole('client');
+      } else {
+        setRole('advisor');
+      }
     } else {
       setRole('advisor');
     }
@@ -86,8 +109,11 @@ export function AuthProvider({ children }) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         const u = session?.user ?? null;
         setUser(u);
-        if (u) syncFromSupabase(u.id).finally(() => setLoading(false));
+        if (u) syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
         else setLoading(false);
+      }).catch((err) => {
+        console.error('[Auth] Session fetch failed:', err);
+        setLoading(false);
       });
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         const u = session?.user ?? null;
@@ -95,9 +121,9 @@ export function AuthProvider({ children }) {
         if (u) {
           if (_event === 'SIGNED_IN') {
             setLoading(true);
-            syncFromSupabase(u.id).finally(() => setLoading(false));
+            syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
           } else {
-            syncFromSupabase(u.id);
+            syncFromSupabase(u.id, u.email);
           }
         }
       });
@@ -110,13 +136,23 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Auth actions ────────────────────────────────────────────────────────────
-  async function signUp(email, password) {
+  async function signUp(email, password, accountType = 'advisor') {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { account_type: accountType } },
+      });
       if (error) throw error;
+      // If client account, mark in clients mapping
+      if (accountType === 'client' && data.user) {
+        const clients = lsGet(LS.clients, {});
+        clients[data.user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
+        lsSet(LS.clients, clients);
+      }
       return data.user;
     }
-    const u = mockSignUp(email, password);
+    const u = mockSignUp(email, password, accountType);
     setUser(u);
     return u;
   }
@@ -152,8 +188,95 @@ export function AuthProvider({ children }) {
     return mockResetPassword(email);
   }
 
+  // Refresh client portfolios by re-syncing from advisor's data in Supabase
+  const refreshClientPortfolios = useCallback(async () => {
+    if (!user) return;
+    const clientData = lsGet(LS.clients, {})[user.id];
+    if (!clientData?.advisor_id) return;
+
+    // Sync advisor's portfolios from Supabase to get latest changes
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('user_portfolios')
+          .select('data')
+          .eq('user_id', clientData.advisor_id)
+          .maybeSingle();
+        if (!error && data?.data) {
+          const advisorPortfolios = data.data;
+          const all = lsGet(LS.portfolios, []);
+          // Replace advisor's portfolios that are linked to this client
+          const linkedIds = new Set(clientData.portfolio_ids || []);
+          const withoutLinked = all.filter((p) => !linkedIds.has(p.id));
+          const linkedFromAdvisor = advisorPortfolios.filter((p) => linkedIds.has(p.id));
+          lsSet(LS.portfolios, [...withoutLinked, ...linkedFromAdvisor]);
+          console.info('[Sync] Client portfolios refreshed from advisor data');
+        }
+      } catch (e) {
+        console.warn('[Sync] Client portfolio refresh failed:', e.message);
+      }
+    }
+  }, [user]);
+
+  // Delete all account data and the account itself
+  async function deleteAccount() {
+    if (!user) return;
+    const userId = user.id;
+    const email = user.email;
+
+    // 1) Delete from Supabase tables (best-effort)
+    if (isSupabaseConfigured) {
+      try { await supabase.from('user_portfolios').delete().eq('user_id', userId); } catch {}
+      try { await supabase.from('invites').delete().or(`advisor_id.eq.${userId},accepted_by.eq.${userId}`); } catch {}
+      try { await supabase.from('messages').delete().eq('sender_id', userId); } catch {}
+      try { await supabase.from('activity_log').delete().eq('user_id', userId); } catch {}
+      try { await supabase.from('share_tokens').delete().eq('owner_id', userId); } catch {}
+    }
+
+    // 2) Clear all localStorage data for this user
+    const portfolios = lsGet(LS.portfolios, []).filter((p) => p.owner !== userId);
+    lsSet(LS.portfolios, portfolios);
+
+    const settings = lsGet(LS.settings, {});
+    delete settings[userId];
+    lsSet(LS.settings, settings);
+
+    const clients = lsGet(LS.clients, {});
+    delete clients[userId];
+    lsSet(LS.clients, clients);
+
+    const activity = lsGet(LS.activity, []).filter((a) => a.user_id !== userId);
+    lsSet(LS.activity, activity);
+
+    const messages = lsGet(LS.messages, []).filter((m) => m.sender_id !== userId);
+    lsSet(LS.messages, messages);
+
+    // Remove invites created by or accepted by this user
+    const invites = lsGet(LS.invites, {});
+    for (const [token, inv] of Object.entries(invites)) {
+      if (inv.advisor_id === userId || inv.accepted_by === userId) delete invites[token];
+    }
+    lsSet(LS.invites, invites);
+
+    // Remove mock user entry
+    const users = lsGet(LS.users, {});
+    if (email && users[email]) {
+      delete users[email];
+      lsSet(LS.users, users);
+    }
+
+    // 3) Sign out
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    } else {
+      mockSignOut();
+    }
+    setUser(null);
+    localStorage.removeItem(LS.session);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, isMockMode: !isSupabaseConfigured }}>
+    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, deleteAccount, isMockMode: !isSupabaseConfigured }}>
       {children}
     </AuthContext.Provider>
   );
@@ -168,19 +291,27 @@ export function useAuth() {
 // All other tables may not exist or may have schema mismatches, so each is
 // wrapped in try/catch and failures are non-fatal.
 
-export async function syncFromSupabase(userId) {
+export async function syncFromSupabase(userId, userEmail) {
   if (!isSupabaseConfigured || !userId) return;
 
-  // 1) Portfolios — the critical sync path (user_portfolios table with JSONB)
+  // 1) Portfolios + settings — the critical sync path (user_portfolios table with JSONB)
   try {
     const { data, error } = await supabase
       .from('user_portfolios')
-      .select('data')
+      .select('data, settings')
       .eq('user_id', userId)
       .maybeSingle();
-    if (!error && data?.data) {
-      lsSet(LS.portfolios, data.data);
-      console.info('[Sync] Portfolios loaded from Supabase (' + data.data.length + ' portfolios)');
+    if (!error && data) {
+      if (data.data) {
+        lsSet(LS.portfolios, data.data);
+        console.info('[Sync] Portfolios loaded from Supabase (' + data.data.length + ' portfolios)');
+      }
+      if (data.settings) {
+        const allSettings = lsGet(LS.settings, {});
+        allSettings[userId] = { ...DEFAULT_SETTINGS, ...data.settings };
+        lsSet(LS.settings, allSettings);
+        console.info('[Sync] Settings loaded from Supabase');
+      }
     } else if (error) {
       console.warn('[Sync] Portfolio fetch error:', error.message);
     }
@@ -188,16 +319,38 @@ export async function syncFromSupabase(userId) {
     console.warn('[Sync] Portfolio fetch failed:', e.message);
   }
 
-  // 2) Invites — pull any invites where this user email was invited
+  // 2) Invites — pull by client email AND by accepted_by user ID
   try {
-    const { data: invData } = await supabase
+    const invites = lsGet(LS.invites, {});
+    const clients = lsGet(LS.clients, {});
+
+    // Fetch invites where this user's email was invited
+    if (userEmail) {
+      const { data: invData } = await supabase
+        .from('invites')
+        .select('*')
+        .eq('client_email', userEmail);
+      if (invData?.length) {
+        invData.forEach((inv) => {
+          invites[inv.token] = inv;
+          if (!clients[userId]) {
+            clients[userId] = {
+              advisor_id: inv.advisor_id,
+              portfolio_ids: inv.portfolio_ids,
+              accepted_at: inv.accepted_at || new Date().toISOString(),
+            };
+          }
+        });
+      }
+    }
+
+    // Also fetch invites this user already accepted (by user ID)
+    const { data: acceptedInvs } = await supabase
       .from('invites')
       .select('*')
-      .eq('client_email', userId);
-    if (invData?.length) {
-      const invites = lsGet(LS.invites, {});
-      const clients = lsGet(LS.clients, {});
-      invData.forEach((inv) => {
+      .eq('accepted_by', userId);
+    if (acceptedInvs?.length) {
+      acceptedInvs.forEach((inv) => {
         invites[inv.token] = inv;
         if (!clients[userId]) {
           clients[userId] = {
@@ -207,11 +360,12 @@ export async function syncFromSupabase(userId) {
           };
         }
       });
-      lsSet(LS.invites, invites);
-      lsSet(LS.clients, clients);
     }
-  } catch {
-    // Table may not exist — silently skip
+
+    lsSet(LS.invites, invites);
+    lsSet(LS.clients, clients);
+  } catch (e) {
+    console.warn('[Sync] Invites fetch failed:', e.message);
   }
 
   // 3) Messages
@@ -227,8 +381,8 @@ export async function syncFromSupabase(userId) {
       const merged = [...existing, ...msgData.filter((m) => !existingIds.has(m.id))];
       lsSet(LS.messages, merged);
     }
-  } catch {
-    // Table may not exist — silently skip
+  } catch (e) {
+    console.warn('[Sync] Messages fetch failed:', e.message);
   }
 
   // 4) Activity log
@@ -245,8 +399,8 @@ export async function syncFromSupabase(userId) {
       const merged = [...actData.filter((a) => !existingIds.has(a.id)), ...existing].slice(0, 500);
       lsSet(LS.activity, merged);
     }
-  } catch {
-    // Table may not exist — silently skip
+  } catch (e) {
+    console.warn('[Sync] Activity log fetch failed:', e.message);
   }
 }
 
@@ -263,21 +417,24 @@ function pushToSupabase(userId, all) {
       } else {
         console.info('[Sync] Portfolios saved to Supabase');
       }
-    });
+    })
+    .catch((err) => console.error('[Sync] Portfolio save rejected:', err.message));
 }
 
 // Push a message to Supabase (best-effort — never blocks)
 function pushMessageToSupabase(msg) {
   if (!isSupabaseConfigured) return;
   supabase.from('messages').insert(msg)
-    .then(({ error }) => { if (error) console.warn('[Sync] Message write skipped:', error.message); });
+    .then(({ error }) => { if (error) console.warn('[Sync] Message write skipped:', error.message); })
+    .catch((err) => console.warn('[Sync] Message write rejected:', err.message));
 }
 
 // Push activity to Supabase (best-effort)
 function pushActivityToSupabase(entry) {
   if (!isSupabaseConfigured) return;
   supabase.from('activity_log').insert(entry)
-    .then(({ error }) => { if (error) console.warn('[Sync] Activity write skipped:', error.message); });
+    .then(({ error }) => { if (error) console.warn('[Sync] Activity write skipped:', error.message); })
+    .catch((err) => console.warn('[Sync] Activity write rejected:', err.message));
 }
 
 // ─── Portfolio data helpers ───────────────────────────────────────────────────
@@ -353,7 +510,29 @@ export function saveSettings(userId, partial) {
   const all = lsGet(LS.settings, {});
   all[userId] = { ...(all[userId] ?? DEFAULT_SETTINGS), ...partial };
   lsSet(LS.settings, all);
+  pushSettingsToSupabase(userId, all[userId]);
   return all[userId];
+}
+
+function pushSettingsToSupabase(userId, settings) {
+  if (!isSupabaseConfigured) return;
+  supabase
+    .from('user_portfolios')
+    .select('data')
+    .eq('user_id', userId)
+    .maybeSingle()
+    .then(({ data }) => {
+      const blob = data?.data || [];
+      supabase
+        .from('user_portfolios')
+        .upsert({ user_id: userId, data: blob, settings, updated_at: new Date().toISOString() })
+        .then(({ error }) => {
+          if (error) console.warn('[Sync] Settings save skipped:', error.message);
+          else console.info('[Sync] Settings saved to Supabase');
+        })
+        .catch((err) => console.warn('[Sync] Settings save rejected:', err.message));
+    })
+    .catch((err) => console.warn('[Sync] Settings fetch rejected:', err.message));
 }
 
 // ─── Share token helpers ───────────────────────────────────────────────────────
@@ -443,13 +622,101 @@ export async function getInvite(token) {
 }
 
 export function acceptInvite(userId, invite) {
+  const acceptedAt = new Date().toISOString();
   const clients = lsGet(LS.clients, {});
+  // Merge portfolio_ids if the client already has some from a previous invite
+  const existing = clients[userId];
+  const existingPortfolioIds = existing?.portfolio_ids ?? [];
+  const newPortfolioIds = invite.portfolio_ids ?? [];
+  const mergedPortfolioIds = [...new Set([...existingPortfolioIds, ...newPortfolioIds])];
+
   clients[userId] = {
     advisor_id: invite.advisor_id,
-    portfolio_ids: invite.portfolio_ids,
-    accepted_at: new Date().toISOString(),
+    portfolio_ids: mergedPortfolioIds,
+    accepted_at: existing?.accepted_at ?? acceptedAt,
   };
   lsSet(LS.clients, clients);
+
+  // Also store the portfolio snapshot in local portfolios so it's immediately available
+  if (invite.portfolio_snapshot) {
+    const all = lsGet(LS.portfolios, []);
+    const snap = invite.portfolio_snapshot;
+    const idx = all.findIndex((p) => p.id === snap.id);
+    if (idx >= 0) {
+      all[idx] = { ...all[idx], ...snap };
+    } else {
+      all.push(snap);
+    }
+    lsSet(LS.portfolios, all);
+  }
+
+  // Persist to Supabase so it survives browser changes
+  if (isSupabaseConfigured && invite.token) {
+    supabase
+      .from('invites')
+      .update({ accepted_by: userId, accepted_at: acceptedAt })
+      .eq('token', invite.token)
+      .then(({ error }) => {
+        if (error) console.warn('[Invite] Accept sync skipped:', error.message);
+        else console.info('[Invite] Acceptance saved to Supabase');
+      })
+      .catch((err) => console.warn('[Invite] Accept sync rejected:', err.message));
+  }
+
+  // Also try to pull the latest version of the portfolio from the advisor's data
+  if (isSupabaseConfigured && invite.advisor_id) {
+    supabase
+      .from('user_portfolios')
+      .select('data')
+      .eq('user_id', invite.advisor_id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data?.data) {
+          const advisorPortfolios = data.data;
+          const linkedIds = new Set(mergedPortfolioIds);
+          const all = lsGet(LS.portfolios, []);
+          const withoutLinked = all.filter((p) => !linkedIds.has(p.id));
+          const linkedFromAdvisor = advisorPortfolios.filter((p) => linkedIds.has(p.id));
+          if (linkedFromAdvisor.length) {
+            lsSet(LS.portfolios, [...withoutLinked, ...linkedFromAdvisor]);
+            console.info('[Invite] Synced latest portfolio data from advisor');
+          }
+        }
+      })
+      .catch((err) => console.warn('[Invite] Advisor portfolio sync failed:', err.message));
+  }
+}
+
+// ─── Email helpers ────────────────────────────────────────────────────────────
+// Sends an invite email via Supabase Edge Function or falls back to mailto: link.
+// For production, set up a Supabase Edge Function or an email API.
+export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteUrl }) {
+  // 1) Try Supabase Edge Function (if deployed)
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.functions.invoke('send-invite-email', {
+        body: { to, advisor_email: advisorEmail, portfolio_name: portfolioName, invite_url: inviteUrl },
+      });
+      if (!error && data?.success) {
+        console.info('[Email] Invite email sent via Supabase Edge Function');
+        return { sent: true, method: 'supabase' };
+      }
+    } catch (e) {
+      console.warn('[Email] Supabase function not available:', e.message);
+    }
+  }
+
+  // 2) Fallback: open the user's email client with a pre-filled mailto: link
+  const subject = encodeURIComponent(`You've been invited to view "${portfolioName}" on WeightWatch Portfolios`);
+  const body = encodeURIComponent(
+    `Hi,\n\nYou've been invited to view the portfolio "${portfolioName}" on WeightWatch Portfolios.\n\n` +
+    `Click the link below to access your personalized client portal:\n${inviteUrl}\n\n` +
+    `This link is unique to you. Once you sign up or log in, the portfolio will be synced to your account.\n\n` +
+    `Best regards,\n${advisorEmail}`
+  );
+  const mailtoUrl = `mailto:${to}?subject=${subject}&body=${body}`;
+  window.open(mailtoUrl, '_blank');
+  return { sent: false, method: 'mailto', mailtoUrl };
 }
 
 // ─── Message helpers ─────────────────────────────────────────────────────────
@@ -457,6 +724,29 @@ export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId)
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+}
+
+// Fetch messages from Supabase for cross-browser sync. Returns sorted array or null on failure.
+export async function fetchMessagesFromSupabase(portfolioId) {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('portfolio_id', portfolioId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    if (data?.length) {
+      // Merge into localStorage for offline access
+      const existing = lsGet(LS.messages, []);
+      const existingIds = new Set(existing.map((m) => m.id));
+      const newMsgs = data.filter((m) => !existingIds.has(m.id));
+      if (newMsgs.length) lsSet(LS.messages, [...existing, ...newMsgs]);
+    }
+    return data || [];
+  } catch {
+    return null; // Fall back to localStorage via getMessages()
+  }
 }
 
 export function sendMessage(message) {
@@ -470,6 +760,27 @@ export function sendMessage(message) {
   lsSet(LS.messages, all);
   pushMessageToSupabase(msg);
   return msg;
+}
+
+// Look up the client email linked to a portfolio (from invites)
+export async function getLinkedClient(portfolioId) {
+  // Check localStorage first
+  const invites = Object.values(lsGet(LS.invites, {}));
+  const match = invites.find((inv) => inv.portfolio_ids?.includes(portfolioId));
+  if (match?.client_email) return match.client_email;
+
+  // Try Supabase
+  if (isSupabaseConfigured) {
+    try {
+      const { data } = await supabase
+        .from('invites')
+        .select('client_email')
+        .contains('portfolio_ids', [portfolioId])
+        .maybeSingle();
+      if (data?.client_email) return data.client_email;
+    } catch { /* fall through */ }
+  }
+  return null;
 }
 
 export function getLatestApproval(portfolioId) {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, CheckCircle, AlertTriangle, User } from 'lucide-react';
-import { useAuth, getPortfolios, getMessages, sendMessage } from '../context/AuthContext';
+import { useAuth, getPortfolios, getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
 
 export default function Messages() {
   const { user, role } = useAuth();
@@ -21,11 +21,12 @@ export default function Messages() {
     }
   }, [user]);
 
-  // Load messages for selected portfolio
+  // Load messages for selected portfolio (from Supabase when available)
   useEffect(() => {
-    if (selectedPortfolioId) {
-      setMessages(getMessages(selectedPortfolioId));
-    }
+    if (!selectedPortfolioId) return;
+    fetchMessagesFromSupabase(selectedPortfolioId).then((msgs) => {
+      setMessages(msgs ?? getMessages(selectedPortfolioId));
+    });
   }, [selectedPortfolioId]);
 
   // Auto-scroll
@@ -33,11 +34,12 @@ export default function Messages() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Poll for new messages every 5 seconds
+  // Poll for new messages every 5 seconds (from Supabase when available)
   useEffect(() => {
     if (!selectedPortfolioId) return;
-    const interval = setInterval(() => {
-      setMessages(getMessages(selectedPortfolioId));
+    const interval = setInterval(async () => {
+      const msgs = await fetchMessagesFromSupabase(selectedPortfolioId);
+      setMessages(msgs ?? getMessages(selectedPortfolioId));
     }, 5000);
     return () => clearInterval(interval);
   }, [selectedPortfolioId]);
@@ -75,20 +77,20 @@ export default function Messages() {
   const selectedPortfolio = portfolios.find((p) => p.id === selectedPortfolioId);
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">
-        <MessageCircle className="w-6 h-6 inline-block mr-2 text-blue-500" />
+    <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+      <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 sm:mb-6">
+        <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 inline-block mr-2 text-blue-500" />
         Messages
       </h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ minHeight: '60vh' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6" style={{ minHeight: '60vh' }}>
         {/* Conversation list */}
         <div className="card overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50">
+          <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50">
             <h2 className="text-sm font-semibold text-slate-700">Conversations</h2>
             <p className="text-xs text-slate-400 mt-0.5">Messages per portfolio</p>
           </div>
-          <div className="divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
+          <div className="divide-y divide-slate-100 max-h-[30vh] lg:max-h-[60vh] overflow-y-auto">
             {conversationPartners.length === 0 && (
               <div className="p-6 text-center text-sm text-slate-400">
                 No conversations yet. Messages appear here when you or your {role === 'advisor' ? 'clients' : 'advisor'} communicate about portfolios.
@@ -154,7 +156,7 @@ export default function Messages() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[50vh]">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 max-h-[40vh] sm:max-h-[50vh]">
                 {messages.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-8">No messages yet. Start the conversation.</p>
                 )}
@@ -197,7 +199,7 @@ export default function Messages() {
                   const isMe = msg.sender_id === user?.id;
                   return (
                     <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[75%] rounded-xl px-4 py-2.5 ${
+                      <div className={`max-w-[85%] sm:max-w-[75%] rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 ${
                         isMe
                           ? 'bg-blue-600 text-white rounded-br-sm'
                           : 'bg-slate-100 text-slate-900 rounded-bl-sm'
@@ -248,11 +250,11 @@ export default function Messages() {
               )}
 
               {/* Message input */}
-              <div className="p-4 border-t border-slate-100 flex gap-2">
+              <div className="p-3 sm:p-4 border-t border-slate-100 flex gap-2">
                 <input
                   id="msg-main-input"
                   type="text"
-                  placeholder={`Type a message to your ${role === 'advisor' ? 'client' : 'advisor'}...`}
+                  placeholder={`Message your ${role === 'advisor' ? 'client' : 'advisor'}...`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={handleKeyDown}

@@ -208,12 +208,12 @@ export default function PerformanceChart({
   return (
     <div>
       {/* Range selector */}
-      <div className="flex items-center gap-1 mb-3 flex-wrap">
+      <div className="flex flex-wrap items-center gap-1 mb-3">
         {ranges.map((r) => (
           <button
             key={r}
             onClick={() => setRange(r)}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            className={`px-2 sm:px-2.5 py-1 rounded text-xs font-medium transition-colors ${
               range === r
                 ? 'bg-blue-600 text-white'
                 : r === 'Since'
@@ -221,10 +221,10 @@ export default function PerformanceChart({
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            {r === 'Since' ? 'Since Creation' : r}
+            {r === 'Since' ? 'Since' : r}
           </button>
         ))}
-        <span className="ml-auto text-xs text-slate-400">
+        <span className="ml-auto text-[10px] sm:text-xs text-slate-400 max-w-[50%] text-right truncate">
           {dataIsReal && <span className="text-green-500 mr-1">●</span>}
           {dataSourceLabel}
         </span>
@@ -245,15 +245,16 @@ export default function PerformanceChart({
       )}
 
       {loading ? (
-        <div className="h-48 flex items-center justify-center text-sm text-slate-400 animate-pulse">
+        <div className="h-[220px] sm:h-[260px] flex items-center justify-center text-sm text-slate-400 animate-pulse">
           Loading chart data…
         </div>
       ) : data.length === 0 ? (
-        <div className="h-48 flex items-center justify-center text-sm text-slate-400">
+        <div className="h-[220px] sm:h-[260px] flex items-center justify-center text-sm text-slate-400">
           Add holdings to see performance
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
+        <div className="h-[220px] sm:h-[260px]">
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
 
@@ -330,6 +331,7 @@ export default function PerformanceChart({
             )}
           </LineChart>
         </ResponsiveContainer>
+        </div>
       )}
     </div>
   );

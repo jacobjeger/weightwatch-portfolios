@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings } from '../context/AuthContext';
+import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User } from 'lucide-react';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, sendInviteEmail } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
 import { getRealPerformanceReturns, clearMarketCaches } from '../lib/finnhub';
@@ -53,6 +53,7 @@ export default function PortfolioBuilder() {
   const [showInvite, setShowInvite]       = useState(false);   // invite client modal
   const [inviteEmail, setInviteEmail]     = useState('');
   const [inviteUrl, setInviteUrl]         = useState(null);
+  const [linkedClient, setLinkedClient]   = useState(null);  // client email linked via invite
 
   // Collapsible section toggles
   const [holdingsOpen, setHoldingsOpen]     = useState(true);
@@ -89,6 +90,12 @@ export default function PortfolioBuilder() {
       }
     }
   }, [id, user, isNew]);
+
+  // Look up which client is linked to this portfolio (for advisor display)
+  useEffect(() => {
+    if (isNew || !portfolioId || role === 'client') return;
+    getLinkedClient(portfolioId).then((email) => { if (email) setLinkedClient(email); });
+  }, [portfolioId, isNew, role]);
 
   // Load + subscribe real-time prices whenever holdings or benchmark change
   useEffect(() => {
@@ -304,6 +311,7 @@ export default function PortfolioBuilder() {
   }
 
   // ── Duplicate ───────────────────────────────────────────────────────────────
+  // Copies only weights/structure — resets all historical values, gains, and dates.
   function handleDuplicate() {
     const newId = crypto.randomUUID();
     const dup = {
@@ -313,7 +321,26 @@ export default function PortfolioBuilder() {
       description,
       primary_benchmark: benchmark || null,
       secondary_benchmarks: [],
-      holdings: [...holdings],
+      starting_value: 100_000,
+      cash_percent: 0,
+      drip_enabled: true,
+      holdings: holdings.map((h) => {
+        const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
+        return {
+          ticker: h.ticker,
+          name: h.name,
+          type: h.type,
+          exchange: h.exchange,
+          category: h.category,
+          weight_percent: h.weight_percent,
+          last_price: currentPrice,
+          entry_price: currentPrice,  // Reset entry to current live price
+          expense_ratio: h.expense_ratio,
+          div_yield: h.div_yield,
+        };
+      }),
+      weight_history: [],
+      created_at: new Date().toISOString(),
     };
     savePortfolio(dup);
     logActivity(user.id, {
@@ -504,28 +531,33 @@ export default function PortfolioBuilder() {
   }, 0) * investedFraction;
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8">
+    <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
       {/* Top toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-slate-900">Portfolio Builder</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900">Portfolio Builder</h1>
           <StatusBadge status={status} totalWeight={totalWeight} />
+          {linkedClient && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+              <User className="w-3 h-3" /> {linkedClient}
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <button className="btn-ghost" onClick={() => navigate('/')}>← Dashboard</button>
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <button className="btn-ghost" onClick={() => navigate('/')}>← <span className="hidden sm:inline">Dashboard</span></button>
           <button className="btn-secondary flex items-center gap-1.5" onClick={handleShare} disabled={isNew}>
-            <Share2 className="w-4 h-4" />Share
+            <Share2 className="w-4 h-4" /><span className="hidden sm:inline">Share</span>
           </button>
           {role !== 'client' && (
             <button className="btn-secondary flex items-center gap-1.5" onClick={() => { setShowInvite(true); setInviteUrl(null); setInviteEmail(''); }} disabled={isNew}>
-              <Plus className="w-4 h-4" />Invite Client
+              <Plus className="w-4 h-4" /><span className="hidden sm:inline">Invite Client</span>
             </button>
           )}
           <button className="btn-secondary" onClick={handleDuplicate} disabled={isNew}>
-            <Copy className="w-4 h-4" />Duplicate
+            <Copy className="w-4 h-4" /><span className="hidden sm:inline">Duplicate</span>
           </button>
           <button className="btn-danger" onClick={() => setShowDelete(true)} disabled={isNew}>
-            <Trash2 className="w-4 h-4" />Delete
+            <Trash2 className="w-4 h-4" /><span className="hidden sm:inline">Delete</span>
           </button>
           <button
             className="btn-primary"
@@ -549,9 +581,9 @@ export default function PortfolioBuilder() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
         {/* Main column */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-4 sm:space-y-6">
 
           {/* Portfolio meta */}
           <div className="card p-5 space-y-4">
@@ -716,13 +748,13 @@ export default function PortfolioBuilder() {
                     <thead>
                       <tr className="border-b border-slate-200">
                         <th className="th pl-0">Symbol</th>
-                        <th className="th">Name</th>
-                        <th className="th">Type</th>
-                        <th className="th">Role</th>
-                        <th className="th text-right">Last Price</th>
+                        <th className="th hidden md:table-cell">Name</th>
+                        <th className="th hidden lg:table-cell">Type</th>
+                        <th className="th hidden lg:table-cell">Role</th>
+                        <th className="th text-right hidden sm:table-cell">Last Price</th>
                         <th className="th text-right">Target %</th>
-                        <th className="th text-right">Current %</th>
-                        <th className="th text-right">Est. Value</th>
+                        <th className="th text-right hidden sm:table-cell">Current %</th>
+                        <th className="th text-right hidden sm:table-cell">Est. Value</th>
                         <th className="th w-10" />
                       </tr>
                     </thead>
@@ -730,13 +762,13 @@ export default function PortfolioBuilder() {
                       {holdings.map((h) => (
                         <tr key={h.ticker} className="group">
                           <td className="td pl-0 font-semibold text-slate-900">{h.ticker}</td>
-                          <td className="td text-slate-600 max-w-xs truncate">{h.name}</td>
-                          <td className="td">
+                          <td className="td text-slate-600 max-w-xs truncate hidden md:table-cell">{h.name}</td>
+                          <td className="td hidden lg:table-cell">
                             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                               h.type === 'ETF' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                             }`}>{h.type}</span>
                           </td>
-                          <td className="td">
+                          <td className="td hidden lg:table-cell">
                             <div className="flex items-center gap-1">
                               {['Core', 'Tilt', 'Satellite'].map((cat) => {
                                 const active = (h.category || 'Core') === cat;
@@ -758,7 +790,7 @@ export default function PortfolioBuilder() {
                               })}
                             </div>
                           </td>
-                          <td className="td text-right font-mono text-slate-700">
+                          <td className="td text-right font-mono text-slate-700 hidden sm:table-cell">
                             {(() => {
                               const lp = live && prices[h.ticker]?.price
                                 ? prices[h.ticker].price
@@ -801,7 +833,7 @@ export default function PortfolioBuilder() {
                             )}
                           </td>
                           {/* Current (drifted) weight — read-only, color-coded vs target */}
-                          <td className="td text-right">
+                          <td className="td text-right hidden sm:table-cell">
                             {(() => {
                               const drifted = currentWeights[h.ticker]?.driftedWeight;
                               if (drifted == null) return <span className="text-slate-300 text-xs">—</span>;
@@ -819,7 +851,7 @@ export default function PortfolioBuilder() {
                               );
                             })()}
                           </td>
-                          <td className="td text-right">
+                          <td className="td text-right hidden sm:table-cell">
                             {(() => {
                               const drifted = currentWeights[h.ticker]?.driftedWeight;
                               if (drifted == null) return <span className="text-slate-300 text-xs">--</span>;
@@ -845,14 +877,18 @@ export default function PortfolioBuilder() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-slate-200">
-                        <td colSpan={5} className="td font-semibold text-slate-700">Total Weight</td>
-                        <td className={`td text-right font-semibold font-mono text-lg ${
+                        <td className="td font-semibold text-slate-700">Total</td>
+                        <td className="td hidden md:table-cell" />
+                        <td className="td hidden lg:table-cell" />
+                        <td className="td hidden lg:table-cell" />
+                        <td className="td hidden sm:table-cell" />
+                        <td className={`td text-right font-semibold font-mono text-base sm:text-lg ${
                           isFullyAllocated ? 'text-green-600' : Math.abs(totalWeight - 100) < 5 ? 'text-yellow-600' : 'text-red-500'
                         }`}>
                           {totalWeight.toFixed(2)}%
                         </td>
-                        <td />{/* Current % — no total needed */}
-                        <td className="td text-right font-semibold font-mono text-sm text-slate-700">
+                        <td className="hidden sm:table-cell" />{/* Current % — no total needed */}
+                        <td className="td text-right font-semibold font-mono text-sm text-slate-700 hidden sm:table-cell">
                           ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                         </td>
                         <td />{/* Delete button column */}
@@ -1087,7 +1123,7 @@ export default function PortfolioBuilder() {
               })() : null;
 
               return (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                   {TIMEFRAMES.map(({ label, days }) => {
                     // Prefer real Finnhub data, fall back to mock
                     const hasReal = realReturns?.portfolio?.[label] != null;
@@ -1489,7 +1525,8 @@ export default function PortfolioBuilder() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Invite Client</h3>
             <p className="text-sm text-gray-500 mb-4">
-              Send a read-only invite link for <span className="font-medium text-gray-700">{name}</span> to a client.
+              Send a personalized invite link for <span className="font-medium text-gray-700">{name}</span> to a client.
+              The client will get view-only access to this portfolio.
             </p>
             <input
               type="email"
@@ -1501,14 +1538,34 @@ export default function PortfolioBuilder() {
             />
             {inviteUrl && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
-                <p className="text-xs text-green-700 mb-1 font-medium">Invite link (copied to clipboard):</p>
-                <p className="text-xs text-green-800 font-mono break-all">{inviteUrl}</p>
+                <p className="text-xs text-green-700 mb-1 font-medium">Invite link created (copied to clipboard):</p>
+                <p className="text-xs text-green-800 font-mono break-all select-all">{inviteUrl}</p>
               </div>
             )}
             <div className="flex justify-end gap-2">
               <button className="btn-secondary text-sm" onClick={() => setShowInvite(false)}>
                 {inviteUrl ? 'Done' : 'Cancel'}
               </button>
+              {inviteUrl && (
+                <button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1.5"
+                  onClick={async () => {
+                    const result = await sendInviteEmail({
+                      to: inviteEmail.trim(),
+                      advisorEmail: user.email,
+                      portfolioName: name,
+                      inviteUrl,
+                    });
+                    if (result.sent) {
+                      toast.success('Invite email sent successfully!');
+                    } else {
+                      toast.success('Opening your email client to send the invite...');
+                    }
+                  }}
+                >
+                  Send Email
+                </button>
+              )}
               {!inviteUrl && (
                 <button
                   className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"

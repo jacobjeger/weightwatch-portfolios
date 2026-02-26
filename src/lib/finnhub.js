@@ -13,6 +13,32 @@ const KEY  = import.meta.env.VITE_FINNHUB_API_KEY;
 
 export const isConfigured = () => Boolean(KEY);
 
+// ── Index ticker → ETF mapping ───────────────────────────────────────────────
+// CBOE/Yahoo-style index tickers don't work on Finnhub free tier.
+// Map them to their ETF equivalents for quotes, WebSocket, and candles.
+const INDEX_TO_ETF = {
+  // CBOE-style
+  'SPX':    'SPY',
+  'NDX':    'QQQ',
+  'RUT':    'IWM',
+  'DJI':    'DIA',
+  'DJIA':   'DIA',
+  // Yahoo-style (caret prefix)
+  '^GSPC':  'SPY',
+  '^DJI':   'DIA',
+  '^IXIC':  'QQQ',
+  '^RUT':   'IWM',
+  '^VIX':   'VIXY',
+  '^TNX':   'TLT',
+};
+
+/** Normalize a ticker: map index symbols to their ETF equivalents for Finnhub. */
+export function normalizeTicker(ticker) {
+  if (!ticker) return ticker;
+  const upper = ticker.toUpperCase();
+  return INDEX_TO_ETF[upper] || ticker;
+}
+
 // After the first 403 from Finnhub candles, switch permanently to Yahoo
 let candleSource = 'finnhub'; // 'finnhub' | 'yahoo'
 
@@ -35,10 +61,12 @@ export function clearMarketCaches() {
 // ── Quote (current price + daily change) ─────────────────────────────────────
 // Returns: { price, change, changePercent, prevClose, high, low, open }
 export async function getQuote(ticker) {
+  const symbol = normalizeTicker(ticker);
+  // Cache under original ticker so callers get consistent results
   const cached = quoteCache.get(ticker);
   if (cached && Date.now() - cached.ts < QUOTE_TTL) return cached.data;
 
-  const res = await fetch(`${BASE}/quote?symbol=${ticker}&token=${KEY}`);
+  const res = await fetch(`${BASE}/quote?symbol=${symbol}&token=${KEY}`);
   if (!res.ok) throw new Error(`Quote fetch failed for ${ticker}: ${res.status}`);
 
   const raw  = await res.json();
@@ -62,6 +90,7 @@ export async function getQuote(ticker) {
 // ── Historical daily candles ──────────────────────────────────────────────────
 // Returns: [{ date: 'YYYY-MM-DD', price: number }, ...]  (closing prices)
 export async function getCandles(ticker, fromDate, toDate) {
+  const symbol = normalizeTicker(ticker);
   const cacheKey = `${ticker}:${fromDate}:${toDate}`;
   const cached   = candleCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < CANDLE_TTL) return cached.data;
@@ -70,7 +99,7 @@ export async function getCandles(ticker, fromDate, toDate) {
   const to   = Math.floor(new Date(toDate).getTime()   / 1000);
 
   const res = await fetch(
-    `${BASE}/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${KEY}`
+    `${BASE}/stock/candle?symbol=${symbol}&resolution=D&from=${from}&to=${to}&token=${KEY}`
   );
   if (!res.ok) throw new Error(`Candle fetch failed for ${ticker}: ${res.status}`);
 
@@ -473,20 +502,43 @@ function ensureWS() {
 // Subscribe to live trade prices for a list of tickers.
 // onTrade(ticker, price) fires on every trade.
 // Returns an unsubscribe function.
+// Internally maps index tickers to ETF equivalents and maps trades back to original tickers.
 export function subscribeToTrades(tickers, onTrade) {
   if (!isConfigured()) return () => {};
 
-  tradeListeners.add(onTrade);
+  // Build a reverse mapping: normalized symbol → original ticker(s)
+  const reverseMap = {};
+  tickers.forEach(t => {
+    const norm = normalizeTicker(t);
+    if (!reverseMap[norm]) reverseMap[norm] = [];
+    reverseMap[norm].push(t);
+  });
+
+  // Wrap onTrade to translate ETF symbols back to original index tickers
+  const wrappedOnTrade = (symbol, price) => {
+    // Fire for the ETF symbol's mapped original tickers
+    const originals = reverseMap[symbol];
+    if (originals) {
+      originals.forEach(orig => onTrade(orig, price));
+    }
+    // Also fire for exact matches (non-mapped tickers)
+    if (!originals || !originals.includes(symbol)) {
+      onTrade(symbol, price);
+    }
+  };
+
+  tradeListeners.add(wrappedOnTrade);
   ensureWS();
 
-  tickers.forEach(ticker => {
-    if (!wsSubscribed.has(ticker)) {
-      wsSubscribed.add(ticker);
+  // Subscribe using normalized (ETF) symbols
+  Object.keys(reverseMap).forEach(symbol => {
+    if (!wsSubscribed.has(symbol)) {
+      wsSubscribed.add(symbol);
       if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'subscribe', symbol: ticker }));
+        ws.send(JSON.stringify({ type: 'subscribe', symbol }));
       }
     }
   });
 
-  return () => { tradeListeners.delete(onTrade); };
+  return () => { tradeListeners.delete(wrappedOnTrade); };
 }
