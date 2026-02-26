@@ -7,6 +7,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const endRef = useRef(null);
+  const prevMsgCount = useRef(0);
 
   // Load messages whenever panel opens or portfolioId changes
   useEffect(() => {
@@ -17,9 +18,14 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
     });
   }, [open, portfolioId]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom ONLY when new messages arrive (not on every re-render)
   useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!open || !messages.length) return;
+    // Only scroll if message count increased (new message added)
+    if (messages.length > prevMsgCount.current) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    prevMsgCount.current = messages.length;
   }, [messages, open]);
 
   // Poll for new messages every 5 seconds while panel is open (from Supabase when available)

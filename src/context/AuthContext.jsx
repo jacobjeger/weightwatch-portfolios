@@ -28,17 +28,25 @@ function lsSet(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function mockSignUp(email, password) {
+function mockSignUp(email, password, accountType = 'advisor') {
   const users = lsGet(LS.users, {});
   if (users[email]) throw new Error('An account with this email already exists.');
   const user = { id: crypto.randomUUID(), email };
   users[email] = { ...user, password };
   lsSet(LS.users, users);
   lsSet(LS.session, user);
-  // seed demo portfolios
-  const existing = lsGet(LS.portfolios, []);
-  if (!existing.find((p) => p.owner === user.id)) {
-    lsSet(LS.portfolios, [...existing, ...createDemoPortfolios(user.id)]);
+
+  if (accountType === 'client') {
+    // Mark as client with no advisor yet — they'll get linked when they accept an invite
+    const clients = lsGet(LS.clients, {});
+    clients[user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
+    lsSet(LS.clients, clients);
+  } else {
+    // Seed demo portfolios for advisors only
+    const existing = lsGet(LS.portfolios, []);
+    if (!existing.find((p) => p.owner === user.id)) {
+      lsSet(LS.portfolios, [...existing, ...createDemoPortfolios(user.id)]);
+    }
   }
   return user;
 }
@@ -113,13 +121,23 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Auth actions ────────────────────────────────────────────────────────────
-  async function signUp(email, password) {
+  async function signUp(email, password, accountType = 'advisor') {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { account_type: accountType } },
+      });
       if (error) throw error;
+      // If client account, mark in clients mapping
+      if (accountType === 'client' && data.user) {
+        const clients = lsGet(LS.clients, {});
+        clients[data.user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
+        lsSet(LS.clients, clients);
+      }
       return data.user;
     }
-    const u = mockSignUp(email, password);
+    const u = mockSignUp(email, password, accountType);
     setUser(u);
     return u;
   }
