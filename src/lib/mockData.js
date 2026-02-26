@@ -3,10 +3,10 @@ import { format, subDays } from 'date-fns';
 // ─── Instrument list ──────────────────────────────────────────────────────────
 export const INSTRUMENTS = [
   // Broad market ETFs          expense_ratio = annual fee %;  div_yield = trailing 12mo yield %
-  { ticker: 'SPY',  name: 'SPDR S&P 500 ETF Trust',             type: 'ETF',   exchange: 'NYSE',   last_price: 596.41,  expense_ratio: 0.0945, div_yield: 1.3  },
-  { ticker: 'QQQ',  name: 'Invesco QQQ Trust (NASDAQ-100)',      type: 'ETF',   exchange: 'NASDAQ', last_price: 510.83,  expense_ratio: 0.20,   div_yield: 0.6  },
-  { ticker: 'IWM',  name: 'iShares Russell 2000 ETF',            type: 'ETF',   exchange: 'NYSE',   last_price: 228.15,  expense_ratio: 0.19,   div_yield: 1.2  },
-  { ticker: 'DIA',  name: 'SPDR Dow Jones Industrial Average ETF', type: 'ETF', exchange: 'NYSE',   last_price: 440.22,  expense_ratio: 0.16,   div_yield: 1.7  },
+  { ticker: 'SPY',  name: 'SPDR S&P 500 ETF Trust',             type: 'ETF',   exchange: 'NYSE',   last_price: 618.50,  expense_ratio: 0.0945, div_yield: 1.3  },
+  { ticker: 'QQQ',  name: 'Invesco QQQ Trust (NASDAQ-100)',      type: 'ETF',   exchange: 'NASDAQ', last_price: 542.70,  expense_ratio: 0.20,   div_yield: 0.6  },
+  { ticker: 'IWM',  name: 'iShares Russell 2000 ETF',            type: 'ETF',   exchange: 'NYSE',   last_price: 234.80,  expense_ratio: 0.19,   div_yield: 1.2  },
+  { ticker: 'DIA',  name: 'SPDR Dow Jones Industrial Average ETF', type: 'ETF', exchange: 'NYSE',   last_price: 454.60,  expense_ratio: 0.16,   div_yield: 1.7  },
   { ticker: 'EFA',  name: 'iShares MSCI EAFE ETF',               type: 'ETF',   exchange: 'NYSE',   last_price: 78.44,   expense_ratio: 0.32,   div_yield: 3.0  },
   { ticker: 'ACWI', name: 'iShares MSCI ACWI ETF',               type: 'ETF',   exchange: 'NASDAQ', last_price: 110.62,  expense_ratio: 0.32,   div_yield: 1.8  },
   { ticker: 'EEM',  name: 'iShares MSCI Emerging Markets ETF',   type: 'ETF',   exchange: 'NYSE',   last_price: 44.18,   expense_ratio: 0.68,   div_yield: 2.5  },
@@ -18,9 +18,9 @@ export const INSTRUMENTS = [
   { ticker: 'LQD',  name: 'iShares iBoxx Investment Grade Corp', type: 'ETF',   exchange: 'NYSE',   last_price: 107.43,  expense_ratio: 0.14,   div_yield: 5.0  },
   { ticker: 'TIPS', name: 'iShares TIPS Bond ETF',               type: 'ETF',   exchange: 'NYSE',   last_price: 107.82,  expense_ratio: 0.19,   div_yield: 3.5  },
   // Other ETFs
-  { ticker: 'VOO',  name: 'Vanguard S&P 500 ETF',                type: 'ETF',   exchange: 'NYSE',   last_price: 548.12,  expense_ratio: 0.03,   div_yield: 1.3  },
-  { ticker: 'VTI',  name: 'Vanguard Total Stock Market ETF',     type: 'ETF',   exchange: 'NYSE',   last_price: 278.96,  expense_ratio: 0.03,   div_yield: 1.4  },
-  { ticker: 'VGT',  name: 'Vanguard Information Technology ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 587.34,  expense_ratio: 0.10,   div_yield: 0.6  },
+  { ticker: 'VOO',  name: 'Vanguard S&P 500 ETF',                type: 'ETF',   exchange: 'NYSE',   last_price: 568.40,  expense_ratio: 0.03,   div_yield: 1.3  },
+  { ticker: 'VTI',  name: 'Vanguard Total Stock Market ETF',     type: 'ETF',   exchange: 'NYSE',   last_price: 292.50,  expense_ratio: 0.03,   div_yield: 1.4  },
+  { ticker: 'VGT',  name: 'Vanguard Information Technology ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 625.80,  expense_ratio: 0.10,   div_yield: 0.6  },
   { ticker: 'VNQ',  name: 'Vanguard Real Estate ETF',            type: 'ETF',   exchange: 'NYSE',   last_price: 84.51,   expense_ratio: 0.12,   div_yield: 4.0  },
   { ticker: 'VWO',  name: 'Vanguard FTSE Emerging Markets ETF',  type: 'ETF',   exchange: 'NYSE',   last_price: 43.12,   expense_ratio: 0.08,   div_yield: 3.5  },
   { ticker: 'GLD',  name: 'SPDR Gold Shares',                    type: 'ETF',   exchange: 'NYSE',   last_price: 243.89,  expense_ratio: 0.40,   div_yield: 0    },
@@ -44,23 +44,23 @@ export const INSTRUMENTS = [
   { ticker: 'XLU',  name: 'Utilities Select Sector SPDR',       type: 'ETF',   exchange: 'NYSE',   last_price: 75.83,   expense_ratio: 0.13,   div_yield: 2.8  },
   { ticker: 'GLTR', name: 'abrdn Physical Precious Metals ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 108.92,  expense_ratio: 0.60,   div_yield: 0    },
   { ticker: 'BITW', name: 'Bitwise 10 Crypto Index Fund',       type: 'ETF',   exchange: 'OTC',    last_price: 38.56,   expense_ratio: 2.50,   div_yield: 0    },
-  { ticker: 'IBIT', name: 'iShares Bitcoin Trust ETF',           type: 'ETF',   exchange: 'NASDAQ', last_price: 52.34,   expense_ratio: 0.25,   div_yield: 0    },
+  { ticker: 'IBIT', name: 'iShares Bitcoin Trust ETF',           type: 'ETF',   exchange: 'NASDAQ', last_price: 58.90,   expense_ratio: 0.25,   div_yield: 0    },
   { ticker: 'JEPI', name: 'JPMorgan Equity Premium Income ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 57.12,   expense_ratio: 0.35,   div_yield: 7.2  },
   { ticker: 'JEPQ', name: 'JPMorgan Nasdaq Equity Premium Income', type: 'ETF', exchange: 'NASDAQ', last_price: 53.88,  expense_ratio: 0.35,   div_yield: 9.5  },
   { ticker: 'VIG',  name: 'Vanguard Dividend Appreciation ETF', type: 'ETF',   exchange: 'NYSE',   last_price: 188.76,  expense_ratio: 0.06,   div_yield: 1.8  },
   { ticker: 'SPLG', name: 'SPDR Portfolio S&P 500 ETF',         type: 'ETF',   exchange: 'NYSE',   last_price: 67.28,   expense_ratio: 0.02,   div_yield: 1.3  },
   // Large-cap Tech                                                               expense_ratio: 0 for all stocks
-  { ticker: 'AAPL', name: 'Apple Inc.',                          type: 'Stock', exchange: 'NASDAQ', last_price: 228.52,  expense_ratio: 0,      div_yield: 0.5  },
-  { ticker: 'MSFT', name: 'Microsoft Corporation',               type: 'Stock', exchange: 'NASDAQ', last_price: 415.40,  expense_ratio: 0,      div_yield: 0.7  },
-  { ticker: 'GOOGL',name: 'Alphabet Inc. Class A',               type: 'Stock', exchange: 'NASDAQ', last_price: 194.75,  expense_ratio: 0,      div_yield: 0.5  },
-  { ticker: 'GOOG', name: 'Alphabet Inc. Class C',               type: 'Stock', exchange: 'NASDAQ', last_price: 196.08,  expense_ratio: 0,      div_yield: 0.5  },
-  { ticker: 'AMZN', name: 'Amazon.com Inc.',                     type: 'Stock', exchange: 'NASDAQ', last_price: 224.80,  expense_ratio: 0,      div_yield: 0    },
-  { ticker: 'NVDA', name: 'NVIDIA Corporation',                  type: 'Stock', exchange: 'NASDAQ', last_price: 873.22,  expense_ratio: 0,      div_yield: 0.03 },
-  { ticker: 'META', name: 'Meta Platforms Inc.',                 type: 'Stock', exchange: 'NASDAQ', last_price: 589.70,  expense_ratio: 0,      div_yield: 0.4  },
-  { ticker: 'TSLA', name: 'Tesla Inc.',                          type: 'Stock', exchange: 'NASDAQ', last_price: 354.45,  expense_ratio: 0,      div_yield: 0    },
+  { ticker: 'AAPL', name: 'Apple Inc.',                          type: 'Stock', exchange: 'NASDAQ', last_price: 242.30,  expense_ratio: 0,      div_yield: 0.5  },
+  { ticker: 'MSFT', name: 'Microsoft Corporation',               type: 'Stock', exchange: 'NASDAQ', last_price: 438.90,  expense_ratio: 0,      div_yield: 0.7  },
+  { ticker: 'GOOGL',name: 'Alphabet Inc. Class A',               type: 'Stock', exchange: 'NASDAQ', last_price: 205.40,  expense_ratio: 0,      div_yield: 0.5  },
+  { ticker: 'GOOG', name: 'Alphabet Inc. Class C',               type: 'Stock', exchange: 'NASDAQ', last_price: 207.15,  expense_ratio: 0,      div_yield: 0.5  },
+  { ticker: 'AMZN', name: 'Amazon.com Inc.',                     type: 'Stock', exchange: 'NASDAQ', last_price: 238.60,  expense_ratio: 0,      div_yield: 0    },
+  { ticker: 'NVDA', name: 'NVIDIA Corporation',                  type: 'Stock', exchange: 'NASDAQ', last_price: 142.50,  expense_ratio: 0,      div_yield: 0.03 },
+  { ticker: 'META', name: 'Meta Platforms Inc.',                 type: 'Stock', exchange: 'NASDAQ', last_price: 695.20,  expense_ratio: 0,      div_yield: 0.3  },
+  { ticker: 'TSLA', name: 'Tesla Inc.',                          type: 'Stock', exchange: 'NASDAQ', last_price: 362.80,  expense_ratio: 0,      div_yield: 0    },
   { ticker: 'ADBE', name: 'Adobe Inc.',                          type: 'Stock', exchange: 'NASDAQ', last_price: 524.83,  expense_ratio: 0,      div_yield: 0    },
   { ticker: 'CRM',  name: 'Salesforce Inc.',                     type: 'Stock', exchange: 'NYSE',   last_price: 303.14,  expense_ratio: 0,      div_yield: 0    },
-  { ticker: 'NFLX', name: 'Netflix Inc.',                        type: 'Stock', exchange: 'NASDAQ', last_price: 760.94,  expense_ratio: 0,      div_yield: 0    },
+  { ticker: 'NFLX', name: 'Netflix Inc.',                        type: 'Stock', exchange: 'NASDAQ', last_price: 1028.40, expense_ratio: 0,      div_yield: 0    },
   { ticker: 'ORCL', name: 'Oracle Corporation',                  type: 'Stock', exchange: 'NYSE',   last_price: 174.22,  expense_ratio: 0,      div_yield: 1.1  },
   { ticker: 'NOW',  name: 'ServiceNow Inc.',                     type: 'Stock', exchange: 'NYSE',   last_price: 940.18,  expense_ratio: 0,      div_yield: 0    },
   { ticker: 'SHOP', name: 'Shopify Inc.',                        type: 'Stock', exchange: 'NYSE',   last_price: 117.48,  expense_ratio: 0,      div_yield: 0    },
@@ -71,7 +71,7 @@ export const INSTRUMENTS = [
   { ticker: 'AMD',  name: 'Advanced Micro Devices Inc.',         type: 'Stock', exchange: 'NASDAQ', last_price: 178.83,  expense_ratio: 0,      div_yield: 0    },
   { ticker: 'INTC', name: 'Intel Corporation',                   type: 'Stock', exchange: 'NASDAQ', last_price: 24.38,   expense_ratio: 0,      div_yield: 2.0  },
   { ticker: 'QCOM', name: 'Qualcomm Inc.',                       type: 'Stock', exchange: 'NASDAQ', last_price: 186.40,  expense_ratio: 0,      div_yield: 2.1  },
-  { ticker: 'AVGO', name: 'Broadcom Inc.',                       type: 'Stock', exchange: 'NASDAQ', last_price: 1743.60, expense_ratio: 0,      div_yield: 1.3  },
+  { ticker: 'AVGO', name: 'Broadcom Inc.',                       type: 'Stock', exchange: 'NASDAQ', last_price: 228.40,  expense_ratio: 0,      div_yield: 1.1  },
   { ticker: 'TXN',  name: 'Texas Instruments Inc.',              type: 'Stock', exchange: 'NASDAQ', last_price: 195.87,  expense_ratio: 0,      div_yield: 2.7  },
   { ticker: 'MU',   name: 'Micron Technology Inc.',              type: 'Stock', exchange: 'NASDAQ', last_price: 108.42,  expense_ratio: 0,      div_yield: 0.4  },
   { ticker: 'AMAT', name: 'Applied Materials Inc.',              type: 'Stock', exchange: 'NASDAQ', last_price: 192.76,  expense_ratio: 0,      div_yield: 0.8  },
@@ -130,8 +130,8 @@ export const INSTRUMENTS = [
   // Fintech / Growth
   { ticker: 'PYPL', name: 'PayPal Holdings Inc.',                type: 'Stock', exchange: 'NASDAQ', last_price: 86.93,   expense_ratio: 0,      div_yield: 0    },
   { ticker: 'SNOW', name: 'Snowflake Inc.',                      type: 'Stock', exchange: 'NYSE',   last_price: 146.38,  expense_ratio: 0,      div_yield: 0    },
-  { ticker: 'PLTR', name: 'Palantir Technologies Inc.',          type: 'Stock', exchange: 'NYSE',   last_price: 38.15,   expense_ratio: 0,      div_yield: 0    },
-  { ticker: 'COIN', name: 'Coinbase Global Inc.',                type: 'Stock', exchange: 'NASDAQ', last_price: 218.74,  expense_ratio: 0,      div_yield: 0    },
+  { ticker: 'PLTR', name: 'Palantir Technologies Inc.',          type: 'Stock', exchange: 'NYSE',   last_price: 118.50,  expense_ratio: 0,      div_yield: 0    },
+  { ticker: 'COIN', name: 'Coinbase Global Inc.',                type: 'Stock', exchange: 'NASDAQ', last_price: 298.40,  expense_ratio: 0,      div_yield: 0    },
   { ticker: 'RBLX', name: 'Roblox Corporation',                  type: 'Stock', exchange: 'NYSE',   last_price: 42.31,   expense_ratio: 0,      div_yield: 0    },
   { ticker: 'DDOG', name: 'Datadog Inc.',                        type: 'Stock', exchange: 'NASDAQ', last_price: 121.48,  expense_ratio: 0,      div_yield: 0    },
   { ticker: 'CRWD', name: 'CrowdStrike Holdings Inc.',           type: 'Stock', exchange: 'NASDAQ', last_price: 368.92,  expense_ratio: 0,      div_yield: 0    },
@@ -192,26 +192,44 @@ const VOLATILITY = {
 
 const DRIFT = 0.00035; // slight upward drift per trading day (~9% annual)
 
-// Approximate 2-year cumulative returns (Mar 2024 → Feb 2026) for key tickers.
+// Approximate 2-year cumulative returns (Feb 2024 → Feb 2026) for key tickers.
 // Used to bias-correct the random walk so chart direction matches reality.
 // All others fall back to DRIFT * 504 default (~19% over 2 years).
 const TICKER_TARGET_2YR = {
   // CBOE index tickers
-  'SPX':    0.27,  // S&P 500 ~+27%
-  'NDX':    0.38,  // NASDAQ-100 ~+38%
-  'DJI':    0.22,  // Dow Jones ~+22%
-  'RUT':    0.08,  // Russell 2000 ~+8% (small caps lagged)
+  'SPX':    0.30,  // S&P 500 ~+30%
+  'NDX':    0.42,  // NASDAQ-100 ~+42%
+  'DJI':    0.24,  // Dow Jones ~+24%
+  'RUT':    0.10,  // Russell 2000 ~+10% (small caps lagged)
   // ETF equivalents (mirror their index)
-  'SPY':    0.27,  'QQQ':   0.38,  'DIA':   0.22,  'IWM':   0.08,
+  'SPY':    0.30,  'QQQ':   0.42,  'DIA':   0.24,  'IWM':   0.10,
   // Popular ETFs the user may add
-  'VOO':    0.27,  'VXUS':  0.10,  'QQQM':  0.38,  'AVUV':  0.12,
-  'SCHD':   0.18,  'XLU':   0.15,  'GLTR':  0.25,  'BITW':  0.60,
-  'EFA':    0.10,  // MSCI EAFE ~+10%
-  'AGG':   -0.02,  // US Agg bonds ~-2% (rates stayed elevated)
+  'VOO':    0.30,  'VTI':   0.28,  'VXUS':  0.12,  'QQQM':  0.42,
+  'AVUV':   0.14,  'SCHD':  0.20,  'XLU':   0.18,  'GLTR':  0.35,
+  'BITW':   0.80,  'IBIT':  1.20,
+  'VGT':    0.45,  'SOXX':  0.35,  'ARKK':  0.15,
+  'EFA':    0.12,  // MSCI EAFE ~+12%
+  'EEM':    0.08,  // Emerging markets ~+8%
+  'AGG':   -0.01,  // US Agg bonds ~-1% (rates elevated but easing)
+  'BND':   -0.01,  'TLT':  -0.05,  'HYG':   0.08,
+  // Sector ETFs
+  'XLK':    0.40,  'XLF':   0.30,  'XLE':   0.15,  'XLV':   0.12,
+  'XLI':    0.22,  'XLY':   0.25,  'XLRE':  0.08,
   // Mega-cap highlights
-  'NVDA':  4.50,  'META':  1.80,  'NFLX':  0.90,
-  'AAPL':  0.25,  'MSFT':  0.20,  'GOOGL': 0.40,
-  'AMZN':  0.55,  'AVGO':  1.20,  'GS':    0.80,
+  'NVDA':  5.00,  'META':  2.00,  'NFLX':  1.00,  'APP':   3.50,
+  'AAPL':  0.28,  'MSFT':  0.25,  'GOOGL': 0.45,  'GOOG':  0.45,
+  'AMZN':  0.60,  'AVGO':  1.40,  'GS':    0.85,
+  'TSLA':  0.50,  'PLTR':  2.50,  'COIN':  1.80,
+  'CRM':   0.30,  'ADBE':  0.15,  'NOW':   0.50,  'SHOP':  0.60,
+  'UBER':  0.55,  'SPOT':  1.50,  'CRWD':  0.45,  'ARM':   0.70,
+  // Financials
+  'JPM':   0.40,  'V':     0.25,  'MA':    0.28,  'BLK':   0.35,
+  // Healthcare
+  'LLY':   0.45,  'UNH':   0.15,  'ISRG':  0.50,  'AMGN':  0.10,
+  // Energy
+  'XOM':   0.12,  'CVX':   0.10,  'COP':   0.08,
+  // Industrials
+  'CAT':   0.35,  'GE':    0.65,  'LMT':   0.28,
 };
 
 // Returns array of {date, price} from oldest to newest, ending near last_price.
@@ -258,8 +276,147 @@ export function generateHistory(ticker, numDays = 504) {
   return dates.map((date, i) => ({ date, price: prices[i] }));
 }
 
+// ─── Risk metrics ─────────────────────────────────────────────────────────────
+const RISK_FREE_RATE = 0.05; // annualized risk-free rate (~5% fed funds proxy)
+
+// Compute annualized volatility from a price array
+function annualizedVolatility(prices) {
+  if (prices.length < 2) return 0;
+  const returns = [];
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i - 1] > 0) returns.push(prices[i] / prices[i - 1] - 1);
+  }
+  if (!returns.length) return 0;
+  const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+  const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+  return Math.sqrt(variance * 252); // annualize
+}
+
+// Compute max drawdown from a price array (returns a negative %)
+function maxDrawdown(prices) {
+  if (prices.length < 2) return 0;
+  let peak = prices[0];
+  let worstDd = 0;
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i] > peak) peak = prices[i];
+    const dd = (prices[i] - peak) / peak;
+    if (dd < worstDd) worstDd = dd;
+  }
+  return worstDd * 100; // as %
+}
+
+// Compute Sharpe ratio from a price array over N trading days
+function sharpeRatio(prices, tradingDays) {
+  if (prices.length < 2 || tradingDays <= 0) return 0;
+  const totalReturn = prices[prices.length - 1] / prices[0] - 1;
+  const annualizedReturn = Math.pow(1 + totalReturn, 252 / tradingDays) - 1;
+  const vol = annualizedVolatility(prices);
+  if (vol === 0) return 0;
+  return (annualizedReturn - RISK_FREE_RATE) / vol;
+}
+
+// Compute Sortino ratio (penalizes only downside volatility)
+function sortinoRatio(prices, tradingDays) {
+  if (prices.length < 2 || tradingDays <= 0) return 0;
+  const returns = [];
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i - 1] > 0) returns.push(prices[i] / prices[i - 1] - 1);
+  }
+  if (!returns.length) return 0;
+  const totalReturn = prices[prices.length - 1] / prices[0] - 1;
+  const annualizedReturn = Math.pow(1 + totalReturn, 252 / tradingDays) - 1;
+  const dailyRf = Math.pow(1 + RISK_FREE_RATE, 1 / 252) - 1;
+  const downsideReturns = returns.filter((r) => r < dailyRf).map((r) => r - dailyRf);
+  if (!downsideReturns.length) return annualizedReturn > RISK_FREE_RATE ? 99 : 0; // no downside
+  const downsideVariance = downsideReturns.reduce((s, r) => s + r ** 2, 0) / downsideReturns.length;
+  const downsideVol = Math.sqrt(downsideVariance * 252);
+  if (downsideVol === 0) return 0;
+  return (annualizedReturn - RISK_FREE_RATE) / downsideVol;
+}
+
+// Build a drawdown series from a price array: [{ date, drawdown: -2.5 }, ...]
+function drawdownSeries(datesPrices) {
+  if (datesPrices.length < 2) return [];
+  let peak = datesPrices[0].price;
+  return datesPrices.map(({ date, price }) => {
+    if (price > peak) peak = price;
+    return { date, drawdown: parseFloat(((price - peak) / peak * 100).toFixed(2)) };
+  });
+}
+
+// Get risk metrics for a single ticker over N trading days
+export function getRiskMetrics(ticker, tradingDays = 252) {
+  const hist = generateHistory(ticker, tradingDays + 1);
+  const prices = hist.map((d) => d.price);
+  return {
+    volatility:  parseFloat((annualizedVolatility(prices) * 100).toFixed(2)),
+    maxDrawdown: parseFloat(maxDrawdown(prices).toFixed(2)),
+    sharpe:      parseFloat(sharpeRatio(prices, tradingDays).toFixed(2)),
+    sortino:     parseFloat(sortinoRatio(prices, tradingDays).toFixed(2)),
+  };
+}
+
+// Get risk metrics for a portfolio
+export function getPortfolioRiskMetrics(holdings, tradingDays = 252) {
+  if (!holdings?.length) return { volatility: 0, maxDrawdown: 0, sharpe: 0, sortino: 0 };
+  const numDays = tradingDays + 1;
+  const histories = holdings.map((h) => ({
+    weight: h.weight_percent / 100,
+    prices: generateHistory(h.ticker, numDays).map((p) => p.price),
+  }));
+  // Build composite portfolio price series
+  const portfolioPrices = Array.from({ length: numDays }, (_, i) => {
+    return histories.reduce((sum, h) => {
+      const startPrice = h.prices[0] || 1;
+      return sum + h.weight * (h.prices[i] / startPrice);
+    }, 0);
+  });
+  return {
+    volatility:  parseFloat((annualizedVolatility(portfolioPrices) * 100).toFixed(2)),
+    maxDrawdown: parseFloat(maxDrawdown(portfolioPrices).toFixed(2)),
+    sharpe:      parseFloat(sharpeRatio(portfolioPrices, tradingDays).toFixed(2)),
+    sortino:     parseFloat(sortinoRatio(portfolioPrices, tradingDays).toFixed(2)),
+  };
+}
+
+// Get drawdown series for the portfolio
+export function getPortfolioDrawdownData(holdings, benchmarkTicker, range = '1Y') {
+  const RANGE_DAYS_DD = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, '2Y': 504, '3Y': 756, Max: 756 };
+  const numDays = RANGE_DAYS_DD[range] ?? 252;
+  if (!holdings?.length) return [];
+
+  const histories = holdings.map((h) => ({
+    weight: h.weight_percent / 100,
+    data: generateHistory(h.ticker, numDays),
+  }));
+
+  const dates = histories[0].data.map((d) => d.date);
+
+  // Build composite portfolio prices
+  const portfolioPrices = dates.map((_, i) => {
+    return histories.reduce((sum, h) => {
+      const startPrice = h.data[0]?.price || 1;
+      return sum + h.weight * (h.data[i]?.price / startPrice);
+    }, 0);
+  });
+
+  const ddSeries = drawdownSeries(dates.map((d, i) => ({ date: d, price: portfolioPrices[i] })));
+
+  if (benchmarkTicker) {
+    const benchHist = generateHistory(benchmarkTicker, numDays);
+    const benchDdSeries = drawdownSeries(benchHist);
+    return ddSeries.map((d, i) => ({
+      date: d.date,
+      portfolio: d.drawdown,
+      benchmark: benchDdSeries[i]?.drawdown ?? 0,
+    }));
+  }
+
+  return ddSeries.map((d) => ({ date: d.date, portfolio: d.drawdown }));
+}
+
 // ─── Performance calculation ──────────────────────────────────────────────────
-const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, Max: 504 };
+const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, '2Y': 504, '3Y': 756, Max: 756 };
 
 // Returns [{ date, portfolio: +5.34, benchmark?: +3.21 }]
 // Values are % return from the start of the range (0 = start, +5 = up 5%).
@@ -363,11 +520,11 @@ export function createDemoPortfolios(userId) {
       created_at: twoYearsAgo,
       last_updated_at: now,
       holdings: [
-        { ticker: 'AAPL',  name: 'Apple Inc.',             type: 'Stock', last_price: 228.52, entry_price: 228.52, weight_percent: 25, category: 'Core' },
-        { ticker: 'MSFT',  name: 'Microsoft Corporation',  type: 'Stock', last_price: 415.40, entry_price: 415.40, weight_percent: 25, category: 'Core' },
-        { ticker: 'GOOGL', name: 'Alphabet Inc. Class A',  type: 'Stock', last_price: 194.75, entry_price: 194.75, weight_percent: 20, category: 'Core' },
-        { ticker: 'NVDA',  name: 'NVIDIA Corporation',     type: 'Stock', last_price: 873.22, entry_price: 873.22, weight_percent: 20, category: 'Tilt' },
-        { ticker: 'AMZN',  name: 'Amazon.com Inc.',        type: 'Stock', last_price: 224.80, entry_price: 224.80, weight_percent: 10, category: 'Satellite' },
+        { ticker: 'AAPL',  name: 'Apple Inc.',             type: 'Stock', last_price: 242.30, entry_price: 242.30, weight_percent: 25, category: 'Core' },
+        { ticker: 'MSFT',  name: 'Microsoft Corporation',  type: 'Stock', last_price: 438.90, entry_price: 438.90, weight_percent: 25, category: 'Core' },
+        { ticker: 'GOOGL', name: 'Alphabet Inc. Class A',  type: 'Stock', last_price: 205.40, entry_price: 205.40, weight_percent: 20, category: 'Core' },
+        { ticker: 'NVDA',  name: 'NVIDIA Corporation',     type: 'Stock', last_price: 142.50, entry_price: 142.50, weight_percent: 20, category: 'Tilt' },
+        { ticker: 'AMZN',  name: 'Amazon.com Inc.',        type: 'Stock', last_price: 238.60, entry_price: 238.60, weight_percent: 10, category: 'Satellite' },
       ],
     },
     {
@@ -382,7 +539,7 @@ export function createDemoPortfolios(userId) {
       created_at: twoYearsAgo,
       last_updated_at: now,
       holdings: [
-        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', type: 'ETF', last_price: 596.41, entry_price: 596.41, weight_percent: 100, category: 'Core' },
+        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', type: 'ETF', last_price: 618.50, entry_price: 618.50, weight_percent: 100, category: 'Core' },
       ],
     },
     {
@@ -397,9 +554,9 @@ export function createDemoPortfolios(userId) {
       created_at: twoYearsAgo,
       last_updated_at: now,
       holdings: [
-        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust',          type: 'ETF', last_price: 596.41, entry_price: 596.41, weight_percent: 40, category: 'Core' },
+        { ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust',          type: 'ETF', last_price: 618.50, entry_price: 618.50, weight_percent: 40, category: 'Core' },
         { ticker: 'AGG', name: 'iShares Core U.S. Aggregate Bond', type: 'ETF', last_price: 97.20,  entry_price: 97.20,  weight_percent: 40, category: 'Core' },
-        { ticker: 'IWM', name: 'iShares Russell 2000 ETF',         type: 'ETF', last_price: 228.15, entry_price: 228.15, weight_percent: 10, category: 'Tilt' },
+        { ticker: 'IWM', name: 'iShares Russell 2000 ETF',         type: 'ETF', last_price: 234.80, entry_price: 234.80, weight_percent: 10, category: 'Tilt' },
         { ticker: 'EFA', name: 'iShares MSCI EAFE ETF',            type: 'ETF', last_price: 78.44,  entry_price: 78.44,  weight_percent: 10, category: 'Satellite' },
       ],
     },

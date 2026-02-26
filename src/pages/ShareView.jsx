@@ -50,7 +50,7 @@ export default function ShareView() {
       <header className="bg-white border-b border-slate-200 px-6 py-5">
         <div className="max-w-4xl mx-auto">
           <span className="text-xs font-semibold text-blue-600 uppercase tracking-widest">
-            WeightWatch Portfolios
+            AJA Wealth Management
           </span>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">{portfolio.name}</h1>
           {portfolio.description && (
@@ -174,7 +174,7 @@ export default function ShareView() {
         {/* Footer */}
         <p className="text-center text-xs text-slate-400 pb-4">
           Powered by{' '}
-          <span className="font-semibold text-blue-600">WeightWatch Portfolios</span>
+          <span className="font-semibold text-blue-600">AJA Wealth Management</span>
         </p>
       </main>
     </div>

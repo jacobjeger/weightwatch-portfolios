@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,13 @@ export default function ResetPassword() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [cooldown > 0]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -19,7 +26,13 @@ export default function ResetPassword() {
       await resetPassword(email.trim());
       setSent(true);
     } catch (err) {
-      setError(err.message);
+      const msg = (err.message || '').toLowerCase();
+      if (msg.includes('rate limit') || msg.includes('too many') || msg.includes('rate_limit')) {
+        setError('Too many attempts — please wait a minute and try again.');
+        setCooldown(60);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -70,8 +83,8 @@ export default function ResetPassword() {
                 />
                 {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
               </div>
-              <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
-                {loading ? 'Sending…' : 'Send Reset Link'}
+              <button type="submit" className="btn-primary w-full justify-center" disabled={loading || cooldown > 0}>
+                {loading ? 'Sending…' : cooldown > 0 ? `Try again in ${cooldown}s` : 'Send Reset Link'}
               </button>
             </form>
             <div className="mt-4 text-center">

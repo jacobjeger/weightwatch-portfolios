@@ -178,7 +178,7 @@ export async function searchSymbols(query) {
 // ── Portfolio chart data ──────────────────────────────────────────────────────
 // Returns: [{ date, portfolio: +5.34, benchmark?: +3.21 }, ...]
 // Values are % return from start of range (0 = start date, positive = gain).
-const RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'Max': 1095 };
+const RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '2Y': 730, 'Max': 1095 };
 
 export async function getRealPortfolioChartData(holdings, benchmarkTicker, range = '1Y') {
   if (!holdings.length) return [];
@@ -233,7 +233,7 @@ export async function getRealPortfolioChartData(holdings, benchmarkTicker, range
 // ── Individual Holdings chart data ───────────────────────────────────────────
 // Returns: [{ date, AAPL: +5.3, MSFT: +2.1, ... }, ...]
 // Each holding is its own key with % return from start of range.
-const HOLDINGS_RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'Max': 1095 };
+const HOLDINGS_RANGE_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '2Y': 730, 'Max': 1095 };
 
 export async function getRealHoldingsChartData(holdings, range = '6M') {
   if (!holdings.length || !isConfigured()) return null;
@@ -342,13 +342,13 @@ async function getQuoteBasedReturns(holdings, benchmarkTicker) {
 // weighted portfolio returns for each standard timeframe.
 // Falls back to quote-based 1D returns if candle data is unavailable.
 // Returns: { portfolio: { '1D': 0.45, '7D': 1.2, ... }, benchmark: { '1D': 0.1, ... } | null }
-const PERF_DAYS = { '1D': 1, '7D': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+const PERF_DAYS = { '1D': 1, '7D': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '2Y': 730 };
 
 export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
   if (!holdings.length || !isConfigured()) return null;
 
   const toDate   = new Date().toISOString().slice(0, 10);
-  const fromDate = new Date(Date.now() - 370 * 86_400_000).toISOString().slice(0, 10); // 370 days to cover weekends
+  const fromDate = new Date(Date.now() - 740 * 86_400_000).toISOString().slice(0, 10); // 740 days to cover 2Y + weekends
 
   // Fetch candles with staggering to respect rate limits
   const tickers = holdings.map(h => h.ticker);
@@ -460,6 +460,93 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
     const quoteRet = await getQuoteBasedReturns(holdings, benchmarkTicker);
     result.portfolio['1D'] = quoteRet.portfolio;
     result.benchmark['1D'] = quoteRet.benchmark;
+  }
+
+  return result;
+}
+
+// ── Real risk metrics from candle data ──────────────────────────────────────
+// Computes volatility, max drawdown, Sharpe, and Sortino from real market data.
+const RISK_FREE_RATE = 0.05;
+
+export async function getRealRiskMetrics(holdings, benchmarkTicker, range = '1Y') {
+  if (!holdings.length || !isConfigured()) return null;
+
+  const days = RANGE_DAYS[range] ?? 365;
+  const toDate = new Date().toISOString().slice(0, 10);
+  const fromDate = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
+  const tickers = holdings.map(h => h.ticker);
+  const allTickers = benchmarkTicker ? [...tickers, benchmarkTicker] : tickers;
+  const candleResults = await staggeredCandles(allTickers, fromDate, toDate);
+
+  const holdingCandles = candleResults.slice(0, tickers.length);
+  const benchCandles = benchmarkTicker ? candleResults[candleResults.length - 1] : [];
+
+  // Build composite portfolio price series
+  const dates = holdingCandles.reduce((best, c) => c.length > best.length ? c : best, []).map(d => d.date);
+  if (!dates.length) return null;
+
+  const priceMaps = holdingCandles.map(candles => {
+    const m = {};
+    candles.forEach(d => { m[d.date] = d.price; });
+    return m;
+  });
+
+  const startPrices = holdingCandles.map(c => c[0]?.price ?? null);
+  const portfolioPrices = dates.map(date => {
+    let val = 0;
+    holdings.forEach((h, i) => {
+      const start = startPrices[i];
+      if (start && start > 0) {
+        val += (h.weight_percent / 100) * ((priceMaps[i][date] ?? start) / start);
+      }
+    });
+    return val || 1;
+  });
+
+  function computeMetrics(prices, tradingDays) {
+    if (prices.length < 2) return { volatility: 0, maxDrawdown: 0, sharpe: 0, sortino: 0 };
+    const returns = [];
+    for (let i = 1; i < prices.length; i++) {
+      if (prices[i - 1] > 0) returns.push(prices[i] / prices[i - 1] - 1);
+    }
+    // Volatility
+    const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+    const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+    const vol = Math.sqrt(variance * 252) * 100;
+    // Max drawdown
+    let peak = prices[0], worstDd = 0;
+    for (let i = 1; i < prices.length; i++) {
+      if (prices[i] > peak) peak = prices[i];
+      const dd = (prices[i] - peak) / peak;
+      if (dd < worstDd) worstDd = dd;
+    }
+    // Sharpe
+    const totalReturn = prices[prices.length - 1] / prices[0] - 1;
+    const annReturn = Math.pow(1 + totalReturn, 252 / tradingDays) - 1;
+    const sharpe = vol > 0 ? (annReturn - RISK_FREE_RATE) / (vol / 100) : 0;
+    // Sortino
+    const dailyRf = Math.pow(1 + RISK_FREE_RATE, 1 / 252) - 1;
+    const downReturns = returns.filter(r => r < dailyRf).map(r => r - dailyRf);
+    const downVar = downReturns.length > 0
+      ? downReturns.reduce((s, r) => s + r ** 2, 0) / downReturns.length
+      : 0;
+    const downVol = Math.sqrt(downVar * 252);
+    const sortino = downVol > 0 ? (annReturn - RISK_FREE_RATE) / downVol : (annReturn > RISK_FREE_RATE ? 99 : 0);
+
+    return {
+      volatility: parseFloat(vol.toFixed(2)),
+      maxDrawdown: parseFloat((worstDd * 100).toFixed(2)),
+      sharpe: parseFloat(sharpe.toFixed(2)),
+      sortino: parseFloat(sortino.toFixed(2)),
+    };
+  }
+
+  const result = { portfolio: computeMetrics(portfolioPrices, dates.length) };
+
+  if (benchmarkTicker && benchCandles.length > 1) {
+    result.benchmark = computeMetrics(benchCandles.map(d => d.price), benchCandles.length);
   }
 
   return result;

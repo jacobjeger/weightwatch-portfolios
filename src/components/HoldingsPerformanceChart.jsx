@@ -6,8 +6,8 @@ import {
 import { generateHistory } from '../lib/mockData';
 import { isConfigured, getRealHoldingsChartData } from '../lib/finnhub';
 
-const RANGES = ['1M', '3M', '6M', '1Y', 'Max'];
-const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, 'Max': 504 };
+const RANGES = ['1M', '3M', '6M', '1Y', '2Y', 'Max'];
+const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, '2Y': 504, 'Max': 756 };
 
 // Distinct colors for up to 15 holdings
 const HOLDING_COLORS = [

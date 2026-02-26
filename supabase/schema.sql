@@ -1,4 +1,4 @@
--- WeightWatch Portfolios — Supabase Schema
+-- AJA Wealth Management — Supabase Schema
 -- Run this in the Supabase SQL editor after creating a project.
 
 -- ────────────────────────────────────────────────────────────

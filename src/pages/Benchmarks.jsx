@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
-import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getYTDReturn } from '../lib/mockData';
+import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getYTDReturn, getRiskMetrics } from '../lib/mockData';
 import { getRealPerformanceReturns, getRealHoldingsChartData, isConfigured } from '../lib/finnhub';
 import { useMarketData } from '../context/MarketDataContext';
 import { useToast } from '../context/ToastContext';
@@ -19,7 +19,7 @@ const TIMEFRAMES = [
 ];
 
 const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#06b6d4', '#ef4444'];
-const CHART_RANGES = ['1M', '3M', '6M', '1Y', 'Max'];
+const CHART_RANGES = ['1M', '3M', '6M', '1Y', '2Y', 'Max'];
 
 function pctColor(v) {
   const n = parseFloat(v);
@@ -79,7 +79,7 @@ export default function Benchmarks() {
 
   // Build multi-line chart data for all 6 benchmarks (mock fallback)
   const multiChartData = (() => {
-    const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, 'Max': 504 };
+    const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, '2Y': 504, 'Max': 756 };
     const numDays = RANGE_DAYS[chartRange] ?? 252;
 
     // Import at top level won't work in closure, so we inline the logic
@@ -154,6 +154,61 @@ export default function Benchmarks() {
                         </td>
                       );
                     })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Risk Metrics table */}
+      <div className="card overflow-hidden">
+        <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-slate-100">
+          <h2 className="section-title">Risk Metrics (1Y)</h2>
+          <p className="text-xs text-slate-400">Annualized volatility, max drawdown, and risk-adjusted returns</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-100">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="th">Ticker</th>
+                <th className="th">Name</th>
+                <th className="th text-right">Volatility</th>
+                <th className="th text-right">Max Drawdown</th>
+                <th className="th text-right">Sharpe</th>
+                <th className="th text-right">Sortino</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {BENCHMARKS.map((ticker) => {
+                const meta = BENCHMARK_META[ticker];
+                const inst = INSTRUMENTS.find((i) => i.ticker === ticker);
+                const metrics = getRiskMetrics(ticker, 252);
+                return (
+                  <tr key={ticker} className="hover:bg-slate-50">
+                    <td className="td">
+                      <span className="font-semibold text-slate-900">{ticker}</span>
+                    </td>
+                    <td className="td text-slate-600">{meta?.label ?? inst?.name ?? ticker}</td>
+                    <td className="td text-right">
+                      <span className="font-mono font-medium text-slate-700">{metrics.volatility.toFixed(1)}%</span>
+                    </td>
+                    <td className="td text-right">
+                      <span className={`font-mono font-medium ${metrics.maxDrawdown < -10 ? 'text-red-500' : metrics.maxDrawdown < -5 ? 'text-amber-600' : 'text-slate-700'}`}>
+                        {metrics.maxDrawdown.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="td text-right">
+                      <span className={`font-mono font-medium ${metrics.sharpe > 1 ? 'text-green-600' : metrics.sharpe > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                        {metrics.sharpe.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="td text-right">
+                      <span className={`font-mono font-medium ${metrics.sortino > 1.5 ? 'text-green-600' : metrics.sortino > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                        {metrics.sortino >= 99 ? '>99' : metrics.sortino.toFixed(2)}
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
