@@ -36,11 +36,11 @@ function CustomTooltip({ active, payload, label, createdAt }) {
         <p className="text-xs text-amber-600 mb-1 font-medium">Backtested (before account start)</p>
       )}
       {payload.map((p) => (
-        <div key={p.dataKey} className="flex items-center gap-2">
+        <div key={String(p.dataKey)} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span className="text-slate-600 capitalize">{p.name ?? p.dataKey}:</span>
+          <span className="text-slate-600 capitalize">{String(p.name ?? p.dataKey ?? '')}:</span>
           <span className="font-semibold" style={{ color: p.color }}>
-            {p.value >= 0 ? '+' : ''}{p.value?.toFixed(2)}%
+            {(Number(p.value) || 0) >= 0 ? '+' : ''}{(Number(p.value) || 0).toFixed(2)}%
           </span>
         </div>
       ))}
@@ -164,7 +164,7 @@ export default function PerformanceChart({
 
   const hasPortfolio = holdings && holdings.length > 0;
   const hasBenchmark = !!benchmarkTicker;
-  const benchLabel   = BENCHMARK_META[benchmarkTicker]?.label ?? benchmarkTicker;
+  const benchLabel   = String(BENCHMARK_META[benchmarkTicker]?.label ?? benchmarkTicker ?? 'Benchmark');
 
   // Determine the account start date for backtest/live distinction
   const accountStartDate = createdAt ? createdAt.slice(0, 10) : null;
@@ -384,7 +384,7 @@ export default function PerformanceChart({
                 />
                 <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
                 <Tooltip
-                  formatter={(v, name) => [`${(v ?? 0).toFixed(2)}%`, name === 'portfolio' ? 'Portfolio DD' : 'Benchmark DD']}
+                  formatter={(v, name) => [`${(Number(v) || 0).toFixed(2)}%`, String(name) === 'portfolio' ? 'Portfolio DD' : 'Benchmark DD']}
                   labelFormatter={(l) => {
                     const d = new Date(l);
                     return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });

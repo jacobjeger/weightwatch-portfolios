@@ -190,14 +190,14 @@ export default function HoldingsPerformanceChart({ holdings }) {
             />
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
             <Tooltip
-              formatter={(v, name) => [`${(v ?? 0) >= 0 ? '+' : ''}${(v ?? 0).toFixed(2)}%`, name]}
+              formatter={(v, name) => [`${(Number(v) || 0) >= 0 ? '+' : ''}${(Number(v) || 0).toFixed(2)}%`, String(name)]}
               labelFormatter={(l) => {
                 const d = new Date(l);
                 return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
               }}
               contentStyle={{ fontSize: 12 }}
             />
-            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => String(v)} />
             {holdings.map((h, i) => {
               const isVisible = !hiddenTickers.has(h.ticker);
               if (!isVisible) return null;
