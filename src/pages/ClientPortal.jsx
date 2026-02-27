@@ -237,7 +237,7 @@ export default function ClientPortal() {
                 <span className="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync'}</span>
               </button>
               <div className="text-right text-sm hidden sm:block">
-                <p className="font-medium text-slate-300">{user.email}</p>
+                <p className="font-medium text-slate-300">{String(user.email || '')}</p>
                 {lastSync && (
                   <p className="text-xs text-slate-500">
                     Last synced {lastSync.toLocaleTimeString()}
@@ -263,7 +263,7 @@ export default function ClientPortal() {
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                   }`}
                 >
-                  {p.name}
+                  {String(p.name || 'Portfolio')}
                   {unreadCounts[p.id] > 0 && (
                     <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                       {unreadCounts[p.id]}
@@ -289,6 +289,7 @@ export default function ClientPortal() {
         </div>
 
         {/* 1. ALLOCATION WHEEL + BREAKDOWN (first thing clients see) */}
+        <SectionErrorBoundary label="Allocation">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-3">Allocation Wheel</h2>
@@ -299,8 +300,8 @@ export default function ClientPortal() {
             <div className="space-y-3">
               {['Core', 'Tilt', 'Satellite'].map((cat) => {
                 const COLORS = { Core: 'bg-blue-500', Tilt: 'bg-violet-500', Satellite: 'bg-amber-500' };
-                const catHoldings = holdings.filter((h) => (h.category || 'Core') === cat);
-                const w = catHoldings.reduce((s, h) => s + (h.weight_percent || 0), 0);
+                const catHoldings = holdings.filter((h) => (String(h.category || 'Core')) === cat);
+                const w = catHoldings.reduce((s, h) => s + (Number(h.weight_percent) || 0), 0);
                 if (w === 0) return null;
                 return (
                   <div key={cat}>
@@ -312,7 +313,7 @@ export default function ClientPortal() {
                       <span className="text-xs font-mono font-semibold text-slate-700 w-12 text-right">{w.toFixed(1)}%</span>
                     </div>
                     <div className="ml-16 text-xs text-slate-400">
-                      {catHoldings.map((h) => h.ticker).join(', ')}
+                      {catHoldings.map((h) => String(h.ticker)).join(', ')}
                     </div>
                   </div>
                 );
@@ -333,35 +334,37 @@ export default function ClientPortal() {
             </div>
           </div>
         </div>
+        </SectionErrorBoundary>
 
         {/* 2. PORTFOLIO PERFORMANCE CHART */}
+        <SectionErrorBoundary label="Performance chart">
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5">
           <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-emerald-500" />
             Portfolio vs Benchmark Performance
           </h2>
-          <SectionErrorBoundary label="Performance chart">
           <PerformanceChart
             holdings={holdings}
-            benchmarkTicker={benchmark || null}
+            benchmarkTicker={typeof benchmark === 'string' ? benchmark : null}
             createdAt={portfolio?.created_at}
             cashPercent={portfolio?.cash_percent ?? 0}
             drip={portfolio?.drip_enabled ?? true}
           />
-          </SectionErrorBoundary>
         </div>
+        </SectionErrorBoundary>
 
         {/* Performance summary cards */}
+        <SectionErrorBoundary label="Performance summary">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-emerald-400 to-teal-500" />
             <p className="text-xs font-medium text-slate-500 mb-1">Year-to-Date</p>
             <p className={`text-lg sm:text-xl font-bold ${ytdReturn > 0 ? 'text-emerald-600' : ytdReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-              {ytdReturn != null ? `${ytdReturn > 0 ? '+' : ''}${ytdReturn.toFixed(2)}%` : '--'}
+              {ytdReturn != null ? `${ytdReturn > 0 ? '+' : ''}${Number(ytdReturn).toFixed(2)}%` : '--'}
             </p>
             {benchYtd != null && (
               <p className="text-xs text-slate-400 mt-1">
-                {benchLabel}: {benchYtd > 0 ? '+' : ''}{benchYtd.toFixed(2)}%
+                {String(benchLabel || '')}: {benchYtd > 0 ? '+' : ''}{Number(benchYtd).toFixed(2)}%
               </p>
             )}
           </div>
@@ -369,14 +372,14 @@ export default function ClientPortal() {
             <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-purple-400 to-indigo-500" />
             <p className="text-xs font-medium text-purple-600 mb-1">Since Creation</p>
             <p className={`text-lg sm:text-xl font-bold ${sinceReturn > 0 ? 'text-emerald-600' : sinceReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-              {sinceReturn != null ? `${sinceReturn > 0 ? '+' : ''}${sinceReturn.toFixed(2)}%` : '--'}
+              {sinceReturn != null ? `${sinceReturn > 0 ? '+' : ''}${Number(sinceReturn).toFixed(2)}%` : '--'}
             </p>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-400 to-cyan-500" />
             <p className="text-xs font-medium text-slate-500 mb-1">1-Year Return</p>
             <p className={`text-lg sm:text-xl font-bold ${oneYearReturn > 0 ? 'text-emerald-600' : oneYearReturn < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-              {oneYearReturn != null ? `${oneYearReturn > 0 ? '+' : ''}${oneYearReturn.toFixed(2)}%` : '--'}
+              {oneYearReturn != null ? `${oneYearReturn > 0 ? '+' : ''}${Number(oneYearReturn).toFixed(2)}%` : '--'}
             </p>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-4 relative overflow-hidden">
@@ -390,23 +393,25 @@ export default function ClientPortal() {
             </p>
           </div>
         </div>
+        </SectionErrorBoundary>
 
         {/* 3. INDIVIDUAL HOLDINGS PERFORMANCE CHART */}
         {holdings.length > 1 && (
+          <SectionErrorBoundary label="Holdings chart">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-blue-500" />
               Individual Holdings Performance
             </h2>
-            <SectionErrorBoundary label="Holdings chart">
             <HoldingsPerformanceChart holdings={holdings} />
-            </SectionErrorBoundary>
           </div>
+          </SectionErrorBoundary>
         )}
 
         {/* 4. EVERYTHING ELSE: Holdings table, details, messages */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Holdings table */}
+          <SectionErrorBoundary label="Holdings table">
           <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
               Your Holdings
@@ -426,31 +431,31 @@ export default function ClientPortal() {
                 </thead>
                 <tbody>
                   {holdings.map((h) => {
-                    const drifted = currentWeights[h.ticker]?.driftedWeight;
-                    const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
-                    const dailyChange = live ? prices[h.ticker]?.changePercent ?? null : null;
+                    const drifted = currentWeights[String(h.ticker)]?.driftedWeight;
+                    const currentPrice = (live && prices[String(h.ticker)]?.price) || h.last_price;
+                    const dailyChange = live ? (typeof prices[String(h.ticker)]?.changePercent === 'number' ? prices[String(h.ticker)].changePercent : null) : null;
                     return (
-                      <tr key={h.ticker} className="border-t border-slate-100">
+                      <tr key={String(h.ticker)} className="border-t border-slate-100">
                         <td className="py-2.5 pr-4">
-                          <span className="font-mono font-semibold text-slate-800">{h.ticker}</span>
+                          <span className="font-mono font-semibold text-slate-800">{String(h.ticker || '')}</span>
                         </td>
-                        <td className="hidden sm:table-cell py-2.5 pr-4 text-slate-600">{h.name}</td>
+                        <td className="hidden sm:table-cell py-2.5 pr-4 text-slate-600">{String(h.name || '')}</td>
                         <td className="hidden sm:table-cell py-2.5 pr-4">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            (h.category || 'Core') === 'Core' ? 'bg-blue-50 text-blue-700'
-                              : (h.category || 'Core') === 'Tilt' ? 'bg-violet-50 text-violet-700'
+                            String(h.category || 'Core') === 'Core' ? 'bg-blue-50 text-blue-700'
+                              : String(h.category || 'Core') === 'Tilt' ? 'bg-violet-50 text-violet-700'
                               : 'bg-amber-50 text-amber-700'
                           }`}>
-                            {h.category || 'Core'}
+                            {String(h.category || 'Core')}
                           </span>
                         </td>
-                        <td className="py-2.5 pr-4 text-right font-mono text-slate-700">{(h.weight_percent || 0).toFixed(1)}%</td>
+                        <td className="py-2.5 pr-4 text-right font-mono text-slate-700">{(Number(h.weight_percent) || 0).toFixed(1)}%</td>
                         <td className="hidden sm:table-cell py-2.5 pr-4 text-right">
-                          {drifted != null ? (
+                          {drifted != null && typeof drifted === 'number' ? (
                             <span className={`font-mono text-sm ${
-                              Math.abs(drifted - h.weight_percent) < 0.5
+                              Math.abs(drifted - (Number(h.weight_percent) || 0)) < 0.5
                                 ? 'text-slate-500'
-                                : drifted > h.weight_percent
+                                : drifted > (Number(h.weight_percent) || 0)
                                   ? 'text-emerald-600'
                                   : 'text-orange-500'
                             }`}>
@@ -460,9 +465,9 @@ export default function ClientPortal() {
                         </td>
                         <td className="hidden sm:table-cell py-2.5 text-right">
                           <div className="font-mono text-slate-700">
-                            {currentPrice != null ? `$${Number(currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--'}
+                            {currentPrice != null && typeof currentPrice === 'number' ? `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--'}
                           </div>
-                          {dailyChange != null && (
+                          {dailyChange != null && typeof dailyChange === 'number' && (
                             <div className={`text-xs flex items-center justify-end gap-0.5 ${
                               dailyChange > 0 ? 'text-emerald-500' : dailyChange < 0 ? 'text-red-500' : 'text-slate-400'
                             }`}>
@@ -480,7 +485,7 @@ export default function ClientPortal() {
                     <td className="py-2.5 font-semibold text-slate-700">Total</td>
                     <td className="hidden sm:table-cell" />
                     <td className="hidden sm:table-cell" />
-                    <td className="py-2.5 text-right font-semibold font-mono text-emerald-600">{totalWeight.toFixed(1)}%</td>
+                    <td className="py-2.5 text-right font-semibold font-mono text-emerald-600">{(Number(totalWeight) || 0).toFixed(1)}%</td>
                     <td className="hidden sm:table-cell" />
                     <td className="hidden sm:table-cell py-2.5 text-right font-semibold font-mono text-slate-700">
                       ${currentPortfolioValue ? Math.round(currentPortfolioValue).toLocaleString() : '--'}
@@ -490,8 +495,10 @@ export default function ClientPortal() {
               </table>
             </div>
           </div>
+          </SectionErrorBoundary>
 
           {/* Sidebar: details + approval */}
+          <SectionErrorBoundary label="Portfolio details">
           <div className="space-y-4">
             {/* Portfolio details card */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
@@ -500,7 +507,7 @@ export default function ClientPortal() {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Starting Value</span>
                   <span className="font-semibold text-slate-800">
-                    ${(portfolio?.starting_value || 0).toLocaleString()}
+                    ${(Number(portfolio?.starting_value) || 0).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -512,13 +519,13 @@ export default function ClientPortal() {
                 {benchmark && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">Benchmark</span>
-                    <span className="font-medium text-blue-600">{benchLabel || benchmark}</span>
+                    <span className="font-medium text-blue-600">{String(benchLabel || benchmark || '')}</span>
                   </div>
                 )}
                 {cashPercent > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">Cash Reserve</span>
-                    <span className="font-medium text-slate-700">{cashPercent}%</span>
+                    <span className="font-medium text-slate-700">{Number(cashPercent)}%</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
@@ -557,15 +564,17 @@ export default function ClientPortal() {
                     : ''}
                 </p>
                 {approval.text && typeof approval.text === 'string' && approval.text !== 'Approved the portfolio' && approval.text !== 'Requested changes' && (
-                  <p className="text-sm mt-1 text-slate-600">{approval.text}</p>
+                  <p className="text-sm mt-1 text-slate-600">{String(approval.text)}</p>
                 )}
               </div>
             )}
           </div>
+          </SectionErrorBoundary>
         </div>
 
         {/* Messages with advisor - always visible for clients */}
         {portfolio && (
+          <SectionErrorBoundary label="Messages">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
             <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center gap-2">
               <MessageCircle className="w-4 h-4 text-emerald-500" />
@@ -576,13 +585,14 @@ export default function ClientPortal() {
               <MessagePanel
                 portfolioId={portfolio.id}
                 userId={user.id}
-                userEmail={user.email}
+                userEmail={String(user.email || '')}
                 userRole="client"
                 showApprovalActions={true}
                 defaultOpen={true}
               />
             </div>
           </div>
+          </SectionErrorBoundary>
         )}
 
         <div className="text-center py-4">

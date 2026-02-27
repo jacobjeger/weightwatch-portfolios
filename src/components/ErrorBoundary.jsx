@@ -55,16 +55,20 @@ export class SectionErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error('[SectionError]', error, info.componentStack);
+    console.error(`[SectionError] ${this.props.label || 'Unknown'}:`, error?.message, error, info?.componentStack);
   }
 
   render() {
     if (this.state.hasError) {
+      const errMsg = this.state.error?.message || 'Unknown error';
       return (
         <div className="flex items-center justify-center py-8 text-center">
           <div>
-            <p className="text-sm text-slate-400 mb-2">
-              {this.props.label || 'This section'} could not load
+            <p className="text-sm text-slate-400 mb-1">
+              {String(this.props.label || 'This section')} could not load
+            </p>
+            <p className="text-xs text-red-400 mb-2 max-w-xs mx-auto break-words">
+              {String(errMsg).slice(0, 200)}
             </p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}

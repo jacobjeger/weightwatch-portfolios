@@ -53,7 +53,7 @@ export default function AllocationPieChart({ holdings }) {
             <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(v, name) => [`${(v ?? 0).toFixed(1)}%`, name]} />
+        <Tooltip formatter={(v, name) => [`${(Number(v) || 0).toFixed(1)}%`, String(name)]} />
       </PieChart>
     </ResponsiveContainer>
   );
