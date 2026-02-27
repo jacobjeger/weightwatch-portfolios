@@ -251,7 +251,7 @@ export default function Benchmarks() {
               interval={Math.max(1, Math.floor(multiChartData.length / 6) - 1)}
             />
             <YAxis
-              tickFormatter={(v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
+              tickFormatter={(v) => v == null ? '' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%`}
               tick={{ fontSize: 11, fill: '#64748b' }}
               axisLine={false} tickLine={false}
               width={52}
@@ -259,7 +259,7 @@ export default function Benchmarks() {
             />
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
             <Tooltip
-              formatter={(v, name) => [`${v >= 0 ? '+' : ''}${v?.toFixed(2)}%`, name]}
+              formatter={(v, name) => [`${(v ?? 0) >= 0 ? '+' : ''}${(v ?? 0).toFixed(2)}%`, name]}
               labelFormatter={(l) => {
                 const d = new Date(l);
                 return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });

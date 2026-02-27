@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { MarketDataProvider } from './context/MarketDataContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import Nav from './components/Nav';
 import Dashboard from './pages/Dashboard';
 import PortfolioBuilder from './pages/PortfolioBuilder';
@@ -26,6 +27,7 @@ export default function App() {
         <div className="min-h-screen flex flex-col">
           <Nav />
           <main className="flex-1">
+            <ErrorBoundary>
             <Routes>
               {/* Public */}
               <Route path="/login" element={<Login />} />
@@ -50,6 +52,7 @@ export default function App() {
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </ErrorBoundary>
           </main>
         </div>
       </BrowserRouter>

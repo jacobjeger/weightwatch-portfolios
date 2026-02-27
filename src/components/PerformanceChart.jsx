@@ -315,7 +315,7 @@ export default function PerformanceChart({
               tickLine={false}
             />
             <YAxis
-              tickFormatter={(v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
+              tickFormatter={(v) => v == null ? '' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%`}
               tick={{ fontSize: 11, fill: '#64748b' }}
               axisLine={false}
               tickLine={false}
@@ -375,7 +375,7 @@ export default function PerformanceChart({
                   interval={Math.max(1, Math.floor(drawdownData.length / 5) - 1)}
                 />
                 <YAxis
-                  tickFormatter={(v) => `${v.toFixed(0)}%`}
+                  tickFormatter={(v) => v == null ? '' : `${Number(v).toFixed(0)}%`}
                   tick={{ fontSize: 9, fill: '#94a3b8' }}
                   axisLine={false}
                   tickLine={false}
@@ -384,7 +384,7 @@ export default function PerformanceChart({
                 />
                 <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
                 <Tooltip
-                  formatter={(v, name) => [`${v.toFixed(2)}%`, name === 'portfolio' ? 'Portfolio DD' : 'Benchmark DD']}
+                  formatter={(v, name) => [`${(v ?? 0).toFixed(2)}%`, name === 'portfolio' ? 'Portfolio DD' : 'Benchmark DD']}
                   labelFormatter={(l) => {
                     const d = new Date(l);
                     return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
