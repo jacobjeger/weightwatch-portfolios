@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, MessageCircle, CheckCircle, AlertTriangle, RefreshCw, Shield, Eye, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuth, getPortfolios, getMessages, getLatestApproval } from '../context/AuthContext';
@@ -10,6 +10,48 @@ import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
 import MessagePanel from '../components/MessagePanel';
+
+// ── Runtime diagnostic: detect objects passed as React children ──────────────
+// Monkey-patches React.createElement to catch error #310 BEFORE React throws.
+// Stores diagnostic info in window.__reactChildDiag for the error boundary to display.
+if (typeof window !== 'undefined' && !window.__childCheckPatched) {
+  window.__childCheckPatched = true;
+  window.__reactChildDiag = null;
+  const _origCreateElement = React.createElement;
+  React.createElement = function patchedCreateElement() {
+    const args = arguments;
+    for (let i = 2; i < args.length; i++) {
+      const child = args[i];
+      if (
+        child !== null &&
+        child !== undefined &&
+        typeof child === 'object' &&
+        !child.$$typeof &&
+        !Array.isArray(child) &&
+        !(child instanceof Promise)
+      ) {
+        // Found a plain object being passed as a React child — this will cause #310
+        const componentName =
+          typeof args[0] === 'string'
+            ? args[0]
+            : args[0]?.displayName || args[0]?.name || 'Unknown';
+        const diag = {
+          component: componentName,
+          childIndex: i - 2,
+          childKeys: Object.keys(child).slice(0, 20),
+          childPreview: JSON.stringify(child).slice(0, 300),
+          propsKeys: args[1] ? Object.keys(args[1]).slice(0, 20) : [],
+          timestamp: new Date().toISOString(),
+        };
+        console.error('[DIAG] Object child detected!', diag);
+        if (!window.__reactChildDiag) {
+          window.__reactChildDiag = diag;
+        }
+      }
+    }
+    return _origCreateElement.apply(this, args);
+  };
+}
 
 // ── Data sanitization ────────────────────────────────────────────────────────
 // Ensures all portfolio/holding fields are the expected primitive types.
