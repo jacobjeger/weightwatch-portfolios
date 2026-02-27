@@ -80,7 +80,7 @@ export default function Nav() {
             {user ? (
               <div className="flex items-center gap-2">
                 <span className="hidden sm:block text-xs text-slate-400 max-w-[140px] truncate">
-                  {user.email}
+                  {String(user.email || '')}
                 </span>
                 <button
                   onClick={handleSignOut}
