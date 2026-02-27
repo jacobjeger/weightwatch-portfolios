@@ -16,8 +16,7 @@ const ADVISOR_LINKS = [
 ];
 
 const CLIENT_LINKS = [
-  { to: '/',               label: 'Dashboard' },
-  { to: '/client-portal',  label: 'My Portal' },
+  { to: '/client-portal',  label: 'Dashboard' },
   { to: '/messages',       label: 'Messages' },
   { to: '/meetings',       label: 'Meetings' },
   { to: '/settings',       label: 'Settings' },
