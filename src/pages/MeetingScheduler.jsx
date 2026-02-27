@@ -289,6 +289,7 @@ export default function MeetingScheduler() {
                 {upcoming.map((m) => {
                   const TypeIcon = MEETING_TYPES.find((t) => t.value === m.type)?.icon || Video;
                   const meetingDate = new Date(m.date + 'T' + m.time);
+                  const dateValid = !isNaN(meetingDate.getTime());
                   return (
                     <div key={m.id} className="border border-slate-100 rounded-lg p-3">
                       <div className="flex items-start justify-between">
@@ -299,11 +300,11 @@ export default function MeetingScheduler() {
                           </div>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500">
                             <Calendar className="w-3 h-3" />
-                            {meetingDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {dateValid ? meetingDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '—'}
                           </div>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
                             <Clock className="w-3 h-3" />
-                            {meetingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · {m.duration}min
+                            {dateValid ? meetingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''} · {m.duration}min
                           </div>
                           {m.attendee_email && (
                             <p className="text-xs text-slate-400 mt-1">With: {m.attendee_email}</p>

@@ -117,9 +117,10 @@ export default function InviteView() {
   }
 
   const portfolio = invite.portfolio_snapshot;
-  const inviteDate = new Date(invite.created_at).toLocaleDateString(undefined, {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
+  const inviteDateObj = new Date(invite.created_at);
+  const inviteDate = !isNaN(inviteDateObj.getTime())
+    ? inviteDateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    : '';
 
   return (
     <div className="min-h-screen bg-slate-50">

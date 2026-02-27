@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart3, MessageCircle, CheckCircle, AlertTriangle, RefreshCw, Shield, Eye, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuth, getPortfolios, getMessages, getLatestApproval } from '../context/AuthContext';
 import { BENCHMARK_META, getPortfolioReturn, getPortfolioYTDReturn, getReturn, getYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
+import { SectionErrorBoundary } from '../components/ErrorBoundary';
 import { getRealPerformanceReturns } from '../lib/finnhub';
 import { useMarketData } from '../context/MarketDataContext';
 import PerformanceChart from '../components/PerformanceChart';
@@ -322,6 +323,7 @@ export default function ClientPortal() {
             <TrendingUp className="w-4 h-4 text-emerald-500" />
             Portfolio vs Benchmark Performance
           </h2>
+          <SectionErrorBoundary label="Performance chart">
           <PerformanceChart
             holdings={holdings}
             benchmarkTicker={benchmark || null}
@@ -329,6 +331,7 @@ export default function ClientPortal() {
             cashPercent={portfolio?.cash_percent ?? 0}
             drip={portfolio?.drip_enabled ?? true}
           />
+          </SectionErrorBoundary>
         </div>
 
         {/* Performance summary cards */}
@@ -378,7 +381,9 @@ export default function ClientPortal() {
               <BarChart3 className="w-4 h-4 text-blue-500" />
               Individual Holdings Performance
             </h2>
+            <SectionErrorBoundary label="Holdings chart">
             <HoldingsPerformanceChart holdings={holdings} />
+            </SectionErrorBoundary>
           </div>
         )}
 

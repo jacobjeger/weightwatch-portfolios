@@ -1045,7 +1045,9 @@ export default function PortfolioBuilder() {
                 const displayHoldings = isCurrentSlide ? holdings : snapshots[activeIdx]?.holdings ?? [];
                 const displayDate = isCurrentSlide
                   ? 'Current'
-                  : new Date(snapshots[activeIdx]?.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  : (snapshots[activeIdx]?.date && !isNaN(new Date(snapshots[activeIdx].date).getTime())
+                      ? new Date(snapshots[activeIdx].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : '—');
                 const displayType = isCurrentSlide ? null : snapshots[activeIdx]?.type;
                 const typeLabels = {
                   created: 'Created', rebalance: 'Rebalanced', adjustment: 'Adjusted',
@@ -1296,7 +1298,7 @@ export default function PortfolioBuilder() {
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <span className="font-medium text-slate-700">{typeConfig.label}</span>
                             <span className="text-xs text-slate-400 flex-shrink-0">
-                              {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {event.date && !isNaN(new Date(event.date).getTime()) ? new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-1">
@@ -1342,7 +1344,7 @@ export default function PortfolioBuilder() {
                   {approval.type === 'approval' ? 'Client approved' : 'Changes requested'}
                 </span>
                 <span className="block text-xs opacity-75 mt-0.5">
-                  {approval.sender_email} &middot; {new Date(approval.created_at).toLocaleDateString()}
+                  {approval.sender_email} &middot; {approval.created_at && !isNaN(new Date(approval.created_at).getTime()) ? new Date(approval.created_at).toLocaleDateString() : ''}
                 </span>
               </div>
             );

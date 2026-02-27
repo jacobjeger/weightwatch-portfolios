@@ -351,7 +351,9 @@ export default function Dashboard() {
                           <span className="text-slate-600">{p.holdings?.length ?? 0}</span>
                         </td>
                         <td className="td text-slate-500 text-xs">
-                          {formatDistanceToNow(new Date(p.last_updated_at), { addSuffix: true })}
+                          {p.last_updated_at && !isNaN(new Date(p.last_updated_at).getTime())
+                            ? formatDistanceToNow(new Date(p.last_updated_at), { addSuffix: true })
+                            : '—'}
                         </td>
                         <td className="td">
                           <StatusBadge status={status} totalWeight={totalWeight} />

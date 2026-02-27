@@ -36,7 +36,7 @@ export default function ShareView() {
     );
   }
 
-  const sharedDate = portfolio._sharedAt
+  const sharedDate = portfolio._sharedAt && !isNaN(new Date(portfolio._sharedAt).getTime())
     ? new Date(portfolio._sharedAt).toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'long',
