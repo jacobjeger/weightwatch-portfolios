@@ -12,6 +12,14 @@ import AllocationPieChart from '../components/AllocationPieChart';
 import MessagePanel from '../components/MessagePanel';
 
 export default function ClientPortal() {
+  return (
+    <SectionErrorBoundary label="Client Portal">
+      <ClientPortalBody />
+    </SectionErrorBoundary>
+  );
+}
+
+function ClientPortalBody() {
   const { user, role, refreshClientPortfolios } = useAuth();
   const navigate = useNavigate();
   const [portfolios, setPortfolios] = useState([]);
@@ -126,19 +134,25 @@ export default function ClientPortal() {
 
   // Drifted weights using live prices
   const currentWeights = useMemo(() => {
-    if (!holdings.length) return {};
-    const rows = holdings.map((h) => {
-      const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
-      const entryPrice = h.entry_price ?? h.last_price;
-      const ratio = (entryPrice && entryPrice > 0) ? currentPrice / entryPrice : 1;
-      return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
-    });
-    const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
-    if (!denom) return {};
-    return Object.fromEntries(rows.map((r) => [r.ticker, {
-      driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
-      ratio: r.ratio,
-    }]));
+    try {
+      if (!holdings.length) return {};
+      const rows = holdings.map((h) => {
+        const ticker = String(h.ticker || '');
+        const currentPrice = (live && prices[ticker]?.price) || h.last_price;
+        const entryPrice = h.entry_price ?? h.last_price;
+        const ratio = (entryPrice && entryPrice > 0) ? currentPrice / entryPrice : 1;
+        return { ticker, targetWeight: Number(h.weight_percent) || 0, ratio };
+      });
+      const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
+      if (!denom) return {};
+      return Object.fromEntries(rows.map((r) => [r.ticker, {
+        driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
+        ratio: r.ratio,
+      }]));
+    } catch (e) {
+      console.error('[ClientPortal] currentWeights error:', e);
+      return {};
+    }
   }, [holdings, prices, live]);
 
   // Performance metrics — wrap in try/catch to prevent crashes from bad data
@@ -182,13 +196,18 @@ export default function ClientPortal() {
 
   const cashPercent = portfolio?.cash_percent ?? 0;
   const currentPortfolioValue = useMemo(() => {
-    const sv = portfolio?.starting_value ?? 0;
-    if (!holdings.length || !sv) return sv;
-    const investedFrac = 1 - cashPercent / 100;
-    const growthFactor = holdings.reduce(
-      (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
-    );
-    return sv * (growthFactor * investedFrac + cashPercent / 100);
+    try {
+      const sv = Number(portfolio?.starting_value) || 0;
+      if (!holdings.length || !sv) return sv;
+      const investedFrac = 1 - cashPercent / 100;
+      const growthFactor = holdings.reduce(
+        (s, h) => s + ((Number(h.weight_percent) || 0) / 100) * (currentWeights[String(h.ticker)]?.ratio ?? 1), 0
+      );
+      return sv * (growthFactor * investedFrac + cashPercent / 100);
+    } catch (e) {
+      console.error('[ClientPortal] currentPortfolioValue error:', e);
+      return 0;
+    }
   }, [holdings, currentWeights, portfolio, cashPercent]);
 
   const totalWeight = holdings.reduce((s, h) => s + (h.weight_percent || 0), 0);
