@@ -10,6 +10,8 @@ import History from './pages/History';
 import AccountSettings from './pages/AccountSettings';
 import HelpTour from './pages/HelpTour';
 import ResetPassword from './pages/ResetPassword';
+import Login from './pages/Login';
+import SignUp from './pages/SignUp';
 import ShareView from './pages/ShareView';
 import InviteView from './pages/InviteView';
 import ClientPortal from './pages/ClientPortal';
@@ -26,6 +28,8 @@ export default function App() {
           <main className="flex-1">
             <Routes>
               {/* Public */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/share/:token" element={<ShareView />} />
               <Route path="/invite/:token" element={<InviteView />} />
