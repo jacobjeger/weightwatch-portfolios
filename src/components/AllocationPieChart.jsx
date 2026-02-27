@@ -22,17 +22,17 @@ function PctLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name })
       dominantBaseline="central"
       style={{ fontSize: 11, fontWeight: 600 }}
     >
-      {name}
+      {String(name ?? '')}
     </text>
   );
 }
 
 export default function AllocationPieChart({ holdings }) {
   const data = holdings
-    .filter((h) => (h.weight_percent || 0) > 0)
+    .filter((h) => (Number(h.weight_percent) || 0) > 0)
     .map((h) => ({
-      name: h.ticker,
-      value: parseFloat((h.weight_percent || 0).toFixed(2)),
+      name: String(h.ticker || ''),
+      value: parseFloat((Number(h.weight_percent) || 0).toFixed(2)),
     }));
 
   if (data.length === 0) return null;
