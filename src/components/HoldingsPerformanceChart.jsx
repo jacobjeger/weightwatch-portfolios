@@ -181,7 +181,7 @@ export default function HoldingsPerformanceChart({ holdings }) {
               tickLine={false}
             />
             <YAxis
-              tickFormatter={(v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
+              tickFormatter={(v) => v == null ? '' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%`}
               tick={{ fontSize: 11, fill: '#64748b' }}
               axisLine={false}
               tickLine={false}
@@ -190,7 +190,7 @@ export default function HoldingsPerformanceChart({ holdings }) {
             />
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
             <Tooltip
-              formatter={(v, name) => [`${v >= 0 ? '+' : ''}${v?.toFixed(2)}%`, name]}
+              formatter={(v, name) => [`${(v ?? 0) >= 0 ? '+' : ''}${(v ?? 0).toFixed(2)}%`, name]}
               labelFormatter={(l) => {
                 const d = new Date(l);
                 return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
@@ -209,7 +209,7 @@ export default function HoldingsPerformanceChart({ holdings }) {
                   stroke={HOLDING_COLORS[i % HOLDING_COLORS.length]}
                   dot={false}
                   strokeWidth={1.5}
-                  name={`${h.ticker} (${h.weight_percent.toFixed(1)}%)`}
+                  name={`${h.ticker} (${(h.weight_percent || 0).toFixed(1)}%)`}
                 />
               );
             })}

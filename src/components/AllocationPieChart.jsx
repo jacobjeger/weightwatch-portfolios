@@ -32,7 +32,7 @@ export default function AllocationPieChart({ holdings }) {
     .filter((h) => (h.weight_percent || 0) > 0)
     .map((h) => ({
       name: h.ticker,
-      value: parseFloat((h.weight_percent).toFixed(2)),
+      value: parseFloat((h.weight_percent || 0).toFixed(2)),
     }));
 
   if (data.length === 0) return null;
@@ -53,7 +53,7 @@ export default function AllocationPieChart({ holdings }) {
             <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(v, name) => [`${v.toFixed(1)}%`, name]} />
+        <Tooltip formatter={(v, name) => [`${(v ?? 0).toFixed(1)}%`, name]} />
       </PieChart>
     </ResponsiveContainer>
   );
