@@ -106,10 +106,13 @@ export async function getCandles(ticker, fromDate, toDate) {
   const raw = await res.json();
   if (raw.s !== 'ok' || !raw.c?.length) return [];
 
-  const data = raw.t.map((ts, i) => ({
-    date:  new Date(ts * 1000).toISOString().slice(0, 10),
-    price: raw.c[i],
-  }));
+  const data = raw.t.map((ts, i) => {
+    const d = new Date(ts * 1000);
+    return {
+      date:  isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10),
+      price: raw.c[i],
+    };
+  }).filter(d => d.date);
 
   candleCache.set(cacheKey, { data, ts: Date.now() });
   return data;

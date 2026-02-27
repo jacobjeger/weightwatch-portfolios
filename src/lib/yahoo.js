@@ -65,11 +65,14 @@ export async function getYahooCandles(ticker, fromDate, toDate) {
   const closes     = result.indicators?.quote?.[0]?.close ?? [];
 
   const data = timestamps
-    .map((ts, i) => ({
-      date:  new Date(ts * 1000).toISOString().slice(0, 10),
-      price: closes[i],
-    }))
-    .filter(d => d.price != null); // filter out null entries (e.g. holidays)
+    .map((ts, i) => {
+      const d = new Date(ts * 1000);
+      return {
+        date:  isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10),
+        price: closes[i],
+      };
+    })
+    .filter(d => d.date && d.price != null); // filter out invalid dates and null prices
 
   yahooCache.set(cacheKey, { data, ts: Date.now() });
   return data;
