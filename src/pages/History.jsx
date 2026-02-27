@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, getActivity, getPortfolios } from '../context/AuthContext';
 import { getPortfolioReturn, getReturn } from '../lib/mockData';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow, format, isValid } from 'date-fns';
 import { Download, ExternalLink } from 'lucide-react';
 
 const ACTION_COLORS = {
@@ -59,7 +59,7 @@ export default function History() {
     const rows = [
       ['Date', 'Portfolio', 'Action', 'Summary'],
       ...activity.map((e) => [
-        format(new Date(e.occurred_at), 'yyyy-MM-dd HH:mm'),
+        isValid(new Date(e.occurred_at)) ? format(new Date(e.occurred_at), 'yyyy-MM-dd HH:mm') : '',
         e.portfolio_name ?? '',
         e.action_type,
         e.change_summary ?? '',
@@ -123,10 +123,10 @@ export default function History() {
                     <tr key={entry.id} className="hover:bg-slate-50">
                       <td className="td text-slate-500 whitespace-nowrap">
                         <div className="font-medium text-slate-700">
-                          {format(new Date(entry.occurred_at), 'MMM d, yyyy')}
+                          {isValid(new Date(entry.occurred_at)) ? format(new Date(entry.occurred_at), 'MMM d, yyyy') : '—'}
                         </div>
                         <div className="text-xs">
-                          {format(new Date(entry.occurred_at), 'h:mm a')}
+                          {isValid(new Date(entry.occurred_at)) ? format(new Date(entry.occurred_at), 'h:mm a') : ''}
                         </div>
                       </td>
                       <td className="td font-medium text-slate-800">{entry.portfolio_name ?? '—'}</td>

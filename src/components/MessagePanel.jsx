@@ -101,7 +101,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                       </span>
                     </div>
                     <span className="block text-xs text-green-500 mt-0.5">
-                      {msg.sender_email} &middot; {new Date(msg.created_at).toLocaleString()}
+                      {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </span>
                     {msg.text && msg.text !== 'Approved the portfolio' && (
                       <p className="text-sm text-green-600 mt-1">{msg.text}</p>
@@ -120,7 +120,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                       </span>
                     </div>
                     <span className="block text-xs text-amber-500 mt-0.5">
-                      {msg.sender_email} &middot; {new Date(msg.created_at).toLocaleString()}
+                      {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </span>
                     {msg.text && msg.text !== 'Requested changes' && (
                       <p className="text-sm text-amber-600 mt-1">{msg.text}</p>
@@ -150,7 +150,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                     </div>
                     <p className="text-sm leading-relaxed">{msg.text}</p>
                     <p className="text-[10px] text-slate-400 mt-1">
-                      {new Date(msg.created_at).toLocaleString()}
+                      {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </p>
                   </div>
                 </div>

@@ -19,7 +19,11 @@ function lsSet(key, value) {
 function getMeetings(userId) {
   return lsGet(LS_MEETINGS, []).filter(
     (m) => m.organizer_id === userId || m.attendee_id === userId
-  ).sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time));
+  ).sort((a, b) => {
+    const ta = new Date(a.date + 'T' + a.time).getTime() || 0;
+    const tb = new Date(b.date + 'T' + b.time).getTime() || 0;
+    return ta - tb;
+  });
 }
 
 function saveMeeting(meeting) {
@@ -364,7 +368,7 @@ export default function MeetingScheduler() {
                         {m.title}
                       </span>
                       <span className="text-xs text-slate-400">
-                        {new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {!isNaN(new Date(m.date).getTime()) ? new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : m.date ?? ''}
                       </span>
                     </div>
                   </div>

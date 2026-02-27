@@ -225,7 +225,7 @@ export default function ClientPortal() {
                     Last synced {lastSync.toLocaleTimeString()}
                   </p>
                 )}
-                {portfolio?.created_at && (
+                {portfolio?.created_at && !isNaN(new Date(portfolio.created_at).getTime()) && (
                   <p className="text-xs text-slate-500">Portfolio since {new Date(portfolio.created_at).toLocaleDateString()}</p>
                 )}
               </div>
@@ -503,7 +503,7 @@ export default function ClientPortal() {
                   <span className="text-slate-500">DRIP</span>
                   <span className="font-medium text-slate-700">{portfolio?.drip_enabled ? 'Enabled' : 'Disabled'}</span>
                 </div>
-                {portfolio?.created_at && (
+                {portfolio?.created_at && !isNaN(new Date(portfolio.created_at).getTime()) && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">Created</span>
                     <span className="font-medium text-slate-700">{new Date(portfolio.created_at).toLocaleDateString()}</span>
@@ -530,7 +530,9 @@ export default function ClientPortal() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  {new Date(approval.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                  {!isNaN(new Date(approval.created_at).getTime())
+                    ? new Date(approval.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+                    : ''}
                 </p>
                 {approval.text && approval.text !== 'Approved the portfolio' && approval.text !== 'Requested changes' && (
                   <p className="text-sm mt-1 text-slate-600">{approval.text}</p>
