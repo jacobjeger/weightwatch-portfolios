@@ -101,7 +101,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                       </span>
                     </div>
                     <span className="block text-xs text-green-500 mt-0.5">
-                      {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
+                      {String(msg.sender_email || '')} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </span>
                     {typeof msg.text === 'string' && msg.text !== 'Approved the portfolio' && (
                       <p className="text-sm text-green-600 mt-1">{msg.text}</p>
@@ -140,12 +140,12 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                   }`}>
                     <div className="flex items-baseline gap-2 mb-0.5">
                       <span className="text-xs font-semibold">
-                        {isMe ? 'You' : msg.sender_email}
+                        {isMe ? 'You' : String(msg.sender_email || '')}
                       </span>
                       <span className={`text-[10px] ${
                         msg.sender_role === 'advisor' ? 'text-blue-400' : 'text-green-500'
                       }`}>
-                        {msg.sender_role}
+                        {String(msg.sender_role || '')}
                       </span>
                     </div>
                     <p className="text-sm leading-relaxed">{typeof msg.text === 'string' ? msg.text : String(msg.text ?? '')}</p>
