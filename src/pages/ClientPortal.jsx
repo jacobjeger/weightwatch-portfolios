@@ -16,8 +16,8 @@ import MessagePanel from '../components/MessagePanel';
 // Prevents React error #310 from corrupted localStorage or Supabase data.
 function sanitizeHolding(h) {
   if (!h || typeof h !== 'object') return null;
+  // Whitelist known primitive fields only — do NOT spread unknown properties
   return {
-    ...h,
     ticker: String(h.ticker ?? ''),
     name: String(h.name ?? ''),
     type: String(h.type ?? 'Stock'),
@@ -30,8 +30,8 @@ function sanitizeHolding(h) {
 
 function sanitizePortfolio(p) {
   if (!p || typeof p !== 'object') return null;
+  // Whitelist known fields only — do NOT spread unknown properties from Supabase JSONB
   return {
-    ...p,
     id: String(p.id ?? ''),
     name: String(p.name ?? 'Portfolio'),
     description: typeof p.description === 'string' ? p.description : '',
@@ -41,6 +41,7 @@ function sanitizePortfolio(p) {
     cash_percent: Number(p.cash_percent) || 0,
     drip_enabled: Boolean(p.drip_enabled),
     created_at: typeof p.created_at === 'string' ? p.created_at : null,
+    last_updated_at: typeof p.last_updated_at === 'string' ? p.last_updated_at : null,
     holdings: Array.isArray(p.holdings)
       ? p.holdings.map(sanitizeHolding).filter(Boolean)
       : [],

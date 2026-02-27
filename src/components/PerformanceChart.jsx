@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
+  Legend, ResponsiveContainer, ReferenceLine, ReferenceArea, Label,
 } from 'recharts';
 import { getPortfolioChartData, getPortfolioDrawdownData } from '../lib/mockData';
 import { isConfigured, getRealPortfolioChartData } from '../lib/finnhub';
@@ -28,10 +28,11 @@ function formatDate(dateStr, range) {
 
 function CustomTooltip({ active, payload, label, createdAt }) {
   if (!active || !payload?.length) return null;
-  const isBacktested = createdAt && label < createdAt.slice(0, 10);
+  const labelStr = (label != null && typeof label !== 'object') ? String(label) : '';
+  const isBacktested = createdAt && labelStr < createdAt.slice(0, 10);
   return (
     <div className="bg-white border border-slate-200 rounded shadow-lg px-3 py-2 text-sm">
-      <p className="font-medium text-slate-700 mb-1">{label}</p>
+      <p className="font-medium text-slate-700 mb-1">{labelStr}</p>
       {isBacktested && (
         <p className="text-xs text-amber-600 mb-1 font-medium">Backtested (before account start)</p>
       )}
@@ -296,14 +297,9 @@ export default function PerformanceChart({
                 stroke="#f59e0b"
                 strokeDasharray="4 4"
                 strokeWidth={1.5}
-                label={{
-                  value: 'Account Start',
-                  position: 'top',
-                  fill: '#d97706',
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}
-              />
+              >
+                <Label value="Account Start" position="top" fill="#d97706" fontSize={10} fontWeight={600} />
+              </ReferenceLine>
             )}
 
             <XAxis
@@ -386,8 +382,9 @@ export default function PerformanceChart({
                 <Tooltip
                   formatter={(v, name) => [`${(Number(v) || 0).toFixed(2)}%`, String(name) === 'portfolio' ? 'Portfolio DD' : 'Benchmark DD']}
                   labelFormatter={(l) => {
+                    if (l == null || typeof l === 'object') return '';
                     const d = new Date(l);
-                    return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
+                    return isNaN(d.getTime()) ? String(l) : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
                   }}
                   contentStyle={{ fontSize: 11 }}
                 />
