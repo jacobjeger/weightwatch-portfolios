@@ -122,7 +122,7 @@ export default function ClientPortal() {
     );
   }
 
-  const benchLabel = benchmark ? (BENCHMARK_META[benchmark]?.label ?? benchmark) : null;
+  const benchLabel = benchmark ? String(BENCHMARK_META[benchmark]?.label ?? benchmark) : null;
 
   // Drifted weights using live prices
   const currentWeights = useMemo(() => {
@@ -141,27 +141,44 @@ export default function ClientPortal() {
     }]));
   }, [holdings, prices, live]);
 
-  // Performance metrics
-  const ytdReturn = realReturns?.portfolio?.['YTD'] != null
-    ? realReturns.portfolio['YTD']
-    : (holdings.length ? parseFloat(getPortfolioYTDReturn(holdings)) : null);
+  // Performance metrics — wrap in try/catch to prevent crashes from bad data
+  let ytdReturn = null;
+  try {
+    ytdReturn = realReturns?.portfolio?.['YTD'] != null
+      ? realReturns.portfolio['YTD']
+      : (holdings.length ? parseFloat(getPortfolioYTDReturn(holdings)) : null);
+    if (typeof ytdReturn !== 'number' || isNaN(ytdReturn)) ytdReturn = null;
+  } catch { ytdReturn = null; }
   const sinceReturn = useMemo(() => {
-    if (live && holdings.length && Object.keys(currentWeights).length) {
-      const growthFactor = holdings.reduce(
-        (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
-      );
-      return parseFloat(((growthFactor - 1) * 100).toFixed(2));
-    }
-    return portfolio?.created_at && holdings.length
-      ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at))
-      : null;
+    try {
+      if (live && holdings.length && Object.keys(currentWeights).length) {
+        const growthFactor = holdings.reduce(
+          (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
+        );
+        const val = parseFloat(((growthFactor - 1) * 100).toFixed(2));
+        return isNaN(val) ? null : val;
+      }
+      if (portfolio?.created_at && holdings.length) {
+        const val = parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at));
+        return isNaN(val) ? null : val;
+      }
+      return null;
+    } catch { return null; }
   }, [live, holdings, currentWeights, portfolio]);
-  const oneYearReturn = realReturns?.portfolio?.['1Y'] != null
-    ? realReturns.portfolio['1Y']
-    : (holdings.length ? parseFloat(getPortfolioReturn(holdings, 252)) : null);
-  const benchYtd = realReturns?.benchmark?.['YTD'] != null
-    ? realReturns.benchmark['YTD']
-    : (benchmark ? parseFloat(getYTDReturn(benchmark)) : null);
+  let oneYearReturn = null;
+  try {
+    oneYearReturn = realReturns?.portfolio?.['1Y'] != null
+      ? realReturns.portfolio['1Y']
+      : (holdings.length ? parseFloat(getPortfolioReturn(holdings, 252)) : null);
+    if (typeof oneYearReturn !== 'number' || isNaN(oneYearReturn)) oneYearReturn = null;
+  } catch { oneYearReturn = null; }
+  let benchYtd = null;
+  try {
+    benchYtd = realReturns?.benchmark?.['YTD'] != null
+      ? realReturns.benchmark['YTD']
+      : (benchmark ? parseFloat(getYTDReturn(benchmark)) : null);
+    if (typeof benchYtd !== 'number' || isNaN(benchYtd)) benchYtd = null;
+  } catch { benchYtd = null; }
 
   const cashPercent = portfolio?.cash_percent ?? 0;
   const currentPortfolioValue = useMemo(() => {
@@ -204,8 +221,8 @@ export default function ClientPortal() {
                   </span>
                 )}
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white">{portfolio?.name || 'Portfolio'}</h1>
-              {portfolio?.description && (
+              <h1 className="text-xl sm:text-2xl font-bold text-white">{String(portfolio?.name || 'Portfolio')}</h1>
+              {portfolio?.description && typeof portfolio.description === 'string' && (
                 <p className="text-sm text-slate-400 mt-0.5">{portfolio.description}</p>
               )}
             </div>
@@ -411,7 +428,7 @@ export default function ClientPortal() {
                   {holdings.map((h) => {
                     const drifted = currentWeights[h.ticker]?.driftedWeight;
                     const currentPrice = (live && prices[h.ticker]?.price) || h.last_price;
-                    const dailyChange = live && prices[h.ticker]?.changePercent;
+                    const dailyChange = live ? prices[h.ticker]?.changePercent ?? null : null;
                     return (
                       <tr key={h.ticker} className="border-t border-slate-100">
                         <td className="py-2.5 pr-4">
@@ -443,7 +460,7 @@ export default function ClientPortal() {
                         </td>
                         <td className="hidden sm:table-cell py-2.5 text-right">
                           <div className="font-mono text-slate-700">
-                            ${currentPrice?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {currentPrice != null ? `$${Number(currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--'}
                           </div>
                           {dailyChange != null && (
                             <div className={`text-xs flex items-center justify-end gap-0.5 ${
@@ -539,7 +556,7 @@ export default function ClientPortal() {
                     ? new Date(approval.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
                     : ''}
                 </p>
-                {approval.text && approval.text !== 'Approved the portfolio' && approval.text !== 'Requested changes' && (
+                {approval.text && typeof approval.text === 'string' && approval.text !== 'Approved the portfolio' && approval.text !== 'Requested changes' && (
                   <p className="text-sm mt-1 text-slate-600">{approval.text}</p>
                 )}
               </div>
