@@ -12,5 +12,5 @@ export default function ProtectedRoute() {
     );
   }
 
-  return user ? <Outlet /> : <Navigate to="/" replace state={{ requireAuth: true }} />;
+  return user ? <Outlet /> : <Navigate to="/login" replace />;
 }
