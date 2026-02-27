@@ -428,17 +428,39 @@ export async function syncFromSupabase(userId, userEmail) {
     console.warn('[Sync] Invites fetch failed:', e.message);
   }
 
-  // 3) Messages
+  // 3) Messages — fetch messages the user sent AND messages for portfolios they can access
   try {
-    const { data: msgData } = await supabase
+    // Get all portfolio IDs this user has access to (owned + shared via invites)
+    const clientData = lsGet(LS.clients, {})[userId];
+    const ownedPortfolios = lsGet(LS.portfolios, []).filter((p) => p.owner === userId).map((p) => p.id);
+    const sharedPortfolioIds = clientData?.portfolio_ids ?? [];
+    const allPortfolioIds = [...new Set([...ownedPortfolios, ...sharedPortfolioIds])];
+
+    // Fetch messages the user sent
+    const { data: sentMsgs } = await supabase
       .from('messages')
       .select('*')
-      .or(`sender_id.eq.${userId}`)
+      .eq('sender_id', userId)
       .order('created_at', { ascending: true });
-    if (msgData?.length) {
+
+    // Fetch messages for portfolios the user can access (includes advisor messages)
+    let portfolioMsgs = [];
+    if (allPortfolioIds.length > 0) {
+      const { data: pMsgs } = await supabase
+        .from('messages')
+        .select('*')
+        .in('portfolio_id', allPortfolioIds)
+        .order('created_at', { ascending: true });
+      portfolioMsgs = pMsgs ?? [];
+    }
+
+    // Merge and deduplicate
+    const allMsgs = [...(sentMsgs ?? []), ...portfolioMsgs];
+    const deduped = Object.values(Object.fromEntries(allMsgs.map((m) => [m.id, m])));
+    if (deduped.length) {
       const existing = lsGet(LS.messages, []);
       const existingIds = new Set(existing.map((m) => m.id));
-      const merged = [...existing, ...msgData.filter((m) => !existingIds.has(m.id))];
+      const merged = [...existing, ...deduped.filter((m) => !existingIds.has(m.id))];
       lsSet(LS.messages, merged);
     }
   } catch (e) {

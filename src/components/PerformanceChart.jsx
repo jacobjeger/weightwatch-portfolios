@@ -326,7 +326,7 @@ export default function PerformanceChart({
             <Tooltip content={<CustomTooltip createdAt={createdAt} />} />
             <Legend
               wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-              formatter={(v) => v}
+              formatter={(v) => String(v)}
             />
             {hasPortfolio && (
               <Line
