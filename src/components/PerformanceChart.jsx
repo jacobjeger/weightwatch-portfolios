@@ -20,6 +20,7 @@ const COLORS = {
 
 function formatDate(dateStr, range) {
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr ?? '';
   if (range === '1M' || range === '3M' || range === '6M' || range === 'Since')
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
@@ -368,6 +369,7 @@ export default function PerformanceChart({
                   tickLine={false}
                   tickFormatter={(v) => {
                     const d = new Date(v);
+                    if (isNaN(d.getTime())) return v ?? '';
                     return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
                   }}
                   interval={Math.max(1, Math.floor(drawdownData.length / 5) - 1)}
@@ -383,7 +385,10 @@ export default function PerformanceChart({
                 <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
                 <Tooltip
                   formatter={(v, name) => [`${v.toFixed(2)}%`, name === 'portfolio' ? 'Portfolio DD' : 'Benchmark DD']}
-                  labelFormatter={(l) => new Date(l).toLocaleDateString('en-US', { dateStyle: 'medium' })}
+                  labelFormatter={(l) => {
+                    const d = new Date(l);
+                    return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
+                  }}
                   contentStyle={{ fontSize: 11 }}
                 />
                 <Line

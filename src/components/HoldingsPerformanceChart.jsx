@@ -18,6 +18,7 @@ const HOLDING_COLORS = [
 
 function formatDate(dateStr, range) {
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr ?? '';
   if (range === '1M' || range === '3M' || range === '6M')
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
@@ -190,7 +191,10 @@ export default function HoldingsPerformanceChart({ holdings }) {
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
             <Tooltip
               formatter={(v, name) => [`${v >= 0 ? '+' : ''}${v?.toFixed(2)}%`, name]}
-              labelFormatter={(l) => new Date(l).toLocaleDateString('en-US', { dateStyle: 'medium' })}
+              labelFormatter={(l) => {
+                const d = new Date(l);
+                return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
+              }}
               contentStyle={{ fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />

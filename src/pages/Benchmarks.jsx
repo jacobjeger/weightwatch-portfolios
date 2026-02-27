@@ -245,6 +245,7 @@ export default function Benchmarks() {
               axisLine={false} tickLine={false}
               tickFormatter={(v) => {
                 const d = new Date(v);
+                if (isNaN(d.getTime())) return v ?? '';
                 return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
               }}
               interval={Math.max(1, Math.floor(multiChartData.length / 6) - 1)}
@@ -259,7 +260,10 @@ export default function Benchmarks() {
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
             <Tooltip
               formatter={(v, name) => [`${v >= 0 ? '+' : ''}${v?.toFixed(2)}%`, name]}
-              labelFormatter={(l) => new Date(l).toLocaleDateString('en-US', { dateStyle: 'medium' })}
+              labelFormatter={(l) => {
+                const d = new Date(l);
+                return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
+              }}
               contentStyle={{ fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />

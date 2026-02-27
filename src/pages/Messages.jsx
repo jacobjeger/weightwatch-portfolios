@@ -119,7 +119,7 @@ export default function Messages() {
                 )}
                 {lastMsg && (
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    {new Date(lastMsg.created_at).toLocaleDateString()}
+                    {!isNaN(new Date(lastMsg.created_at).getTime()) ? new Date(lastMsg.created_at).toLocaleDateString() : ''}
                   </p>
                 )}
               </button>
@@ -170,7 +170,7 @@ export default function Messages() {
                           <span className="text-green-700 text-sm font-medium">Portfolio approved</span>
                         </div>
                         <span className="block text-xs text-green-500 mt-0.5">
-                          {msg.sender_email} &middot; {new Date(msg.created_at).toLocaleString()}
+                          {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                         </span>
                         {msg.text && msg.text !== 'Approved the portfolio' && (
                           <p className="text-sm text-green-600 mt-1">{msg.text}</p>
@@ -187,7 +187,7 @@ export default function Messages() {
                           <span className="text-amber-700 text-sm font-medium">Changes requested</span>
                         </div>
                         <span className="block text-xs text-amber-500 mt-0.5">
-                          {msg.sender_email} &middot; {new Date(msg.created_at).toLocaleString()}
+                          {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                         </span>
                         {msg.text && msg.text !== 'Requested changes' && (
                           <p className="text-sm text-amber-600 mt-1">{msg.text}</p>
@@ -214,7 +214,7 @@ export default function Messages() {
                         </div>
                         <p className="text-sm leading-relaxed">{msg.text}</p>
                         <p className={`text-[10px] mt-1 ${isMe ? 'text-blue-200' : 'text-slate-400'}`}>
-                          {new Date(msg.created_at).toLocaleString()}
+                          {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                         </p>
                       </div>
                     </div>
