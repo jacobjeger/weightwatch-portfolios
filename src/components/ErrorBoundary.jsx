@@ -47,7 +47,7 @@ export default class ErrorBoundary extends Component {
 export class SectionErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorStack: '' };
   }
 
   static getDerivedStateFromError(error) {
@@ -55,12 +55,17 @@ export class SectionErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error(`[SectionError] ${this.props.label || 'Unknown'}:`, error?.message, error, info?.componentStack);
+    const stack = typeof info?.componentStack === 'string' ? info.componentStack : '';
+    console.error(`[SectionError] ${this.props.label || 'Unknown'}:`, error?.message, error, stack);
+    this.setState({ errorStack: stack });
   }
 
   render() {
     if (this.state.hasError) {
-      const errMsg = this.state.error?.message || 'Unknown error';
+      const errMsg = typeof this.state.error?.message === 'string'
+        ? this.state.error.message
+        : String(this.state.error ?? 'Unknown error');
+      const stack = typeof this.state.errorStack === 'string' ? this.state.errorStack : '';
       return (
         <div className="flex items-center justify-center py-8 text-center">
           <div>
@@ -70,8 +75,16 @@ export class SectionErrorBoundary extends Component {
             <p className="text-xs text-red-400 mb-2 max-w-xs mx-auto break-words">
               {String(errMsg).slice(0, 200)}
             </p>
+            {stack && (
+              <details className="text-left max-w-sm mx-auto mb-2">
+                <summary className="text-[10px] text-slate-400 cursor-pointer">Component trace</summary>
+                <pre className="text-[9px] text-slate-400 whitespace-pre-wrap break-all mt-1 max-h-32 overflow-y-auto">
+                  {String(stack).slice(0, 500)}
+                </pre>
+              </details>
+            )}
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => this.setState({ hasError: false, error: null, errorStack: '' })}
               className="text-xs text-blue-500 hover:underline"
             >
               Try again

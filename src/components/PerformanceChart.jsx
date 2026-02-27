@@ -346,7 +346,7 @@ export default function PerformanceChart({
                 dot={false}
                 strokeWidth={1.5}
                 strokeDasharray="5 3"
-                name={benchLabel ?? benchmarkTicker}
+                name={String(benchLabel || benchmarkTicker || 'Benchmark')}
               />
             )}
           </LineChart>

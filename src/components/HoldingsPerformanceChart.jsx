@@ -133,12 +133,13 @@ export default function HoldingsPerformanceChart({ holdings }) {
       <div className="flex flex-wrap items-center gap-1.5 mb-3">
         <span className="text-xs text-slate-400 mr-1">Show:</span>
         {holdings.map((h, i) => {
-          const isVisible = !hiddenTickers.has(h.ticker);
+          const ticker = String(h.ticker || '');
+          const isVisible = !hiddenTickers.has(ticker);
           const color = HOLDING_COLORS[i % HOLDING_COLORS.length];
           return (
             <button
-              key={h.ticker}
-              onClick={() => toggleTicker(h.ticker)}
+              key={ticker || i}
+              onClick={() => toggleTicker(ticker)}
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all border ${
                 isVisible
                   ? 'border-transparent text-white'
@@ -146,7 +147,7 @@ export default function HoldingsPerformanceChart({ holdings }) {
               }`}
               style={isVisible ? { backgroundColor: color } : {}}
             >
-              {h.ticker}
+              {ticker}
             </button>
           );
         })}
@@ -199,17 +200,18 @@ export default function HoldingsPerformanceChart({ holdings }) {
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => String(v)} />
             {holdings.map((h, i) => {
-              const isVisible = !hiddenTickers.has(h.ticker);
+              const ticker = String(h.ticker || '');
+              const isVisible = !hiddenTickers.has(ticker);
               if (!isVisible) return null;
               return (
                 <Line
-                  key={h.ticker}
+                  key={ticker || i}
                   type="monotone"
-                  dataKey={h.ticker}
+                  dataKey={ticker}
                   stroke={HOLDING_COLORS[i % HOLDING_COLORS.length]}
                   dot={false}
                   strokeWidth={1.5}
-                  name={`${h.ticker} (${(h.weight_percent || 0).toFixed(1)}%)`}
+                  name={`${ticker} (${(Number(h.weight_percent) || 0).toFixed(1)}%)`}
                 />
               );
             })}
