@@ -11,6 +11,42 @@ import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
 import MessagePanel from '../components/MessagePanel';
 
+// ── Data sanitization ────────────────────────────────────────────────────────
+// Ensures all portfolio/holding fields are the expected primitive types.
+// Prevents React error #310 from corrupted localStorage or Supabase data.
+function sanitizeHolding(h) {
+  if (!h || typeof h !== 'object') return null;
+  return {
+    ...h,
+    ticker: String(h.ticker ?? ''),
+    name: String(h.name ?? ''),
+    type: String(h.type ?? 'Stock'),
+    category: String(h.category ?? 'Core'),
+    weight_percent: Number(h.weight_percent) || 0,
+    last_price: Number(h.last_price) || 0,
+    entry_price: h.entry_price != null ? Number(h.entry_price) || 0 : undefined,
+  };
+}
+
+function sanitizePortfolio(p) {
+  if (!p || typeof p !== 'object') return null;
+  return {
+    ...p,
+    id: String(p.id ?? ''),
+    name: String(p.name ?? 'Portfolio'),
+    description: typeof p.description === 'string' ? p.description : '',
+    owner: String(p.owner ?? ''),
+    primary_benchmark: typeof p.primary_benchmark === 'string' ? p.primary_benchmark : null,
+    starting_value: Number(p.starting_value) || 0,
+    cash_percent: Number(p.cash_percent) || 0,
+    drip_enabled: Boolean(p.drip_enabled),
+    created_at: typeof p.created_at === 'string' ? p.created_at : null,
+    holdings: Array.isArray(p.holdings)
+      ? p.holdings.map(sanitizeHolding).filter(Boolean)
+      : [],
+  };
+}
+
 export default function ClientPortal() {
   return (
     <SectionErrorBoundary label="Client Portal">
@@ -30,13 +66,19 @@ function ClientPortalBody() {
   const [lastSync, setLastSync] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
 
-  // Load portfolios
+  // Load portfolios (sanitized to prevent #310 from corrupt data)
   const loadPortfolios = useCallback(() => {
     if (user) {
-      const all = getPortfolios(user.id);
-      // Only show portfolios that are shared with this client (not owned by them)
-      const clientPortfolios = all.filter((p) => p.owner !== user.id);
-      setPortfolios(clientPortfolios.length > 0 ? clientPortfolios : all);
+      try {
+        const all = getPortfolios(user.id);
+        const safe = (Array.isArray(all) ? all : []).map(sanitizePortfolio).filter(Boolean);
+        // Only show portfolios that are shared with this client (not owned by them)
+        const clientPortfolios = safe.filter((p) => p.owner !== user.id);
+        setPortfolios(clientPortfolios.length > 0 ? clientPortfolios : safe);
+      } catch (e) {
+        console.error('[ClientPortal] loadPortfolios failed:', e);
+        setPortfolios([]);
+      }
     }
   }, [user]);
 
@@ -74,9 +116,13 @@ function ClientPortalBody() {
   }, [user, role, handleSync]);
 
   const portfolio = portfolios[selectedIdx] || null;
-  const approval = portfolio ? getLatestApproval(portfolio.id) : null;
-  const holdings = portfolio?.holdings ?? [];
-  const benchmark = portfolio?.primary_benchmark;
+  let approval = null;
+  try {
+    const raw = portfolio ? getLatestApproval(portfolio.id) : null;
+    approval = (raw && typeof raw === 'object' && typeof raw.type === 'string') ? raw : null;
+  } catch { approval = null; }
+  const holdings = Array.isArray(portfolio?.holdings) ? portfolio.holdings : [];
+  const benchmark = typeof portfolio?.primary_benchmark === 'string' ? portfolio.primary_benchmark : null;
 
   // Load + subscribe real-time prices
   useEffect(() => {
@@ -214,86 +260,22 @@ function ClientPortalBody() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      {/* Client Portal Header - distinct from advisor */}
-      <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700 shadow-lg">
-        <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-4 sm:py-5">
-          <div className="flex flex-wrap items-start sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-                  <Shield className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">
-                  Client Portal
-                </span>
-                {approval && (
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                    approval.type === 'approval'
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : 'bg-amber-500/20 text-amber-300'
-                  }`}>
-                    {approval.type === 'approval' ? (
-                      <><CheckCircle className="w-3 h-3" /> Approved</>
-                    ) : (
-                      <><AlertTriangle className="w-3 h-3" /> Changes Requested</>
-                    )}
-                  </span>
-                )}
-              </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white">{String(portfolio?.name || 'Portfolio')}</h1>
-              {portfolio?.description && typeof portfolio.description === 'string' && (
-                <p className="text-sm text-slate-400 mt-0.5">{portfolio.description}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-                title="Sync latest changes from advisor"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync'}</span>
-              </button>
-              <div className="text-right text-sm hidden sm:block">
-                <p className="font-medium text-slate-300">{String(user.email || '')}</p>
-                {lastSync && (
-                  <p className="text-xs text-slate-500">
-                    Last synced {lastSync.toLocaleTimeString()}
-                  </p>
-                )}
-                {portfolio?.created_at && !isNaN(new Date(portfolio.created_at).getTime()) && (
-                  <p className="text-xs text-slate-500">Portfolio since {new Date(portfolio.created_at).toLocaleDateString()}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Portfolio selector if multiple */}
-          {portfolios.length > 1 && (
-            <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
-              {portfolios.map((p, i) => (
-                <button
-                  key={p.id}
-                  onClick={() => { setSelectedIdx(i); setRealReturns(null); }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-1.5 ${
-                    selectedIdx === i
-                      ? 'bg-emerald-500 text-white shadow-md'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  {String(p.name || 'Portfolio')}
-                  {unreadCounts[p.id] > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                      {unreadCounts[p.id]}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </header>
+      {/* Client Portal Header - wrapped in its own error boundary */}
+      <SectionErrorBoundary label="Header">
+      <PortalHeader
+        portfolio={portfolio}
+        approval={approval}
+        syncing={syncing}
+        handleSync={handleSync}
+        user={user}
+        lastSync={lastSync}
+        portfolios={portfolios}
+        selectedIdx={selectedIdx}
+        setSelectedIdx={setSelectedIdx}
+        unreadCounts={unreadCounts}
+        setRealReturns={setRealReturns}
+      />
+      </SectionErrorBoundary>
 
       <main className="max-w-screen-xl mx-auto px-3 sm:px-4 py-6 sm:py-8 space-y-4 sm:space-y-6">
         {/* Read-only notice */}
@@ -408,7 +390,7 @@ function ClientPortalBody() {
               {currentPortfolioValue ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              {holdings.length} holdings{live && realReturns ? ' · live' : ''}
+              {String(holdings.length)}{' holdings'}{live === true && realReturns ? ' · live' : ''}
             </p>
           </div>
         </div>
@@ -621,5 +603,90 @@ function ClientPortalBody() {
         </div>
       </main>
     </div>
+  );
+}
+
+// ── Header extracted as its own component so SectionErrorBoundary can catch its render errors ──
+function PortalHeader({ portfolio, approval, syncing, handleSync, user, lastSync, portfolios, selectedIdx, setSelectedIdx, unreadCounts, setRealReturns }) {
+  return (
+    <header className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700 shadow-lg">
+      <div className="max-w-screen-xl mx-auto px-3 sm:px-4 py-4 sm:py-5">
+        <div className="flex flex-wrap items-start sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+                <Shield className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">
+                Client Portal
+              </span>
+              {approval && typeof approval === 'object' && (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  String(approval.type) === 'approval'
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-amber-500/20 text-amber-300'
+                }`}>
+                  {String(approval.type) === 'approval' ? (
+                    <><CheckCircle className="w-3 h-3" />{' '}Approved</>
+                  ) : (
+                    <><AlertTriangle className="w-3 h-3" />{' '}Changes Requested</>
+                  )}
+                </span>
+              )}
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">{String(portfolio?.name || 'Portfolio')}</h1>
+            {typeof portfolio?.description === 'string' && portfolio.description && (
+              <p className="text-sm text-slate-400 mt-0.5">{String(portfolio.description)}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+              title="Sync latest changes from advisor"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync'}</span>
+            </button>
+            <div className="text-right text-sm hidden sm:block">
+              <p className="font-medium text-slate-300">{String(user?.email || '')}</p>
+              {lastSync instanceof Date && !isNaN(lastSync.getTime()) && (
+                <p className="text-xs text-slate-500">
+                  {'Last synced '}{lastSync.toLocaleTimeString()}
+                </p>
+              )}
+              {typeof portfolio?.created_at === 'string' && !isNaN(new Date(portfolio.created_at).getTime()) && (
+                <p className="text-xs text-slate-500">{'Portfolio since '}{new Date(portfolio.created_at).toLocaleDateString()}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Portfolio selector if multiple */}
+        {Array.isArray(portfolios) && portfolios.length > 1 && (
+          <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
+            {portfolios.map((p, i) => (
+              <button
+                key={String(p.id || i)}
+                onClick={() => { setSelectedIdx(i); setRealReturns(null); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  selectedIdx === i
+                    ? 'bg-emerald-500 text-white shadow-md'
+                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                {String(p.name || 'Portfolio')}
+                {(Number(unreadCounts[p.id]) || 0) > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {Number(unreadCounts[p.id]) || 0}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </header>
   );
 }
