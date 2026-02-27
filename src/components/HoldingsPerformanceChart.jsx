@@ -193,8 +193,9 @@ export default function HoldingsPerformanceChart({ holdings }) {
             <Tooltip
               formatter={(v, name) => [`${(Number(v) || 0) >= 0 ? '+' : ''}${(Number(v) || 0).toFixed(2)}%`, String(name)]}
               labelFormatter={(l) => {
+                if (l == null || typeof l === 'object') return '';
                 const d = new Date(l);
-                return isNaN(d.getTime()) ? (l ?? '') : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
+                return isNaN(d.getTime()) ? String(l) : d.toLocaleDateString('en-US', { dateStyle: 'medium' });
               }}
               contentStyle={{ fontSize: 12 }}
             />
