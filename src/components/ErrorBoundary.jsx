@@ -66,8 +66,6 @@ export class SectionErrorBoundary extends Component {
         ? this.state.error.message
         : String(this.state.error ?? 'Unknown error');
       const stack = typeof this.state.errorStack === 'string' ? this.state.errorStack : '';
-      // Grab runtime diagnostic captured by the monkey-patch in ClientPortal.jsx
-      const diag = typeof window !== 'undefined' ? window.__reactChildDiag : null;
       return (
         <div className="flex items-center justify-center py-8 text-center">
           <div>
@@ -77,19 +75,6 @@ export class SectionErrorBoundary extends Component {
             <p className="text-xs text-red-400 mb-2 max-w-xs mx-auto break-words">
               {String(errMsg).slice(0, 200)}
             </p>
-            {diag && (
-              <details open className="text-left max-w-sm mx-auto mb-2 bg-yellow-50 border border-yellow-200 rounded p-2">
-                <summary className="text-[10px] text-yellow-700 cursor-pointer font-bold">Object child diagnostic</summary>
-                <pre className="text-[9px] text-yellow-800 whitespace-pre-wrap break-all mt-1 max-h-48 overflow-y-auto">
-                  {'Component: ' + String(diag.component || '?') + '\n'}
-                  {'Child index: ' + String(diag.childIndex) + '\n'}
-                  {'Child keys: ' + String(diag.childKeys || []) + '\n'}
-                  {'Props keys: ' + String(diag.propsKeys || []) + '\n'}
-                  {'Preview: ' + String(diag.childPreview || '').slice(0, 200) + '\n'}
-                  {'Time: ' + String(diag.timestamp || '')}
-                </pre>
-              </details>
-            )}
             {stack && (
               <details className="text-left max-w-sm mx-auto mb-2">
                 <summary className="text-[10px] text-slate-400 cursor-pointer">Component trace</summary>
