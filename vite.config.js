@@ -51,4 +51,10 @@ export default defineConfig({
     // like "sce".  Remove this once the #310 bug is fixed.
     minify: false,
   },
+  // Force React development mode so error #310 shows the full message
+  // including the object's keys (e.g. "found: object with keys {id, name}")
+  // Remove this once the bug is identified.
+  define: {
+    'process.env.NODE_ENV': '"development"',
+  },
 });
