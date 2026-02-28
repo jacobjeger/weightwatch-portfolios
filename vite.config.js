@@ -45,4 +45,7 @@ function yahooFinanceProxy() {
 
 export default defineConfig({
   plugins: [react(), yahooFinanceProxy()],
+  build: {
+    sourcemap: true,
+  },
 });

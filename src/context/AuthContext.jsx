@@ -848,7 +848,16 @@ export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteU
 export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId)
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    .map((m) => ({
+      id: typeof m.id === 'string' ? m.id : String(m.id ?? ''),
+      portfolio_id: typeof m.portfolio_id === 'string' ? m.portfolio_id : String(m.portfolio_id ?? ''),
+      type: typeof m.type === 'string' ? m.type : '',
+      text: typeof m.text === 'string' ? m.text : '',
+      sender: typeof m.sender === 'string' ? m.sender : '',
+      sender_email: typeof m.sender_email === 'string' ? m.sender_email : '',
+      created_at: typeof m.created_at === 'string' ? m.created_at : '',
+    }));
 }
 
 // Fetch messages from Supabase for cross-browser sync. Returns sorted array or null on failure.
@@ -914,7 +923,15 @@ export async function getLinkedClient(portfolioId) {
 }
 
 export function getLatestApproval(portfolioId) {
-  return lsGet(LS.messages, [])
+  const raw = lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId && (m.type === 'approval' || m.type === 'change_request'))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] ?? null;
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    type: typeof raw.type === 'string' ? raw.type : '',
+    text: typeof raw.text === 'string' ? raw.text : '',
+    created_at: typeof raw.created_at === 'string' ? raw.created_at : '',
+    sender_email: typeof raw.sender_email === 'string' ? raw.sender_email : '',
+    portfolio_id: typeof raw.portfolio_id === 'string' ? raw.portfolio_id : String(raw.portfolio_id ?? ''),
+  };
 }
