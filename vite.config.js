@@ -45,10 +45,4 @@ function yahooFinanceProxy() {
 
 export default defineConfig({
   plugins: [react(), yahooFinanceProxy()],
-  build: {
-    // Temporarily disable minification so React error traces show actual
-    // component names (e.g. "PerformanceChart") instead of minified ones
-    // like "sce".  Remove this once the #310 bug is fixed.
-    minify: false,
-  },
 });

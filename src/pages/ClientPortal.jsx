@@ -120,7 +120,14 @@ function ClientPortalBody() {
   let approval = null;
   try {
     const raw = portfolio ? getLatestApproval(portfolio.id) : null;
-    approval = (raw && typeof raw === 'object' && typeof raw.type === 'string') ? raw : null;
+    if (raw && typeof raw === 'object' && typeof raw.type === 'string') {
+      // Sanitize approval to prevent React #310 — only keep known string fields
+      approval = {
+        type: String(raw.type),
+        text: typeof raw.text === 'string' ? raw.text : '',
+        created_at: typeof raw.created_at === 'string' ? raw.created_at : '',
+      };
+    }
   } catch { approval = null; }
   const holdings = Array.isArray(portfolio?.holdings) ? portfolio.holdings : [];
   const benchmark = typeof portfolio?.primary_benchmark === 'string' ? portfolio.primary_benchmark : null;

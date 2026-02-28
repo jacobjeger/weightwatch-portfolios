@@ -96,7 +96,7 @@ export default function PortfolioBuilder() {
   // Look up which client is linked to this portfolio (for advisor display)
   useEffect(() => {
     if (isNew || !portfolioId || role === 'client') return;
-    getLinkedClient(portfolioId).then((info) => { if (info) setLinkedClient(info); });
+    getLinkedClient(portfolioId).then((info) => { setLinkedClient(info || null); });
   }, [portfolioId, isNew, role]);
 
   // Load + subscribe real-time prices whenever holdings or benchmark change
@@ -818,28 +818,17 @@ export default function PortfolioBuilder() {
                             })()}
                           </td>
                           <td className="td text-right">
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center justify-end gap-1">
                               <input
-                                type="range"
+                                type="number"
                                 min={0}
                                 max={100}
-                                step={1}
-                                className="w-24 accent-blue-600 cursor-pointer"
-                                value={h.weight_percent || 0}
+                                step={0.01}
+                                className={`input w-14 text-right font-mono text-sm ${weightErrors[h.ticker] ? 'border-red-400' : ''}`}
+                                value={h.weight_percent}
                                 onChange={(e) => updateWeight(h.ticker, e.target.value)}
                               />
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  step={0.01}
-                                  className={`input w-14 text-right font-mono text-sm ${weightErrors[h.ticker] ? 'border-red-400' : ''}`}
-                                  value={h.weight_percent}
-                                  onChange={(e) => updateWeight(h.ticker, e.target.value)}
-                                />
-                                <span className="text-slate-400 text-sm">%</span>
-                              </div>
+                              <span className="text-slate-400 text-sm">%</span>
                             </div>
                             {weightErrors[h.ticker] && (
                               <p className="text-xs text-red-500 mt-0.5 text-right">{weightErrors[h.ticker]}</p>
