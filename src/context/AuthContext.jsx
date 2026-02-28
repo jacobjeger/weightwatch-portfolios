@@ -719,6 +719,16 @@ export function acceptInvite(userId, invite) {
   };
   lsSet(LS.clients, clients);
 
+  // Update the invite's accepted_at in localStorage so getLinkedClient sees it
+  if (invite.token) {
+    const invites = lsGet(LS.invites, {});
+    if (invites[invite.token]) {
+      invites[invite.token].accepted_by = userId;
+      invites[invite.token].accepted_at = invites[invite.token].accepted_at ?? acceptedAt;
+      lsSet(LS.invites, invites);
+    }
+  }
+
   // Also store the portfolio snapshot in local portfolios so it's immediately available
   if (invite.portfolio_snapshot) {
     const all = lsGet(LS.portfolios, []);
