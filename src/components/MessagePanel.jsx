@@ -101,9 +101,9 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                       </span>
                     </div>
                     <span className="block text-xs text-green-500 mt-0.5">
-                      {String(msg.sender_email || '')} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
+                      {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </span>
-                    {typeof msg.text === 'string' && msg.text !== 'Approved the portfolio' && (
+                    {msg.text && msg.text !== 'Approved the portfolio' && (
                       <p className="text-sm text-green-600 mt-1">{msg.text}</p>
                     )}
                   </div>
@@ -120,9 +120,9 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                       </span>
                     </div>
                     <span className="block text-xs text-amber-500 mt-0.5">
-                      {String(msg.sender_email || '')} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
+                      {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </span>
-                    {typeof msg.text === 'string' && msg.text !== 'Requested changes' && (
+                    {msg.text && msg.text !== 'Requested changes' && (
                       <p className="text-sm text-amber-600 mt-1">{msg.text}</p>
                     )}
                   </div>
@@ -140,15 +140,15 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                   }`}>
                     <div className="flex items-baseline gap-2 mb-0.5">
                       <span className="text-xs font-semibold">
-                        {isMe ? 'You' : String(msg.sender_email || '')}
+                        {isMe ? 'You' : msg.sender_email}
                       </span>
                       <span className={`text-[10px] ${
                         msg.sender_role === 'advisor' ? 'text-blue-400' : 'text-green-500'
                       }`}>
-                        {String(msg.sender_role || '')}
+                        {msg.sender_role}
                       </span>
                     </div>
-                    <p className="text-sm leading-relaxed">{typeof msg.text === 'string' ? msg.text : String(msg.text ?? '')}</p>
+                    <p className="text-sm leading-relaxed">{msg.text}</p>
                     <p className="text-[10px] text-slate-400 mt-1">
                       {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </p>

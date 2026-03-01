@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth, getInvite, acceptInvite } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import PerformanceChart from '../components/PerformanceChart';
@@ -8,7 +8,6 @@ import MessagePanel from '../components/MessagePanel';
 export default function InviteView() {
   const { token } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { user, signUp, signIn } = useAuth();
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,34 +34,11 @@ export default function InviteView() {
         setInvite(inv);
         if (inv.client_email) setEmail(inv.client_email);
       } else {
-        // Fall back to URL-encoded invite data (cross-browser demo mode)
-        const encoded = searchParams.get('d');
-        if (encoded) {
-          try {
-            // Decode base64 → bytes → UTF-8 string → JSON
-            const binary = atob(decodeURIComponent(encoded));
-            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-            const jsonStr = new TextDecoder().decode(bytes);
-            const decoded = JSON.parse(jsonStr);
-            setInvite(decoded);
-            if (decoded.client_email) setEmail(decoded.client_email);
-          } catch {
-            // Fallback: try legacy atob approach
-            try {
-              const decoded = JSON.parse(atob(decodeURIComponent(encoded)));
-              setInvite(decoded);
-              if (decoded.client_email) setEmail(decoded.client_email);
-            } catch {
-              setNotFound(true);
-            }
-          }
-        } else {
-          setNotFound(true);
-        }
+        setNotFound(true);
       }
       setLoading(false);
     });
-  }, [token, searchParams]);
+  }, [token]);
 
   // Auto-accept when user is logged in, then redirect to full Client Portal
   useEffect(() => {
