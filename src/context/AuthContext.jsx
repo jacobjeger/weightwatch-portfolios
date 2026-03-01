@@ -158,7 +158,16 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (isSupabaseConfigured) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        const u = session?.user ?? null;
+        let u = session?.user ?? null;
+        // Fall back to localStorage for users who signed up but haven't
+        // confirmed email yet (no Supabase session, but LS.session exists)
+        if (!u) {
+          const pending = lsGet(LS.session);
+          if (pending?.id && pending?.email) {
+            u = pending;
+            autoLinkInvites(u.id, u.email);
+          }
+        }
         setUser(u);
         if (u) syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
         else setLoading(false);
@@ -168,15 +177,23 @@ export function AuthProvider({ children }) {
       });
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         const u = session?.user ?? null;
-        setUser(u);
         if (u) {
+          // Supabase session is live — clear any pending localStorage session
+          localStorage.removeItem(LS.session);
+          setUser(u);
           if (_event === 'SIGNED_IN') {
             setLoading(true);
             syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
           } else {
             syncFromSupabase(u.id, u.email);
           }
+        } else if (_event === 'SIGNED_OUT') {
+          // Explicit sign-out — clear pending session too
+          localStorage.removeItem(LS.session);
+          setUser(null);
         }
+        // For other events with no session (e.g., TOKEN_REFRESHED failure),
+        // don't reset user — keep the pending localStorage session if it exists
       });
       return () => subscription.unsubscribe();
     } else {
@@ -200,11 +217,31 @@ export function AuthProvider({ children }) {
         },
       });
       if (error) throw error;
-      // If client account, mark in clients mapping
-      if (accountType === 'client' && data.user) {
-        const clients = lsGet(LS.clients, {});
-        clients[data.user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
-        lsSet(LS.clients, clients);
+
+      if (data.user) {
+        // Mark client accounts in clients mapping
+        if (accountType === 'client') {
+          const clients = lsGet(LS.clients, {});
+          clients[data.user.id] = { advisor_id: null, portfolio_ids: [], accepted_at: null };
+          lsSet(LS.clients, clients);
+        }
+
+        // Set user immediately so invite acceptance and navigation work.
+        // If email confirmation is required (data.session is null), the auth
+        // listener won't fire until confirmation, so we set user manually.
+        const userObj = { id: data.user.id, email: data.user.email };
+        setUser(userObj);
+        autoLinkInvites(userObj.id, email);
+        // Persist so the session survives page refresh
+        lsSet(LS.session, userObj);
+
+        // Send a welcome/confirmation email via Edge Function (independent
+        // of Supabase's built-in auth emails which require SMTP in dashboard)
+        sendEmail('welcome', email, {
+          email,
+          account_type: accountType,
+          app_url: window.location.origin,
+        }).catch(() => {}); // best-effort
       }
       return data.user;
     }
@@ -225,12 +262,14 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
+    // Clear pending session in both modes
+    localStorage.removeItem(LS.session);
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
     } else {
       mockSignOut();
-      setUser(null);
     }
+    setUser(null);
   }
 
   async function resetPassword(email) {
