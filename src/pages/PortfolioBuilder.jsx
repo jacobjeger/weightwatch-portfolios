@@ -1321,19 +1321,19 @@ export default function PortfolioBuilder() {
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {/* Client approval status badge */}
           {!isNew && (() => {
-            const approval = getLatestApproval(portfolioId);
-            if (!approval) return null;
+            const raw = getLatestApproval(portfolioId);
+            if (!raw || typeof raw !== 'object' || typeof raw.type !== 'string') return null;
             return (
               <div className={`p-3 rounded-lg text-sm ${
-                approval.type === 'approval'
+                raw.type === 'approval'
                   ? 'bg-green-50 border border-green-200 text-green-700'
                   : 'bg-amber-50 border border-amber-200 text-amber-700'
               }`}>
                 <span className="font-medium">
-                  {approval.type === 'approval' ? 'Client approved' : 'Changes requested'}
+                  {raw.type === 'approval' ? 'Client approved' : 'Changes requested'}
                 </span>
                 <span className="block text-xs opacity-75 mt-0.5">
-                  {approval.sender_email} &middot; {approval.created_at && !isNaN(new Date(approval.created_at).getTime()) ? new Date(approval.created_at).toLocaleDateString() : ''}
+                  {String(raw.sender_email || '')} &middot; {typeof raw.created_at === 'string' && !isNaN(new Date(raw.created_at).getTime()) ? new Date(raw.created_at).toLocaleDateString() : ''}
                 </span>
               </div>
             );
