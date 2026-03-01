@@ -463,29 +463,7 @@ export default function PortfolioBuilder() {
     };
     try {
       const token = await inviteClient(user.id, inviteEmail.trim(), [portfolioId], snap);
-      // Build invite URL with encoded data for cross-browser demo mode
-      const inviteData = {
-        token,
-        advisor_id: user.id,
-        client_email: inviteEmail.trim(),
-        portfolio_ids: [portfolioId],
-        portfolio_snapshot: snap,
-        created_at: new Date().toISOString(),
-      };
-      let url;
-      try {
-        // Use TextEncoder → base64 to handle any characters safely
-        const jsonStr = JSON.stringify(inviteData);
-        const bytes = new TextEncoder().encode(jsonStr);
-        let binary = '';
-        bytes.forEach(b => { binary += String.fromCharCode(b); });
-        const encoded = btoa(binary);
-        const fullUrl = `${window.location.origin}/invite/${token}?d=${encodeURIComponent(encoded)}`;
-        // Browsers can handle URLs up to ~2000 chars; use token-only if too long
-        url = fullUrl.length < 8000 ? fullUrl : `${window.location.origin}/invite/${token}`;
-      } catch {
-        url = `${window.location.origin}/invite/${token}`;
-      }
+      const url = `${window.location.origin}/invite/${token}`;
       setInviteUrl(url);
       try { await navigator.clipboard?.writeText(url); } catch { /* ok */ }
       toast.success('Invite link created! Link copied to clipboard.');

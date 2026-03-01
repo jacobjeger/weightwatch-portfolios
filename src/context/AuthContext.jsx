@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { createDemoPortfolios } from '../lib/mockData';
+import { sanitizePortfolio, sanitizeMessage, sanitizeApproval, sanitizeInvite } from '../lib/sanitize';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
 const LS = {
@@ -82,11 +83,13 @@ function autoLinkInvites(userId, email) {
       // Store portfolio snapshot so getPortfolios can find it
       if (inv.portfolio_snapshot) {
         const all = lsGet(LS.portfolios, []);
-        const snap = inv.portfolio_snapshot;
-        const idx = all.findIndex((p) => p.id === snap.id);
-        if (idx >= 0) all[idx] = { ...all[idx], ...snap };
-        else all.push(snap);
-        lsSet(LS.portfolios, all);
+        const snap = sanitizePortfolio(inv.portfolio_snapshot);
+        if (snap) {
+          const idx = all.findIndex((p) => p.id === snap.id);
+          if (idx >= 0) all[idx] = { ...all[idx], ...snap };
+          else all.push(snap);
+          lsSet(LS.portfolios, all);
+        }
       }
       changed = true;
     }
@@ -261,7 +264,10 @@ export function AuthProvider({ children }) {
           // Replace advisor's portfolios that are linked to this client
           const linkedIds = new Set(clientData.portfolio_ids || []);
           const withoutLinked = all.filter((p) => !linkedIds.has(p.id));
-          const linkedFromAdvisor = advisorPortfolios.filter((p) => linkedIds.has(p.id));
+          const linkedFromAdvisor = advisorPortfolios
+            .filter((p) => linkedIds.has(p.id))
+            .map(sanitizePortfolio)
+            .filter(Boolean);
           lsSet(LS.portfolios, [...withoutLinked, ...linkedFromAdvisor]);
           console.info('[Sync] Client portfolios refreshed from advisor data');
         }
@@ -398,11 +404,13 @@ export async function syncFromSupabase(userId, userEmail) {
       // Also store portfolio snapshot if present so getPortfolios can find it
       if (inv.portfolio_snapshot) {
         const all = lsGet(LS.portfolios, []);
-        const snap = inv.portfolio_snapshot;
-        const idx = all.findIndex((p) => p.id === snap.id);
-        if (idx >= 0) all[idx] = { ...all[idx], ...snap };
-        else all.push(snap);
-        lsSet(LS.portfolios, all);
+        const snap = sanitizePortfolio(inv.portfolio_snapshot);
+        if (snap) {
+          const idx = all.findIndex((p) => p.id === snap.id);
+          if (idx >= 0) all[idx] = { ...all[idx], ...snap };
+          else all.push(snap);
+          lsSet(LS.portfolios, all);
+        }
       }
     }
 
@@ -524,13 +532,14 @@ export function getPortfolios(userId) {
   const all = lsGet(LS.portfolios, []);
   const owned = all.filter((p) => p.owner === userId);
   const clientData = lsGet(LS.clients, {})[userId];
+  let result = owned;
   if (clientData?.portfolio_ids) {
     const shared = all.filter(
       (p) => clientData.portfolio_ids.includes(p.id) && p.owner !== userId
     );
-    return [...owned, ...shared];
+    result = [...owned, ...shared];
   }
-  return owned;
+  return result.map(sanitizePortfolio).filter(Boolean);
 }
 
 export function savePortfolio(portfolio) {
@@ -695,12 +704,13 @@ export async function getInvite(token) {
         .select('*')
         .eq('token', token)
         .maybeSingle();
-      if (!error && data) return data;
+      if (!error && data) return sanitizeInvite(data);
     } catch { /* fall through */ }
   }
   // Fallback to localStorage
   const invites = lsGet(LS.invites, {});
-  return invites[token] ?? null;
+  const raw = invites[token] ?? null;
+  return raw ? sanitizeInvite(raw) : null;
 }
 
 export function acceptInvite(userId, invite) {
@@ -732,14 +742,16 @@ export function acceptInvite(userId, invite) {
   // Also store the portfolio snapshot in local portfolios so it's immediately available
   if (invite.portfolio_snapshot) {
     const all = lsGet(LS.portfolios, []);
-    const snap = invite.portfolio_snapshot;
-    const idx = all.findIndex((p) => p.id === snap.id);
-    if (idx >= 0) {
-      all[idx] = { ...all[idx], ...snap };
-    } else {
-      all.push(snap);
+    const snap = sanitizePortfolio(invite.portfolio_snapshot);
+    if (snap) {
+      const idx = all.findIndex((p) => p.id === snap.id);
+      if (idx >= 0) {
+        all[idx] = { ...all[idx], ...snap };
+      } else {
+        all.push(snap);
+      }
+      lsSet(LS.portfolios, all);
     }
-    lsSet(LS.portfolios, all);
   }
 
   // Persist to Supabase so it survives browser changes
@@ -768,7 +780,10 @@ export function acceptInvite(userId, invite) {
           const linkedIds = new Set(mergedPortfolioIds);
           const all = lsGet(LS.portfolios, []);
           const withoutLinked = all.filter((p) => !linkedIds.has(p.id));
-          const linkedFromAdvisor = advisorPortfolios.filter((p) => linkedIds.has(p.id));
+          const linkedFromAdvisor = advisorPortfolios
+            .filter((p) => linkedIds.has(p.id))
+            .map(sanitizePortfolio)
+            .filter(Boolean);
           if (linkedFromAdvisor.length) {
             lsSet(LS.portfolios, [...withoutLinked, ...linkedFromAdvisor]);
             console.info('[Invite] Synced latest portfolio data from advisor');
@@ -845,20 +860,6 @@ export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteU
 }
 
 // ─── Message helpers ─────────────────────────────────────────────────────────
-function sanitizeMessage(m) {
-  return {
-    id: typeof m.id === 'string' ? m.id : String(m.id ?? ''),
-    portfolio_id: typeof m.portfolio_id === 'string' ? m.portfolio_id : String(m.portfolio_id ?? ''),
-    type: typeof m.type === 'string' ? m.type : '',
-    text: typeof m.text === 'string' ? m.text : '',
-    sender: typeof m.sender === 'string' ? m.sender : '',
-    sender_id: typeof m.sender_id === 'string' ? m.sender_id : String(m.sender_id ?? ''),
-    sender_email: typeof m.sender_email === 'string' ? m.sender_email : '',
-    sender_role: typeof m.sender_role === 'string' ? m.sender_role : '',
-    created_at: typeof m.created_at === 'string' ? m.created_at : '',
-  };
-}
-
 export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId)
@@ -932,12 +933,5 @@ export function getLatestApproval(portfolioId) {
   const raw = lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId && (m.type === 'approval' || m.type === 'change_request'))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] ?? null;
-  if (!raw || typeof raw !== 'object') return null;
-  return {
-    type: typeof raw.type === 'string' ? raw.type : '',
-    text: typeof raw.text === 'string' ? raw.text : '',
-    created_at: typeof raw.created_at === 'string' ? raw.created_at : '',
-    sender_email: typeof raw.sender_email === 'string' ? raw.sender_email : '',
-    portfolio_id: typeof raw.portfolio_id === 'string' ? raw.portfolio_id : String(raw.portfolio_id ?? ''),
-  };
+  return sanitizeApproval(raw);
 }
