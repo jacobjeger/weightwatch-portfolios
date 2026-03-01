@@ -447,6 +447,7 @@ export default function PortfolioBuilder() {
     // Build a minimal snapshot — strip heavy fields to keep URL short
     const snap = {
       id: portfolioId,
+      owner: user.id,
       name,
       description: (description || '').slice(0, 200),
       primary_benchmark: benchmark,
@@ -459,6 +460,8 @@ export default function PortfolioBuilder() {
         last_price: h.last_price,
       })),
       starting_value: startingValue,
+      cash_percent: cashPercent,
+      drip_enabled: drip,
       created_at: createdAt,
     };
     try {

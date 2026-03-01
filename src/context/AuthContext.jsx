@@ -552,7 +552,9 @@ export function savePortfolio(portfolio) {
     all.push({ ...updated, created_at: updated.last_updated_at });
   }
   lsSet(LS.portfolios, all);
-  pushToSupabase(portfolio.owner, all);
+  // Only push this user's portfolios to Supabase (not other users' data from same browser)
+  const ownedByUser = all.filter((p) => p.owner === portfolio.owner);
+  pushToSupabase(portfolio.owner, ownedByUser);
   return updated;
 }
 
@@ -877,14 +879,24 @@ export async function fetchMessagesFromSupabase(portfolioId) {
       .eq('portfolio_id', portfolioId)
       .order('created_at', { ascending: true });
     if (error) throw error;
-    if (data?.length) {
-      // Merge into localStorage for offline access
-      const existing = lsGet(LS.messages, []);
-      const existingIds = new Set(existing.map((m) => m.id));
-      const newMsgs = data.filter((m) => !existingIds.has(m.id));
-      if (newMsgs.length) lsSet(LS.messages, [...existing, ...newMsgs]);
+    const supabaseMessages = data || [];
+    const localMessages = lsGet(LS.messages, []).filter(m => m.portfolio_id === portfolioId);
+
+    // Merge both directions: Supabase ↔ localStorage
+    if (supabaseMessages.length) {
+      const allLocal = lsGet(LS.messages, []);
+      const localIds = new Set(allLocal.map((m) => m.id));
+      const newFromSupabase = supabaseMessages.filter((m) => !localIds.has(m.id));
+      if (newFromSupabase.length) lsSet(LS.messages, [...allLocal, ...newFromSupabase]);
     }
-    return (data || []).map(sanitizeMessage);
+
+    // Combine both sources, deduplicate by id, Supabase wins on conflicts
+    const merged = new Map();
+    for (const m of localMessages) merged.set(m.id, m);
+    for (const m of supabaseMessages) merged.set(m.id, m);
+    return Array.from(merged.values())
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      .map(sanitizeMessage);
   } catch {
     return null; // Fall back to localStorage via getMessages()
   }

@@ -52,11 +52,11 @@ export function useClientPortfolio(user, role, refreshClientPortfolios) {
     }
   }, [refreshClientPortfolios, loadPortfolios]);
 
-  // Auto-sync every 30 seconds
+  // Auto-sync every 10 seconds
   useEffect(() => {
     if (!user || role !== 'client') return;
     handleSync(); // initial sync
-    const interval = setInterval(handleSync, 30000);
+    const interval = setInterval(handleSync, 10000);
     return () => clearInterval(interval);
   }, [user, role, handleSync]);
 
