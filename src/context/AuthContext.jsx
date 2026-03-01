@@ -845,19 +845,25 @@ export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteU
 }
 
 // ─── Message helpers ─────────────────────────────────────────────────────────
+function sanitizeMessage(m) {
+  return {
+    id: typeof m.id === 'string' ? m.id : String(m.id ?? ''),
+    portfolio_id: typeof m.portfolio_id === 'string' ? m.portfolio_id : String(m.portfolio_id ?? ''),
+    type: typeof m.type === 'string' ? m.type : '',
+    text: typeof m.text === 'string' ? m.text : '',
+    sender: typeof m.sender === 'string' ? m.sender : '',
+    sender_id: typeof m.sender_id === 'string' ? m.sender_id : String(m.sender_id ?? ''),
+    sender_email: typeof m.sender_email === 'string' ? m.sender_email : '',
+    sender_role: typeof m.sender_role === 'string' ? m.sender_role : '',
+    created_at: typeof m.created_at === 'string' ? m.created_at : '',
+  };
+}
+
 export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId)
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-    .map((m) => ({
-      id: typeof m.id === 'string' ? m.id : String(m.id ?? ''),
-      portfolio_id: typeof m.portfolio_id === 'string' ? m.portfolio_id : String(m.portfolio_id ?? ''),
-      type: typeof m.type === 'string' ? m.type : '',
-      text: typeof m.text === 'string' ? m.text : '',
-      sender: typeof m.sender === 'string' ? m.sender : '',
-      sender_email: typeof m.sender_email === 'string' ? m.sender_email : '',
-      created_at: typeof m.created_at === 'string' ? m.created_at : '',
-    }));
+    .map(sanitizeMessage);
 }
 
 // Fetch messages from Supabase for cross-browser sync. Returns sorted array or null on failure.
@@ -877,7 +883,7 @@ export async function fetchMessagesFromSupabase(portfolioId) {
       const newMsgs = data.filter((m) => !existingIds.has(m.id));
       if (newMsgs.length) lsSet(LS.messages, [...existing, ...newMsgs]);
     }
-    return data || [];
+    return (data || []).map(sanitizeMessage);
   } catch {
     return null; // Fall back to localStorage via getMessages()
   }
@@ -893,7 +899,7 @@ export function sendMessage(message) {
   all.push(msg);
   lsSet(LS.messages, all);
   pushMessageToSupabase(msg);
-  return msg;
+  return sanitizeMessage(msg);
 }
 
 // Look up the client email linked to a portfolio (from invites)
