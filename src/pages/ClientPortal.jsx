@@ -8,6 +8,7 @@ import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
 import MessagePanel from '../components/MessagePanel';
+import TickerInfoPopup from '../components/TickerInfoPopup';
 
 function CollapsibleSection({ title, icon, defaultOpen = true, children, badge }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -48,6 +49,7 @@ function ClientPortalBody() {
     currentPortfolioValue, totalWeight, cashPercent,
     live, prices, handleSync,
   } = useClientPortfolio(user, role, refreshClientPortfolios);
+  const [tickerInfo, setTickerInfo] = useState(null);
 
   if (!user || role !== 'client') {
     return (
@@ -270,7 +272,13 @@ function ClientPortalBody() {
                         return (
                           <tr key={h.ticker} className="border-t border-slate-100">
                             <td className="py-2.5 pr-4">
-                              <span className="font-mono font-semibold text-slate-800">{h.ticker}</span>
+                              <button
+                                type="button"
+                                className="font-mono font-semibold text-slate-800 hover:text-blue-600 hover:underline transition-colors cursor-pointer"
+                                onClick={() => setTickerInfo(h.ticker)}
+                              >
+                                {h.ticker}
+                              </button>
                             </td>
                             <td className="hidden sm:table-cell py-2.5 pr-4 text-slate-600">{h.name}</td>
                             <td className="hidden sm:table-cell py-2.5 pr-4">
@@ -434,6 +442,16 @@ function ClientPortalBody() {
           </p>
         </div>
       </main>
+
+      {/* Ticker info popup */}
+      {tickerInfo && (
+        <TickerInfoPopup
+          ticker={tickerInfo}
+          holding={holdings.find((h) => h.ticker === tickerInfo)}
+          livePrice={live && prices[tickerInfo]?.price ? prices[tickerInfo].price : null}
+          onClose={() => setTickerInfo(null)}
+        />
+      )}
     </div>
   );
 }

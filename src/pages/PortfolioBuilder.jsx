@@ -11,6 +11,7 @@ import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
 import MessagePanel from '../components/MessagePanel';
+import TickerInfoPopup from '../components/TickerInfoPopup';
 import { useToast } from '../context/ToastContext';
 import { useMarketData } from '../context/MarketDataContext';
 
@@ -55,6 +56,7 @@ export default function PortfolioBuilder() {
   const [inviteEmail, setInviteEmail]     = useState('');
   const [inviteUrl, setInviteUrl]         = useState(null);
   const [linkedClient, setLinkedClient]   = useState(null);  // { email, accepted } linked via invite
+  const [tickerInfo, setTickerInfo]       = useState(null);  // ticker string for info popup
 
   // Collapsible section toggles
   const [holdingsOpen, setHoldingsOpen]     = useState(true);
@@ -743,8 +745,8 @@ export default function PortfolioBuilder() {
                       <tr className="border-b border-slate-200">
                         <th className="th pl-0">Symbol</th>
                         <th className="th hidden md:table-cell">Name</th>
-                        <th className="th hidden lg:table-cell">Type</th>
-                        <th className="th hidden lg:table-cell">Role</th>
+                        <th className="th hidden md:table-cell">Type</th>
+                        <th className="th hidden md:table-cell">Role</th>
                         <th className="th text-right hidden sm:table-cell">Last Price</th>
                         <th className="th text-right">Target %</th>
                         <th className="th text-right hidden sm:table-cell">Current %</th>
@@ -755,14 +757,22 @@ export default function PortfolioBuilder() {
                     <tbody className="divide-y divide-slate-100">
                       {holdings.map((h) => (
                         <tr key={h.ticker} className="group">
-                          <td className="td pl-0 font-semibold text-slate-900">{h.ticker}</td>
+                          <td className="td pl-0 font-semibold text-slate-900">
+                            <button
+                              type="button"
+                              className="hover:text-blue-600 hover:underline transition-colors cursor-pointer"
+                              onClick={() => setTickerInfo(h.ticker)}
+                            >
+                              {h.ticker}
+                            </button>
+                          </td>
                           <td className="td text-slate-600 max-w-xs truncate hidden md:table-cell">{h.name}</td>
-                          <td className="td hidden lg:table-cell">
+                          <td className="td hidden md:table-cell">
                             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                               h.type === 'ETF' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                             }`}>{h.type}</span>
                           </td>
-                          <td className="td hidden lg:table-cell">
+                          <td className="td hidden md:table-cell">
                             <div className="flex items-center gap-1">
                               {['Core', 'Tilt', 'Satellite'].map((cat) => {
                                 const active = (h.category || 'Core') === cat;
@@ -1618,6 +1628,16 @@ export default function PortfolioBuilder() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Ticker info popup */}
+      {tickerInfo && (
+        <TickerInfoPopup
+          ticker={tickerInfo}
+          holding={holdings.find((h) => h.ticker === tickerInfo)}
+          livePrice={live && prices[tickerInfo]?.price ? prices[tickerInfo].price : null}
+          onClose={() => setTickerInfo(null)}
+        />
       )}
     </div>
   );

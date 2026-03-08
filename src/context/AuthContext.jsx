@@ -363,8 +363,16 @@ export function AuthProvider({ children }) {
       lsSet(LS.users, users);
     }
 
-    // 3) Sign out
+    // 3) Delete the Supabase Auth user via Edge Function (requires service role)
     if (isSupabaseConfigured) {
+      try {
+        await supabase.functions.invoke('delete-account', {
+          body: { user_id: userId },
+        });
+      } catch {
+        // Edge Function may not be deployed — sign-out still happens below
+        console.warn('[Auth] delete-account Edge Function not available');
+      }
       await supabase.auth.signOut();
     } else {
       mockSignOut();
@@ -770,14 +778,22 @@ export function acceptInvite(userId, invite) {
   };
   lsSet(LS.clients, clients);
 
-  // Update the invite's accepted_at in localStorage so getLinkedClient sees it
+  // Update the invite's accepted_at in localStorage so getLinkedClient sees it.
+  // Create the entry if it doesn't exist yet (e.g. invite was created on a different browser).
   if (invite.token) {
     const invites = lsGet(LS.invites, {});
-    if (invites[invite.token]) {
-      invites[invite.token].accepted_by = userId;
-      invites[invite.token].accepted_at = invites[invite.token].accepted_at ?? acceptedAt;
-      lsSet(LS.invites, invites);
-    }
+    invites[invite.token] = {
+      ...(invites[invite.token] || {
+        token: invite.token,
+        advisor_id: invite.advisor_id,
+        client_email: invite.client_email,
+        portfolio_ids: invite.portfolio_ids,
+        created_at: invite.created_at,
+      }),
+      accepted_by: userId,
+      accepted_at: invites[invite.token]?.accepted_at ?? acceptedAt,
+    };
+    lsSet(LS.invites, invites);
   }
 
   // Also store the portfolio snapshot in local portfolios so it's immediately available

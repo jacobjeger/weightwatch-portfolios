@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, Send, CheckCircle, AlertTriangle, User } from 'lucide-react';
 import { useAuth, getPortfolios, getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
 
@@ -8,7 +8,9 @@ export default function Messages() {
   const [selectedPortfolioId, setSelectedPortfolioId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
+  const [sidebarCounts, setSidebarCounts] = useState({}); // { portfolioId: { count, lastMsg } }
   const endRef = useRef(null);
+  const prevMsgCount = useRef(0);
 
   // Load portfolios
   useEffect(() => {
@@ -21,6 +23,20 @@ export default function Messages() {
     }
   }, [user]);
 
+  // Build sidebar counts — fetch from Supabase for each portfolio on mount
+  const refreshSidebar = useCallback(async () => {
+    if (!portfolios.length) return;
+    const counts = {};
+    for (const p of portfolios) {
+      const msgs = await fetchMessagesFromSupabase(p.id) ?? getMessages(p.id);
+      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+      counts[p.id] = { count: msgs.length, lastMsg };
+    }
+    setSidebarCounts(counts);
+  }, [portfolios]);
+
+  useEffect(() => { refreshSidebar(); }, [refreshSidebar]);
+
   // Load messages for selected portfolio (from Supabase when available)
   useEffect(() => {
     if (!selectedPortfolioId) return;
@@ -29,9 +45,13 @@ export default function Messages() {
     });
   }, [selectedPortfolioId]);
 
-  // Auto-scroll
+  // Auto-scroll only when new messages arrive
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!messages.length) return;
+    if (messages.length > prevMsgCount.current) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    prevMsgCount.current = messages.length;
   }, [messages]);
 
   // Poll for new messages every 5 seconds (from Supabase when available)
@@ -39,7 +59,11 @@ export default function Messages() {
     if (!selectedPortfolioId) return;
     const interval = setInterval(async () => {
       const msgs = await fetchMessagesFromSupabase(selectedPortfolioId);
-      setMessages(msgs ?? getMessages(selectedPortfolioId));
+      const resolved = msgs ?? getMessages(selectedPortfolioId);
+      setMessages(resolved);
+      // Update sidebar count for this portfolio too
+      const lastMsg = resolved.length > 0 ? resolved[resolved.length - 1] : null;
+      setSidebarCounts((prev) => ({ ...prev, [selectedPortfolioId]: { count: resolved.length, lastMsg } }));
     }, 5000);
     return () => clearInterval(interval);
   }, [selectedPortfolioId]);
@@ -56,6 +80,11 @@ export default function Messages() {
       text: text.trim() || (type === 'approval' ? 'Approved the portfolio' : 'Requested changes'),
     });
     setMessages((prev) => [...prev, msg]);
+    // Update sidebar count immediately
+    setSidebarCounts((prev) => ({
+      ...prev,
+      [selectedPortfolioId]: { count: (prev[selectedPortfolioId]?.count ?? 0) + 1, lastMsg: msg },
+    }));
     setText('');
   }
 
@@ -65,14 +94,6 @@ export default function Messages() {
       handleSend();
     }
   }
-
-  // Get unique conversation partners
-  const conversationPartners = portfolios.map((p) => {
-    const msgs = getMessages(p.id);
-    const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-    const unread = msgs.filter((m) => m.sender_id !== user?.id).length;
-    return { portfolio: p, lastMsg, messageCount: msgs.length, unread };
-  });
 
   const selectedPortfolio = portfolios.find((p) => p.id === selectedPortfolioId);
 
@@ -91,39 +112,42 @@ export default function Messages() {
             <p className="text-xs text-slate-400 mt-0.5">Messages per portfolio</p>
           </div>
           <div className="divide-y divide-slate-100 max-h-[30vh] lg:max-h-[60vh] overflow-y-auto">
-            {conversationPartners.length === 0 && (
+            {portfolios.length === 0 && (
               <div className="p-6 text-center text-sm text-slate-400">
                 No conversations yet. Messages appear here when you or your {role === 'advisor' ? 'clients' : 'advisor'} communicate about portfolios.
               </div>
             )}
-            {conversationPartners.map(({ portfolio: p, lastMsg, messageCount }) => (
-              <button
-                key={p.id}
-                onClick={() => setSelectedPortfolioId(p.id)}
-                className={`w-full text-left p-4 hover:bg-slate-50 transition-colors ${
-                  selectedPortfolioId === p.id ? 'bg-blue-50 border-l-2 border-blue-500' : ''
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm text-slate-900 truncate">{p.name || 'Portfolio'}</span>
-                  {messageCount > 0 && (
-                    <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-1.5 py-0.5 rounded-full ml-2">
-                      {messageCount}
-                    </span>
+            {portfolios.map((p) => {
+              const info = sidebarCounts[p.id] ?? { count: 0, lastMsg: null };
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPortfolioId(p.id)}
+                  className={`w-full text-left p-4 hover:bg-slate-50 transition-colors ${
+                    selectedPortfolioId === p.id ? 'bg-blue-50 border-l-2 border-blue-500' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm text-slate-900 truncate">{p.name || 'Portfolio'}</span>
+                    {info.count > 0 && (
+                      <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-1.5 py-0.5 rounded-full ml-2">
+                        {info.count}
+                      </span>
+                    )}
+                  </div>
+                  {info.lastMsg && (
+                    <p className="text-xs text-slate-500 mt-1 truncate">
+                      {info.lastMsg.sender_id === user?.id ? 'You: ' : ''}{info.lastMsg.text}
+                    </p>
                   )}
-                </div>
-                {lastMsg && (
-                  <p className="text-xs text-slate-500 mt-1 truncate">
-                    {lastMsg.sender_id === user?.id ? 'You: ' : ''}{lastMsg.text}
-                  </p>
-                )}
-                {lastMsg && (
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    {!isNaN(new Date(lastMsg.created_at).getTime()) ? new Date(lastMsg.created_at).toLocaleDateString() : ''}
-                  </p>
-                )}
-              </button>
-            ))}
+                  {info.lastMsg && (
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {!isNaN(new Date(info.lastMsg.created_at).getTime()) ? new Date(info.lastMsg.created_at).toLocaleDateString() : ''}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
