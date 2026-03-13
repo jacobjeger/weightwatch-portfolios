@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { MarketDataProvider } from './context/MarketDataContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import Nav from './components/Nav';
@@ -21,6 +22,7 @@ import MeetingScheduler from './pages/MeetingScheduler';
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <MarketDataProvider>
       <BrowserRouter>
@@ -58,5 +60,6 @@ export default function App() {
       </BrowserRouter>
       </MarketDataProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }

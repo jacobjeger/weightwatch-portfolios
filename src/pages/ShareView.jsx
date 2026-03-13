@@ -3,12 +3,14 @@ import { useParams } from 'react-router-dom';
 import { getSharedPortfolio } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import PerformanceChart from '../components/PerformanceChart';
+import TickerSummaryModal from '../components/TickerSummaryModal';
 
 export default function ShareView() {
   const { token } = useParams();
   const [portfolio, setPortfolio] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [summaryTicker, setSummaryTicker] = useState(null);
 
   useEffect(() => {
     getSharedPortfolio(token).then((p) => {
@@ -92,7 +94,11 @@ export default function ShareView() {
               <tbody>
                 {portfolio.holdings.map((h) => (
                   <tr key={h.ticker} className="border-t border-slate-100">
-                    <td className="py-2 pr-4 font-mono font-semibold text-slate-800">
+                    <td
+                      className="py-2 pr-4 font-mono font-semibold text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
+                      onClick={() => setSummaryTicker(h.ticker)}
+                      title="Click for ticker summary"
+                    >
                       {h.ticker}
                     </td>
                     <td className="py-2 pr-4 text-slate-600">{h.name}</td>
@@ -177,6 +183,11 @@ export default function ShareView() {
           <span className="font-semibold text-blue-600">AJA Wealth Management</span>
         </p>
       </main>
+
+      {/* Ticker summary modal */}
+      {summaryTicker && (
+        <TickerSummaryModal ticker={summaryTicker} onClose={() => setSummaryTicker(null)} />
+      )}
     </div>
   );
 }

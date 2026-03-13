@@ -26,7 +26,11 @@ function lsGet(key, fallback = null) {
   }
 }
 function lsSet(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn('[Storage] Write failed:', e.message);
+  }
 }
 
 function mockSignUp(email, password, accountType = 'advisor') {
@@ -979,7 +983,9 @@ export function sendMessage(message) {
     ...message,
   };
   all.push(msg);
-  lsSet(LS.messages, all);
+  // Cap at 2000 messages to prevent localStorage quota issues
+  const capped = all.length > 2000 ? all.slice(-2000) : all;
+  lsSet(LS.messages, capped);
   pushMessageToSupabase(msg);
   return sanitizeMessage(msg);
 }

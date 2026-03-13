@@ -178,10 +178,10 @@ export default function PerformanceChart({
       const now = new Date();
       const day = now.getDay();
       if (day === 0 || day === 6) return false; // weekend
-      // Convert to ET (approximate: UTC-5 or UTC-4 for DST)
-      const utcHour = now.getUTCHours();
-      const utcMin = now.getUTCMinutes();
-      const etMinutes = (utcHour * 60 + utcMin) - 300; // EST offset; DST would be -240
+      // Use Intl to get current ET time (handles DST automatically)
+      const etStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+      const et = new Date(etStr);
+      const etMinutes = et.getHours() * 60 + et.getMinutes();
       return etMinutes >= 570 && etMinutes <= 960; // 9:30 AM to 4:00 PM ET
     }
 
