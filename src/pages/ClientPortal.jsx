@@ -8,6 +8,7 @@ import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
 import MessagePanel from '../components/MessagePanel';
+import TickerSummaryModal from '../components/TickerSummaryModal';
 
 function CollapsibleSection({ title, icon, defaultOpen = true, children, badge }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -48,6 +49,8 @@ function ClientPortalBody() {
     currentPortfolioValue, totalWeight, cashPercent,
     live, prices, handleSync,
   } = useClientPortfolio(user, role, refreshClientPortfolios);
+
+  const [summaryTicker, setSummaryTicker] = useState(null);
 
   if (!user || role !== 'client') {
     return (
@@ -270,7 +273,13 @@ function ClientPortalBody() {
                         return (
                           <tr key={h.ticker} className="border-t border-slate-100">
                             <td className="py-2.5 pr-4">
-                              <span className="font-mono font-semibold text-slate-800">{h.ticker}</span>
+                              <span
+                                className="font-mono font-semibold text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
+                                onClick={() => setSummaryTicker(h.ticker)}
+                                title="Click for ticker summary"
+                              >
+                                {h.ticker}
+                              </span>
                             </td>
                             <td className="hidden sm:table-cell py-2.5 pr-4 text-slate-600">{h.name}</td>
                             <td className="hidden sm:table-cell py-2.5 pr-4">
@@ -434,6 +443,11 @@ function ClientPortalBody() {
           </p>
         </div>
       </main>
+
+      {/* Ticker summary modal */}
+      {summaryTicker && (
+        <TickerSummaryModal ticker={summaryTicker} onClose={() => setSummaryTicker(null)} />
+      )}
     </div>
   );
 }

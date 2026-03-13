@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, sendInviteEmail } from '../context/AuthContext';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, sendInviteEmail, getClientStatusForPortfolio } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn, getPortfolioRiskMetrics, getRiskMetrics } from '../lib/mockData';
 import { getRealPerformanceReturns, getRealRiskMetrics, clearMarketCaches } from '../lib/finnhub';
@@ -11,6 +11,7 @@ import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
 import MessagePanel from '../components/MessagePanel';
+import TickerSummaryModal from '../components/TickerSummaryModal';
 import { useToast } from '../context/ToastContext';
 import { useMarketData } from '../context/MarketDataContext';
 
@@ -55,6 +56,7 @@ export default function PortfolioBuilder() {
   const [inviteEmail, setInviteEmail]     = useState('');
   const [inviteUrl, setInviteUrl]         = useState(null);
   const [linkedClient, setLinkedClient]   = useState(null);  // { email, accepted } linked via invite
+  const [summaryTicker, setSummaryTicker] = useState(null);
 
   // Collapsible section toggles
   const [holdingsOpen, setHoldingsOpen]     = useState(true);
@@ -755,7 +757,13 @@ export default function PortfolioBuilder() {
                     <tbody className="divide-y divide-slate-100">
                       {holdings.map((h) => (
                         <tr key={h.ticker} className="group">
-                          <td className="td pl-0 font-semibold text-slate-900">{h.ticker}</td>
+                          <td
+                            className="td pl-0 font-semibold text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
+                            onClick={() => setSummaryTicker(h.ticker)}
+                            title="Click for ticker summary"
+                          >
+                            {h.ticker}
+                          </td>
                           <td className="td text-slate-600 max-w-xs truncate hidden md:table-cell">{h.name}</td>
                           <td className="td hidden lg:table-cell">
                             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
@@ -1301,7 +1309,57 @@ export default function PortfolioBuilder() {
         {/* Live Snapshot & Allocation — displayed below holdings for full-width layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {/* Client approval status badge */}
-          {!isNew && (() => {
+          {/* Client connection + approval status (advisor view) */}
+          {!isNew && role === 'advisor' && (() => {
+            const clientStatus = getClientStatusForPortfolio(portfolioId);
+            const approval = getLatestApproval(portfolioId);
+            return (
+              <div className="space-y-2">
+                <div className={`p-3 rounded-lg text-sm ${
+                  clientStatus.connected
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : clientStatus.pending
+                    ? 'bg-blue-50 border border-blue-200 text-blue-700'
+                    : 'bg-slate-50 border border-slate-200 text-slate-500'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      clientStatus.connected ? 'bg-green-500' : clientStatus.pending ? 'bg-blue-400 animate-pulse' : 'bg-slate-300'
+                    }`} />
+                    <span className="font-medium">
+                      {clientStatus.connected
+                        ? 'Client Connected'
+                        : clientStatus.pending
+                        ? 'Invite Pending'
+                        : 'No Client Invited'}
+                    </span>
+                  </div>
+                  {clientStatus.clientEmail && (
+                    <span className="block text-xs opacity-75 mt-0.5 ml-4">
+                      {clientStatus.clientEmail}
+                      {clientStatus.acceptedAt && ` · joined ${new Date(clientStatus.acceptedAt).toLocaleDateString()}`}
+                    </span>
+                  )}
+                </div>
+                {approval && (
+                  <div className={`p-3 rounded-lg text-sm ${
+                    approval.type === 'approval'
+                      ? 'bg-green-50 border border-green-200 text-green-700'
+                      : 'bg-amber-50 border border-amber-200 text-amber-700'
+                  }`}>
+                    <span className="font-medium">
+                      {approval.type === 'approval' ? 'Client approved' : 'Changes requested'}
+                    </span>
+                    <span className="block text-xs opacity-75 mt-0.5">
+                      {approval.sender_email} &middot; {new Date(approval.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {/* Client approval status badge (client view) */}
+          {!isNew && role === 'client' && (() => {
             const raw = getLatestApproval(portfolioId);
             if (!raw || typeof raw !== 'object' || typeof raw.type !== 'string') return null;
             return (
@@ -1618,6 +1676,11 @@ export default function PortfolioBuilder() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Ticker summary modal */}
+      {summaryTicker && (
+        <TickerSummaryModal ticker={summaryTicker} onClose={() => setSummaryTicker(null)} />
       )}
     </div>
   );

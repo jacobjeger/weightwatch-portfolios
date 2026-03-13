@@ -1,11 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceLine, ReferenceArea, Label,
 } from 'recharts';
+import { RefreshCw } from 'lucide-react';
 import { getPortfolioChartData, getPortfolioDrawdownData } from '../lib/mockData';
 import { isConfigured, getRealPortfolioChartData } from '../lib/finnhub';
 import { BENCHMARK_META } from '../lib/mockData';
+
+const INTRADAY_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
 const BASE_RANGES = ['1M', '3M', '6M', '1Y', '2Y', 'Max'];
 const RANGE_CALENDAR_DAYS = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '2Y': 730, 'Max': 1095 };
@@ -87,14 +90,21 @@ export default function PerformanceChart({
   const [data, setData]       = useState([]);
   const [loading, setLoading] = useState(false);
   const [dataIsReal, setDataIsReal] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);      // increment to force refresh
+  const [lastRefresh, setLastRefresh] = useState(null);  // timestamp of last data fetch
   const usingReal = isConfigured();
+
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   // Clamp range to valid set when createdAt changes
   useEffect(() => {
     if (!ranges.includes(range)) setRange('1Y');
   }, [ranges]);
 
-  // Fetch (real or mock) whenever inputs change
+  // Fetch (real or mock) whenever inputs change or refreshKey bumps
   useEffect(() => {
     let cancelled = false;
 
@@ -134,6 +144,7 @@ export default function PerformanceChart({
               setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
               setDataIsReal(false);
             }
+            setLastRefresh(new Date());
           }
         } catch {
           if (!cancelled) {
@@ -141,6 +152,7 @@ export default function PerformanceChart({
             const clipped = clipToCreation(raw);
             setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
             setDataIsReal(false);
+            setLastRefresh(new Date());
           }
         } finally {
           if (!cancelled) setLoading(false);
@@ -150,12 +162,37 @@ export default function PerformanceChart({
         const clipped = clipToCreation(raw);
         setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
         setDataIsReal(false);
+        setLastRefresh(new Date());
       }
     }
 
     fetchData();
     return () => { cancelled = true; };
-  }, [holdings, benchmarkTicker, range, usingReal, cashPercent, drip]);
+  }, [holdings, benchmarkTicker, range, usingReal, cashPercent, drip, refreshKey]);
+
+  // Auto-refresh every 5 minutes during market hours (Mon-Fri 9:30-16:00 ET)
+  useEffect(() => {
+    if (!holdings?.length) return;
+
+    function isMarketOpen() {
+      const now = new Date();
+      const day = now.getDay();
+      if (day === 0 || day === 6) return false; // weekend
+      // Convert to ET (approximate: UTC-5 or UTC-4 for DST)
+      const utcHour = now.getUTCHours();
+      const utcMin = now.getUTCMinutes();
+      const etMinutes = (utcHour * 60 + utcMin) - 300; // EST offset; DST would be -240
+      return etMinutes >= 570 && etMinutes <= 960; // 9:30 AM to 4:00 PM ET
+    }
+
+    const interval = setInterval(() => {
+      if (isMarketOpen()) {
+        setRefreshKey((k) => k + 1);
+      }
+    }, INTRADAY_REFRESH_MS);
+
+    return () => clearInterval(interval);
+  }, [holdings]);
 
   // Thin out X-axis ticks
   const tickInterval = Math.max(1, Math.floor(data.length / 8));
@@ -245,10 +282,25 @@ export default function PerformanceChart({
         >
           DD
         </button>
-        <span className="ml-auto text-[10px] sm:text-xs text-slate-400 max-w-[50%] text-right truncate">
-          {dataIsReal && <span className="text-green-500 mr-1">●</span>}
-          {dataSourceLabel}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="text-slate-400 hover:text-blue-600 disabled:opacity-40 p-0.5 rounded transition-colors"
+            title="Refresh performance data"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <span className="text-xs text-slate-400">
+            {dataIsReal && <span className="text-green-500 mr-1">●</span>}
+            {dataSourceLabel}
+            {lastRefresh && (
+              <span className="ml-1 text-slate-300" title={`Last refreshed: ${lastRefresh.toLocaleTimeString()}`}>
+                · {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </span>
+        </div>
       </div>
 
       {/* Backtest legend when chart shows a boundary */}
