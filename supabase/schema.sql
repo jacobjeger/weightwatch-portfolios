@@ -1,5 +1,6 @@
 -- AJA Wealth Management — Supabase Schema
 -- Run this in the Supabase SQL editor after creating a project.
+-- Safe to re-run: all statements are idempotent.
 
 -- ────────────────────────────────────────────────────────────
 -- Profiles (extends auth.users)
@@ -11,8 +12,10 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles enable row level security;
+drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile" on public.profiles
   for select using (auth.uid() = id);
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles
   for update using (auth.uid() = id);
 
@@ -44,6 +47,7 @@ create table if not exists public.instruments (
 );
 
 alter table public.instruments enable row level security;
+drop policy if exists "Anyone can read instruments" on public.instruments;
 create policy "Anyone can read instruments" on public.instruments
   for select using (true);
 
@@ -62,6 +66,7 @@ create table if not exists public.portfolios (
 );
 
 alter table public.portfolios enable row level security;
+drop policy if exists "Users can manage own portfolios" on public.portfolios;
 create policy "Users can manage own portfolios" on public.portfolios
   for all using (auth.uid() = owner);
 
@@ -77,6 +82,7 @@ create table if not exists public.portfolio_holdings (
 );
 
 alter table public.portfolio_holdings enable row level security;
+drop policy if exists "Users can manage holdings of own portfolios" on public.portfolio_holdings;
 create policy "Users can manage holdings of own portfolios" on public.portfolio_holdings
   for all using (
     exists (
@@ -102,6 +108,7 @@ create table if not exists public.performance_snapshots (
 );
 
 alter table public.performance_snapshots enable row level security;
+drop policy if exists "Users can manage snapshots of own portfolios" on public.performance_snapshots;
 create policy "Users can manage snapshots of own portfolios" on public.performance_snapshots
   for all using (
     exists (
@@ -128,6 +135,7 @@ create table if not exists public.user_settings (
 );
 
 alter table public.user_settings enable row level security;
+drop policy if exists "Users can manage own settings" on public.user_settings;
 create policy "Users can manage own settings" on public.user_settings
   for all using (auth.uid() = user_id);
 
@@ -145,6 +153,7 @@ create table if not exists public.activity_log (
 );
 
 alter table public.activity_log enable row level security;
+drop policy if exists "Users can manage own activity log" on public.activity_log;
 create policy "Users can manage own activity log" on public.activity_log
   for all using (auth.uid() = user_id);
 
@@ -162,6 +171,7 @@ create table if not exists public.user_portfolios (
 );
 
 alter table public.user_portfolios enable row level security;
+drop policy if exists "Users manage own portfolios" on public.user_portfolios;
 create policy "Users manage own portfolios"
   on public.user_portfolios for all
   using (auth.uid() = user_id)
@@ -184,44 +194,16 @@ create table if not exists public.share_tokens (
 alter table public.share_tokens enable row level security;
 
 -- Anyone with the token URL can read the record (enables unauthenticated share links)
+drop policy if exists "Public can read share tokens" on public.share_tokens;
 create policy "Public can read share tokens"
   on public.share_tokens for select using (true);
 
 -- Only the owner can create or delete their own share tokens
+drop policy if exists "Owners manage own share tokens" on public.share_tokens;
 create policy "Owners manage own share tokens"
   on public.share_tokens for all
   using (auth.uid() = owner_id)
   with check (auth.uid() = owner_id);
-
--- ────────────────────────────────────────────────────────────
--- Messages (advisor ↔ client communication per portfolio)
--- ────────────────────────────────────────────────────────────
-create table if not exists public.messages (
-  id           uuid primary key default gen_random_uuid(),
-  portfolio_id uuid not null,
-  sender_id    uuid not null references auth.users(id) on delete cascade,
-  sender_email text,
-  sender_role  text not null check (sender_role in ('advisor', 'client')),
-  type         text not null default 'comment' check (type in ('comment', 'approval', 'change_request')),
-  text         text not null,
-  created_at   timestamptz not null default now()
-);
-
-alter table public.messages enable row level security;
-
-create policy "Users can read messages for their portfolios"
-  on public.messages for select using (
-    auth.uid() = sender_id
-    or exists (
-      select 1 from public.invites i
-      where i.portfolio_ids @> array[messages.portfolio_id]
-        and (i.advisor_id = auth.uid() or i.accepted_by = auth.uid())
-    )
-  );
-
-create policy "Users can send messages"
-  on public.messages for insert
-  with check (auth.uid() = sender_id);
 
 -- ────────────────────────────────────────────────────────────
 -- Invites (advisor → client invite links)
@@ -239,12 +221,59 @@ create table if not exists public.invites (
 
 alter table public.invites enable row level security;
 
+drop policy if exists "Anyone can read invites by token" on public.invites;
 create policy "Anyone can read invites by token"
   on public.invites for select using (true);
 
+drop policy if exists "Advisors can create invites" on public.invites;
 create policy "Advisors can create invites"
   on public.invites for insert
   with check (auth.uid() = advisor_id);
+
+-- Allow clients to accept invites (set accepted_by on unclaimed invites)
+drop policy if exists "Users can accept invites" on public.invites;
+create policy "Users can accept invites"
+  on public.invites for update
+  using (accepted_by is null or accepted_by = auth.uid())
+  with check (accepted_by = auth.uid());
+
+-- Allow advisors to update their own invites (e.g. unlink a client)
+drop policy if exists "Advisors can update own invites" on public.invites;
+create policy "Advisors can update own invites"
+  on public.invites for update
+  using (auth.uid() = advisor_id);
+
+-- ────────────────────────────────────────────────────────────
+-- Messages (advisor ↔ client communication per portfolio)
+-- ────────────────────────────────────────────────────────────
+create table if not exists public.messages (
+  id           uuid primary key default gen_random_uuid(),
+  portfolio_id uuid not null,
+  sender_id    uuid not null references auth.users(id) on delete cascade,
+  sender_email text,
+  sender_role  text not null check (sender_role in ('advisor', 'client')),
+  type         text not null default 'comment' check (type in ('comment', 'approval', 'change_request')),
+  text         text not null,
+  created_at   timestamptz not null default now()
+);
+
+alter table public.messages enable row level security;
+
+drop policy if exists "Users can read messages for their portfolios" on public.messages;
+create policy "Users can read messages for their portfolios"
+  on public.messages for select using (
+    auth.uid() = sender_id
+    or exists (
+      select 1 from public.invites i
+      where i.portfolio_ids @> array[messages.portfolio_id]
+        and (i.advisor_id = auth.uid() or i.accepted_by = auth.uid())
+    )
+  );
+
+drop policy if exists "Users can send messages" on public.messages;
+create policy "Users can send messages"
+  on public.messages for insert
+  with check (auth.uid() = sender_id);
 
 -- ────────────────────────────────────────────────────────────
 -- Indexes for query performance

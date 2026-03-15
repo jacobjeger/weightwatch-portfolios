@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, sendInviteEmail, getClientStatusForPortfolio } from '../context/AuthContext';
+import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User, X } from 'lucide-react';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, unlinkClient, sendInviteEmail, getClientStatusForPortfolio } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn, getPortfolioRiskMetrics, getRiskMetrics } from '../lib/mockData';
 import { getRealPerformanceReturns, getRealRiskMetrics, clearMarketCaches } from '../lib/finnhub';
@@ -68,6 +68,7 @@ export default function PortfolioBuilder() {
   const [allocBarOpen, setAllocBarOpen]         = useState(true);
 
   // UI state
+  const [showUnlinkClient, setShowUnlinkClient] = useState(false);
   const [showDelete, setShowDelete]         = useState(false);
   const [showRebalance, setShowRebalance]   = useState(false);
   const [saving, setSaving]                 = useState(false);
@@ -536,6 +537,14 @@ export default function PortfolioBuilder() {
               title={linkedClient.accepted ? 'Client account set up' : 'Client has not yet accepted invite'}
             >
               <User className="w-3 h-3" /> {linkedClient.email}
+              <button
+                type="button"
+                onClick={() => setShowUnlinkClient(true)}
+                className="ml-0.5 hover:text-red-600 transition-colors"
+                title="Remove client from this portfolio"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </span>
           )}
         </div>
@@ -1614,6 +1623,21 @@ export default function PortfolioBuilder() {
           confirmLabel="Rebalance"
           onConfirm={handleRebalance}
           onCancel={() => setShowRebalance(false)}
+        />
+      )}
+
+      {showUnlinkClient && linkedClient && (
+        <ConfirmModal
+          title={`Remove client ${linkedClient.email}?`}
+          message="This client will lose access to this portfolio. You can re-invite them later."
+          confirmLabel="Remove Client"
+          onConfirm={() => {
+            unlinkClient(portfolioId);
+            setLinkedClient(null);
+            setShowUnlinkClient(false);
+            toast.success('Client removed from portfolio');
+          }}
+          onCancel={() => setShowUnlinkClient(false)}
         />
       )}
 
