@@ -211,7 +211,7 @@ export default function AccountSettings() {
               try {
                 await deleteAccount();
                 toast.success('Account deleted');
-                navigate('/', { replace: true });
+                navigate('/login', { replace: true });
               } catch (err) {
                 toast.error('Failed to delete account: ' + (err.message || 'Unknown error'));
                 setDeleting(false);

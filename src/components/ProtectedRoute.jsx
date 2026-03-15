@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useEffect } from 'react';
 
@@ -8,7 +8,7 @@ export default function ProtectedRoute() {
 
   useEffect(() => {
     if (!loading && !user) {
-      navigate(window.location.pathname, { replace: true, state: { requireAuth: true } });
+      navigate('/login', { replace: true, state: { requireAuth: true } });
     }
   }, [loading, user, navigate]);
 
@@ -20,5 +20,11 @@ export default function ProtectedRoute() {
     );
   }
 
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  return <Outlet />;
+}
+
+export function AdvisorRoute() {
+  const { role } = useAuth();
+  if (role === 'client') return <Navigate to="/client-portal" replace />;
+  return <Outlet />;
 }

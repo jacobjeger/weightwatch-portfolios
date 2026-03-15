@@ -106,6 +106,7 @@ export default function Nav() {
               <button
                 className="lg:hidden text-slate-300 hover:text-white"
                 onClick={() => setMobileOpen((o) => !o)}
+                aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
               >
                 {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>

@@ -604,7 +604,10 @@ export function savePortfolio(portfolio) {
 export function deletePortfolios(ids, userId) {
   const all = lsGet(LS.portfolios, []).filter((p) => !ids.includes(p.id));
   lsSet(LS.portfolios, all);
-  if (userId) pushToSupabase(userId, all);
+  if (userId) {
+    const ownedByUser = all.filter((p) => p.owner === userId);
+    pushToSupabase(userId, ownedByUser);
+  }
 }
 
 // ─── Activity log helpers ─────────────────────────────────────────────────────
