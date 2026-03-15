@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3, Search, Star } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, getSettings, saveSettings } from '../context/AuthContext';
@@ -25,6 +25,12 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [favVersion, setFavVersion] = useState(0);
+  const longPressedRef = useRef(false);
+
+  // Clients should always see the client portal, never the advisor dashboard
+  useEffect(() => {
+    if (isClient) navigate('/client-portal', { replace: true });
+  }, [isClient, navigate]);
 
   function load() {
     if (user) setPortfolios(getPortfolios(user.id));
@@ -105,7 +111,7 @@ export default function Dashboard() {
   function handleDelete() {
     const ids = [...selected];
     const names = portfolios.filter((p) => ids.includes(p.id)).map((p) => p.name);
-    deletePortfolios(ids);
+    deletePortfolios(ids, user.id);
     ids.forEach((id, i) => {
       logActivity(user.id, {
         portfolio_id: id,
@@ -144,8 +150,10 @@ export default function Dashboard() {
   }
 
   function handleTouchStart(e, portfolioId) {
+    longPressedRef.current = false;
     const touch = e.touches[0];
     const timer = setTimeout(() => {
+      longPressedRef.current = true;
       setContextMenu({
         x: Math.min(touch.clientX, window.innerWidth - 200),
         y: Math.min(touch.clientY, window.innerHeight - 100),
@@ -318,11 +326,11 @@ export default function Dashboard() {
                 <div
                   key={p.id}
                   className="card p-4 flex items-center justify-between gap-3 cursor-pointer active:bg-slate-50"
-                  onClick={() => navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`)}
+                  onClick={() => { if (longPressedRef.current) { longPressedRef.current = false; return; } navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`); }}
                   onContextMenu={(e) => openContextMenu(e, p.id)}
                   onTouchStart={(e) => handleTouchStart(e, p.id)}
                   onTouchEnd={handleTouchEnd}
-                  onTouchMove={handleTouchEnd}
+                  onTouchMove={(e) => { clearTimeout(e.currentTarget._lpt); longPressedRef.current = false; }}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {!isClient && <input
