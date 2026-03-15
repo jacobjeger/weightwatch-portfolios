@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3 } from 'lucide-react';
-import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity } from '../context/AuthContext';
+import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3, Search, Star } from 'lucide-react';
+import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, getSettings, saveSettings } from '../context/AuthContext';
 import { getPortfolioReturn, getPortfolioYTDReturn } from '../lib/mockData';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import NewPortfolioModal from '../components/NewPortfolioModal';
@@ -22,6 +22,9 @@ export default function Dashboard() {
   const [showNew, setShowNew] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [perfTimeframe, setPerfTimeframe] = useState('YTD');
+  const [search, setSearch] = useState('');
+  const [contextMenu, setContextMenu] = useState(null);
+  const [favVersion, setFavVersion] = useState(0);
 
   function load() {
     if (user) setPortfolios(getPortfolios(user.id));
@@ -37,6 +40,47 @@ export default function Dashboard() {
     )];
     if (allTickers.length) loadTickers(allTickers);
   }, [live, portfolios, loadTickers]);
+
+  // Close context menu on scroll or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [contextMenu]);
+
+  // Favorites
+  const favoriteIds = new Set(
+    (user ? getSettings(user.id) : {}).favorite_portfolio_ids ?? []
+  );
+  // Force re-read when favVersion changes
+  void favVersion;
+
+  function toggleFavorite(portfolioId) {
+    const current = getSettings(user.id).favorite_portfolio_ids ?? [];
+    const next = current.includes(portfolioId)
+      ? current.filter((id) => id !== portfolioId)
+      : [...current, portfolioId];
+    saveSettings(user.id, { favorite_portfolio_ids: next });
+    setContextMenu(null);
+    setFavVersion((v) => v + 1);
+  }
+
+  // Filter and sort: favorites first, then alphabetical
+  const filtered = portfolios.filter(
+    (p) => p.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const sorted = [...filtered].sort((a, b) => {
+    const aFav = favoriteIds.has(a.id);
+    const bFav = favoriteIds.has(b.id);
+    if (aFav !== bFav) return aFav ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
 
   function handleCreate(data) {
     const portfolio = savePortfolio({
@@ -84,17 +128,40 @@ export default function Dashboard() {
   }
 
   function toggleAll() {
-    if (selected.size === portfolios.length) {
+    if (selected.size === sorted.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(portfolios.map((p) => p.id)));
+      setSelected(new Set(sorted.map((p) => p.id)));
     }
+  }
+
+  function openContextMenu(e, portfolioId) {
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 100);
+    setContextMenu({ x, y, portfolioId });
+  }
+
+  function handleTouchStart(e, portfolioId) {
+    const touch = e.touches[0];
+    const timer = setTimeout(() => {
+      setContextMenu({
+        x: Math.min(touch.clientX, window.innerWidth - 200),
+        y: Math.min(touch.clientY, window.innerHeight - 100),
+        portfolioId,
+      });
+    }, 500);
+    e.currentTarget._lpt = timer;
+  }
+
+  function handleTouchEnd(e) {
+    clearTimeout(e.currentTarget._lpt);
   }
 
   const days = TIMEFRAME_DAYS[perfTimeframe] ?? 252;
 
   // Compute portfolio performance for the selected timeframe.
-  // For 1D when live is enabled, use real weighted changePercent from Finnhub.
   function portfolioPerf(portfolio) {
     const holdings = portfolio.holdings ?? [];
     if (!holdings.length) return null;
@@ -108,7 +175,6 @@ export default function Dashboard() {
           coveredWeight  += h.weight_percent;
         }
       });
-      // If we have real data for at least half the weight, use it; else fall back
       if (coveredWeight >= 50) return weightedReturn;
     }
     if (perfTimeframe === 'YTD') {
@@ -157,11 +223,23 @@ export default function Dashboard() {
             {isClient ? 'My Managed Portfolios' : 'My Portfolios'}
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
+            {search
+              ? `${filtered.length} of ${portfolios.length} portfolio${portfolios.length !== 1 ? 's' : ''}`
+              : `${portfolios.length} portfolio${portfolios.length !== 1 ? 's' : ''}`}
             {isClient && ' · managed by your advisor'}
           </p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search portfolios..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input pl-8 w-48 sm:w-56"
+            />
+          </div>
           {!isClient && selected.size > 0 && (
             <button
               className="btn-danger"
@@ -222,11 +300,16 @@ export default function Dashboard() {
             </>
           )}
         </div>
+      ) : sorted.length === 0 ? (
+        <div className="card p-12 text-center">
+          <Search className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500">No portfolios match "{search}"</p>
+        </div>
       ) : (
         <>
           {/* Mobile card list — hidden on sm+ */}
           <div className="sm:hidden space-y-3">
-            {portfolios.map((p) => {
+            {sorted.map((p) => {
               const status = getPortfolioStatus(p);
               const totalWeight = (p.holdings ?? []).reduce((s, h) => s + (h.weight_percent ?? 0), 0);
               const ret = portfolioPerf(p);
@@ -236,6 +319,10 @@ export default function Dashboard() {
                   key={p.id}
                   className="card p-4 flex items-center justify-between gap-3 cursor-pointer active:bg-slate-50"
                   onClick={() => navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`)}
+                  onContextMenu={(e) => openContextMenu(e, p.id)}
+                  onTouchStart={(e) => handleTouchStart(e, p.id)}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={handleTouchEnd}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {!isClient && <input
@@ -246,7 +333,10 @@ export default function Dashboard() {
                       onClick={(e) => e.stopPropagation()}
                     />}
                     <div className="min-w-0">
-                      <div className="font-semibold text-slate-900 truncate">{p.name}</div>
+                      <div className="font-semibold text-slate-900 truncate flex items-center gap-1.5">
+                        {favoriteIds.has(p.id) && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
+                        {p.name}
+                      </div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <StatusBadge status={status} totalWeight={totalWeight} />
                         {p.primary_benchmark && (
@@ -278,7 +368,7 @@ export default function Dashboard() {
                       <input
                         type="checkbox"
                         className="rounded border-slate-300"
-                        checked={selected.size === portfolios.length && portfolios.length > 0}
+                        checked={selected.size === sorted.length && sorted.length > 0}
                         onChange={toggleAll}
                       />
                     </th>
@@ -293,7 +383,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {portfolios.map((p) => {
+                  {sorted.map((p) => {
                     const status = getPortfolioStatus(p);
                     const totalWeight = (p.holdings ?? []).reduce((s, h) => s + (h.weight_percent ?? 0), 0);
                     const ret = portfolioPerf(p);
@@ -304,6 +394,7 @@ export default function Dashboard() {
                         key={p.id}
                         className="hover:bg-slate-50 cursor-pointer"
                         onClick={() => navigate(isClient ? '/client-portal' : `/portfolio/${p.id}`)}
+                        onContextMenu={(e) => openContextMenu(e, p.id)}
                       >
                         <td className="td" onClick={(e) => e.stopPropagation()}>
                           {!isClient && <input
@@ -314,7 +405,10 @@ export default function Dashboard() {
                           />}
                         </td>
                         <td className="td">
-                          <div className="font-semibold text-slate-900">{p.name}</div>
+                          <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                            {favoriteIds.has(p.id) && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
+                            {p.name}
+                          </div>
                           {p.description && (
                             <div
                               className="text-xs text-slate-400 mt-0.5 max-w-xs truncate"
@@ -375,6 +469,40 @@ export default function Dashboard() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setContextMenu(null)}
+          onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+        >
+          <div
+            className="fixed z-50 bg-white rounded-lg shadow-xl border border-slate-200 py-1 min-w-[180px]"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              onClick={() => toggleFavorite(contextMenu.portfolioId)}
+            >
+              <Star className={`w-4 h-4 ${favoriteIds.has(contextMenu.portfolioId) ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
+              {favoriteIds.has(contextMenu.portfolioId) ? 'Remove from Favorites' : 'Add to Favorites'}
+            </button>
+            <button
+              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+              onClick={() => {
+                setSelected(new Set([contextMenu.portfolioId]));
+                setShowDelete(true);
+                setContextMenu(null);
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Modals */}

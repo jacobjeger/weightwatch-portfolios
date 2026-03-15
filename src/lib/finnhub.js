@@ -322,10 +322,6 @@ async function getQuoteBasedReturns(holdings, benchmarkTicker) {
       validWeight  += h.weight_percent;
     }
   });
-  if (validWeight > 0 && validWeight < 100) {
-    portfolioRet = portfolioRet * (100 / validWeight);
-  }
-
   let benchRet = null;
   if (benchmarkTicker && quotes[benchmarkTicker]) {
     const q = quotes[benchmarkTicker];
@@ -337,6 +333,7 @@ async function getQuoteBasedReturns(holdings, benchmarkTicker) {
   return {
     portfolio: validWeight > 0 ? parseFloat(portfolioRet.toFixed(2)) : null,
     benchmark: benchRet != null ? parseFloat(benchRet.toFixed(2)) : null,
+    coverage: validWeight,
   };
 }
 
@@ -422,11 +419,6 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
       }
     });
 
-    // Scale up if some holdings had no data
-    if (validWeight > 0 && validWeight < 100) {
-      portfolioRet = portfolioRet * (100 / validWeight);
-    }
-
     // Benchmark return
     let benchRet = null;
     if (benchmarkTicker) {
@@ -440,6 +432,7 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
     return {
       portfolio: validWeight > 0 ? parseFloat(portfolioRet.toFixed(2)) : null,
       benchmark: benchRet != null ? parseFloat(benchRet.toFixed(2)) : null,
+      coverage: validWeight,
     };
   }
 

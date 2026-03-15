@@ -635,6 +635,7 @@ const DEFAULT_SETTINGS = {
   snapshot_refresh_interval: 60,
   confirm_deletes: true,
   activity_log_granularity: 'standard',
+  favorite_portfolio_ids: [],
 };
 
 export function getSettings(userId) {

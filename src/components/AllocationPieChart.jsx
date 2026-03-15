@@ -28,6 +28,7 @@ function PctLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name })
 }
 
 export default function AllocationPieChart({ holdings }) {
+  if (!holdings?.length) return null;
   const data = holdings
     .filter((h) => (Number(h.weight_percent) || 0) > 0)
     .map((h) => ({

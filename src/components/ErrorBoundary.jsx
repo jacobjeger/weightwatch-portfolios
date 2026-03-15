@@ -15,28 +15,25 @@ export default class ErrorBoundary extends Component {
   }
 
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
-          <div className="text-center max-w-md px-6">
-            <h1 className="text-xl font-bold text-slate-800 mb-2">Something went wrong</h1>
-            <p className="text-sm text-slate-500 mb-4">
-              An unexpected error occurred. Please try refreshing the page.
-            </p>
-            <pre className="text-xs text-red-600 bg-red-50 rounded p-3 mb-4 text-left overflow-auto max-h-32">
-              {this.state.error?.message}
-            </pre>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
-            >
-              Refresh Page
-            </button>
-          </div>
-        </div>
-      );
-    }
+    if (!this.state.hasError) return this.props.children;
 
-    return this.props.children;
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4 px-4">
+        <h2 className="text-lg font-semibold text-slate-700">Something went wrong</h2>
+        <p className="text-sm text-slate-500 text-center max-w-md">
+          An unexpected error occurred. Try reloading the page.
+        </p>
+        <details className="text-xs text-slate-400 max-w-md">
+          <summary className="cursor-pointer hover:text-slate-600">Error details</summary>
+          <pre className="mt-2 whitespace-pre-wrap break-words">{this.state.error?.message}</pre>
+        </details>
+        <button
+          className="btn-primary"
+          onClick={() => window.location.reload()}
+        >
+          Reload
+        </button>
+      </div>
+    );
   }
 }
