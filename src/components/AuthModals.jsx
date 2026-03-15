@@ -41,7 +41,7 @@ function Field({ label, type, value, onChange, error }) {
 }
 
 // ─── Login Modal ──────────────────────────────────────────────────────────────
-export function LoginModal({ onClose, onSwitchToSignUp }) {
+export function LoginModal({ onClose }) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -83,10 +83,7 @@ export function LoginModal({ onClose, onSwitchToSignUp }) {
           {loading ? 'Logging in…' : cooldown > 0 ? `Try again in ${cooldown}s` : 'Log In'}
         </button>
         <p className="text-center text-sm text-slate-500">
-          Don't have an account?{' '}
-          <button type="button" className="text-blue-600 hover:underline font-medium" onClick={onSwitchToSignUp}>
-            Sign Up
-          </button>
+          Need an account? Ask your advisor for an invite link.
         </p>
         <p className="text-center text-sm">
           <a href="/reset-password" className="text-slate-500 hover:underline text-xs">

@@ -4,6 +4,7 @@ import { useAuth, getInvite, acceptInvite } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import PerformanceChart from '../components/PerformanceChart';
 import MessagePanel from '../components/MessagePanel';
+import TickerSummaryModal from '../components/TickerSummaryModal';
 
 export default function InviteView() {
   const { token } = useParams();
@@ -21,6 +22,7 @@ export default function InviteView() {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [summaryTicker, setSummaryTicker] = useState(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -82,7 +84,7 @@ export default function InviteView() {
     );
   }
 
-  if (notFound) {
+  if (notFound || !invite?.portfolio_snapshot?.holdings?.length) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-3">
         <div className="text-2xl">🔗</div>
@@ -283,6 +285,11 @@ export default function InviteView() {
           Powered by <span className="font-semibold text-blue-600">AJA Wealth Management</span>
         </p>
       </main>
+
+      {/* Ticker summary modal */}
+      {summaryTicker && (
+        <TickerSummaryModal ticker={summaryTicker} onClose={() => setSummaryTicker(null)} />
+      )}
     </div>
   );
 }

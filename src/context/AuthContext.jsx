@@ -26,7 +26,11 @@ function lsGet(key, fallback = null) {
   }
 }
 function lsSet(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn('[Storage] Write failed:', e.message);
+  }
 }
 
 function mockSignUp(email, password, accountType = 'advisor') {
@@ -631,6 +635,7 @@ const DEFAULT_SETTINGS = {
   snapshot_refresh_interval: 60,
   confirm_deletes: true,
   activity_log_granularity: 'standard',
+  favorite_portfolio_ids: [],
 };
 
 export function getSettings(userId) {
@@ -900,6 +905,36 @@ export async function sendInviteEmail({ to, advisorEmail, portfolioName, inviteU
   return { sent: false, method: 'mailto', mailtoUrl };
 }
 
+// ─── Client connection helpers ──────────────────────────────────────────────
+// Returns the connection status of a client for a given portfolio:
+// { connected: bool, clientEmail: string | null, acceptedAt: string | null }
+export function getClientStatusForPortfolio(portfolioId) {
+  const clients = lsGet(LS.clients, {});
+  const invites = lsGet(LS.invites, {});
+
+  // Check if any client has accepted an invite that includes this portfolio
+  for (const [userId, clientInfo] of Object.entries(clients)) {
+    if (clientInfo.portfolio_ids?.includes(portfolioId)) {
+      // Find matching invite to get client email
+      const users = lsGet(LS.users, {});
+      let clientEmail = null;
+      for (const [email, userData] of Object.entries(users)) {
+        if (userData.id === userId) { clientEmail = email; break; }
+      }
+      return { connected: true, clientEmail, acceptedAt: clientInfo.accepted_at };
+    }
+  }
+
+  // Check if there's a pending invite for this portfolio
+  for (const invite of Object.values(invites)) {
+    if (invite.portfolio_ids?.includes(portfolioId)) {
+      return { connected: false, clientEmail: invite.client_email, acceptedAt: null, pending: true };
+    }
+  }
+
+  return { connected: false, clientEmail: null, acceptedAt: null, pending: false };
+}
+
 // ─── Message helpers ─────────────────────────────────────────────────────────
 export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
@@ -949,7 +984,9 @@ export function sendMessage(message) {
     ...message,
   };
   all.push(msg);
-  lsSet(LS.messages, all);
+  // Cap at 2000 messages to prevent localStorage quota issues
+  const capped = all.length > 2000 ? all.slice(-2000) : all;
+  lsSet(LS.messages, capped);
   pushMessageToSupabase(msg);
   return sanitizeMessage(msg);
 }

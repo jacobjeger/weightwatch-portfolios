@@ -245,3 +245,10 @@ create policy "Anyone can read invites by token"
 create policy "Advisors can create invites"
   on public.invites for insert
   with check (auth.uid() = advisor_id);
+
+-- ────────────────────────────────────────────────────────────
+-- Indexes for query performance
+-- ────────────────────────────────────────────────────────────
+create index if not exists idx_messages_portfolio_id on public.messages(portfolio_id);
+create index if not exists idx_messages_portfolio_created on public.messages(portfolio_id, created_at);
+create index if not exists idx_activity_log_user_occurred on public.activity_log(user_id, occurred_at);

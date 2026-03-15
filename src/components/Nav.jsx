@@ -98,12 +98,6 @@ export default function Nav() {
                 >
                   Log In
                 </Link>
-                <Link
-                  to="/signup"
-                  className="text-sm btn bg-blue-600 text-white hover:bg-blue-500"
-                >
-                  Sign Up
-                </Link>
               </div>
             )}
 

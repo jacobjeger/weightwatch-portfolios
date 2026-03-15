@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { MarketDataProvider } from './context/MarketDataContext';
-import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import ProtectedRoute from './components/ProtectedRoute';
 import Nav from './components/Nav';
 import Dashboard from './pages/Dashboard';
 import PortfolioBuilder from './pages/PortfolioBuilder';
@@ -12,7 +12,6 @@ import AccountSettings from './pages/AccountSettings';
 import HelpTour from './pages/HelpTour';
 import ResetPassword from './pages/ResetPassword';
 import Login from './pages/Login';
-import SignUp from './pages/SignUp';
 import ShareView from './pages/ShareView';
 import InviteView from './pages/InviteView';
 import ClientPortal from './pages/ClientPortal';
@@ -21,6 +20,7 @@ import MeetingScheduler from './pages/MeetingScheduler';
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <MarketDataProvider>
       <BrowserRouter>
@@ -31,7 +31,6 @@ export default function App() {
             <Routes>
               {/* Public */}
               <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<SignUp />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/share/:token" element={<ShareView />} />
               <Route path="/invite/:token" element={<InviteView />} />
@@ -58,5 +57,6 @@ export default function App() {
       </BrowserRouter>
       </MarketDataProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }

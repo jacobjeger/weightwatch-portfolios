@@ -101,10 +101,7 @@ export default function Login() {
 
           <div className="mt-4 space-y-2 text-center">
             <p className="text-sm text-slate-500">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-blue-600 hover:underline font-medium">
-                Sign Up
-              </Link>
+              Need an account? Ask your advisor for an invite link.
             </p>
             <Link to="/reset-password" className="text-slate-500 hover:underline text-xs">
               Forgot your password?
