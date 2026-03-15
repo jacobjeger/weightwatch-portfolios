@@ -1032,25 +1032,35 @@ export function unlinkClient(portfolioId) {
 // Look up the client email linked to a portfolio (from invites)
 // Returns { email, accepted } or null
 export async function getLinkedClient(portfolioId) {
-  // Check localStorage first
-  const invites = Object.values(lsGet(LS.invites, {}));
-  const match = invites.find((inv) => inv.portfolio_ids?.includes(portfolioId));
-  if (match?.client_email) {
-    return { email: match.client_email, accepted: !!match.accepted_at };
-  }
-
-  // Try Supabase
+  // When Supabase is available, prefer it — it has the cross-browser source of truth
+  // (the client accepts on their browser, so the advisor's localStorage won't have accepted_at)
   if (isSupabaseConfigured) {
     try {
       const { data } = await supabase
         .from('invites')
-        .select('client_email, accepted_at')
+        .select('token, client_email, accepted_at, accepted_by')
         .contains('portfolio_ids', [portfolioId])
         .maybeSingle();
       if (data?.client_email) {
+        // Sync back to localStorage so the badge updates without another round-trip
+        if (data.token) {
+          const invites = lsGet(LS.invites, {});
+          if (invites[data.token]) {
+            invites[data.token].accepted_at = data.accepted_at;
+            invites[data.token].accepted_by = data.accepted_by;
+            lsSet(LS.invites, invites);
+          }
+        }
         return { email: data.client_email, accepted: !!data.accepted_at };
       }
-    } catch { /* fall through */ }
+    } catch { /* fall through to localStorage */ }
+  }
+
+  // Fallback: check localStorage (works offline / when Supabase not configured)
+  const invites = Object.values(lsGet(LS.invites, {}));
+  const match = invites.find((inv) => inv.portfolio_ids?.includes(portfolioId));
+  if (match?.client_email) {
+    return { email: match.client_email, accepted: !!match.accepted_at };
   }
   return null;
 }
