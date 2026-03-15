@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { MessageCircle, Send, CheckCircle, AlertTriangle, User } from 'lucide-react';
 import { useAuth, getPortfolios, getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
 
@@ -66,13 +66,13 @@ export default function Messages() {
     }
   }
 
-  // Get unique conversation partners
-  const conversationPartners = portfolios.map((p) => {
+  // Get unique conversation partners (recompute when messages change)
+  const conversationPartners = useMemo(() => portfolios.map((p) => {
     const msgs = getMessages(p.id);
     const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
     const unread = msgs.filter((m) => m.sender_id !== user?.id).length;
     return { portfolio: p, lastMsg, messageCount: msgs.length, unread };
-  });
+  }), [portfolios, messages.length]);
 
   const selectedPortfolio = portfolios.find((p) => p.id === selectedPortfolioId);
 

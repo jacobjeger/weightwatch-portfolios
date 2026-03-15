@@ -943,7 +943,7 @@ export function getMessages(portfolioId) {
   return lsGet(LS.messages, [])
     .filter((m) => m.portfolio_id === portfolioId)
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-    .map(sanitizeMessage);
+    .map(sanitizeMessage).filter(Boolean);
 }
 
 // Fetch messages from Supabase for cross-browser sync. Returns sorted array or null on failure.
@@ -973,7 +973,7 @@ export async function fetchMessagesFromSupabase(portfolioId) {
     for (const m of supabaseMessages) merged.set(m.id, m);
     return Array.from(merged.values())
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-      .map(sanitizeMessage);
+      .map(sanitizeMessage).filter(Boolean);
   } catch {
     return null; // Fall back to localStorage via getMessages()
   }
@@ -992,6 +992,41 @@ export function sendMessage(message) {
   lsSet(LS.messages, capped);
   pushMessageToSupabase(msg);
   return sanitizeMessage(msg);
+}
+
+// Unlink a client from a portfolio (advisor action)
+export function unlinkClient(portfolioId) {
+  // Remove portfolioId from all client entries that reference it
+  const clients = lsGet(LS.clients, {});
+  for (const [uid, data] of Object.entries(clients)) {
+    if (data.portfolio_ids?.includes(portfolioId)) {
+      data.portfolio_ids = data.portfolio_ids.filter((id) => id !== portfolioId);
+      if (data.portfolio_ids.length === 0) delete clients[uid];
+    }
+  }
+  lsSet(LS.clients, clients);
+
+  // Nullify accepted_by on matching invites
+  const invites = lsGet(LS.invites, {});
+  for (const [token, inv] of Object.entries(invites)) {
+    if (inv.portfolio_ids?.includes(portfolioId)) {
+      inv.accepted_by = null;
+      inv.accepted_at = null;
+    }
+  }
+  lsSet(LS.invites, invites);
+
+  // Supabase: clear accepted_by on matching invites
+  if (isSupabaseConfigured) {
+    supabase
+      .from('invites')
+      .update({ accepted_by: null, accepted_at: null })
+      .contains('portfolio_ids', [portfolioId])
+      .then(({ error }) => {
+        if (error) console.warn('[Unlink] Supabase update skipped:', error.message);
+      })
+      .catch((err) => console.warn('[Unlink] Supabase update rejected:', err.message));
+  }
 }
 
 // Look up the client email linked to a portfolio (from invites)
