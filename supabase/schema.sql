@@ -276,6 +276,30 @@ create policy "Users can send messages"
   with check (auth.uid() = sender_id);
 
 -- ────────────────────────────────────────────────────────────
+-- Schwab Tokens (OAuth tokens for Schwab API integration)
+-- Stores per-user Schwab access/refresh tokens for the
+-- brokerage API.  One row per user.  The proxy serverless
+-- function reads/refreshes these tokens server-side.
+-- ────────────────────────────────────────────────────────────
+create table if not exists public.schwab_tokens (
+  user_id        uuid primary key references auth.users(id) on delete cascade,
+  access_token   text not null,
+  refresh_token  text not null,
+  expires_at     timestamptz not null,
+  schwab_accounts jsonb,          -- cached account list [{accountNumber, accountHash, ...}]
+  linked_at      timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+alter table public.schwab_tokens enable row level security;
+
+drop policy if exists "Users manage own Schwab tokens" on public.schwab_tokens;
+create policy "Users manage own Schwab tokens"
+  on public.schwab_tokens for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- ────────────────────────────────────────────────────────────
 -- Indexes for query performance
 -- ────────────────────────────────────────────────────────────
 create index if not exists idx_messages_portfolio_id on public.messages(portfolio_id);

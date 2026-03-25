@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, getActivity, getPortfolios } from '../context/AuthContext';
 import { getPortfolioReturn, getReturn } from '../lib/mockData';
+import { isConfigured, getRealPerformanceReturns } from '../lib/finnhub';
 import { formatDistanceToNow, format, isValid } from 'date-fns';
 import { Download, ExternalLink } from 'lucide-react';
 
@@ -30,13 +31,41 @@ export default function History() {
   const activity = useMemo(() => (user ? getActivity(user.id) : []), [user]);
   const portfolios = useMemo(() => (user ? getPortfolios(user.id) : []), [user]);
 
-  // Generate mock snapshots for all portfolios
+  // Fetch real returns for all portfolios
+  const [realReturnsMap, setRealReturnsMap] = useState({});
+  useEffect(() => {
+    if (!isConfigured() || !portfolios.length) return;
+    let cancelled = false;
+    async function fetchAll() {
+      const results = {};
+      for (const p of portfolios) {
+        if (!p.holdings?.length) continue;
+        try {
+          const data = await getRealPerformanceReturns(p.holdings, p.primary_benchmark || null);
+          if (data) results[p.id] = data;
+        } catch { /* fall back to mock */ }
+      }
+      if (!cancelled) setRealReturnsMap(results);
+    }
+    fetchAll();
+    return () => { cancelled = true; };
+  }, [portfolios]);
+
+  const LABEL_MAP = { '1M': '1M', '3M': '3M', '6M': '6M', '1Y': '1Y' };
+
+  // Generate snapshots — prefer real data, fall back to mock
   const snapshots = useMemo(() => {
     return portfolios.flatMap((p) =>
       Object.entries(TIMEFRAME_DAYS).map(([tf, days]) => {
-        const pRet = parseFloat(getPortfolioReturn(p.holdings, days));
+        const real = realReturnsMap[p.id];
+        const realLabel = LABEL_MAP[tf];
+        const pRet = real?.portfolio?.[realLabel] != null
+          ? real.portfolio[realLabel]
+          : parseFloat(getPortfolioReturn(p.holdings, days));
         const bRet = p.primary_benchmark
-          ? parseFloat(getReturn(p.primary_benchmark, days))
+          ? (real?.benchmark?.[realLabel] != null
+              ? real.benchmark[realLabel]
+              : parseFloat(getReturn(p.primary_benchmark, days)))
           : null;
         return {
           id: `${p.id}-${tf}`,
@@ -48,10 +77,11 @@ export default function History() {
           benchmark_return_pct: bRet,
           outperformance_pct: bRet !== null ? pRet - bRet : null,
           benchmark_used: p.primary_benchmark,
+          isReal: real?.portfolio?.[realLabel] != null,
         };
       })
     );
-  }, [portfolios]);
+  }, [portfolios, realReturnsMap]);
 
   const selectedPortfolio = portfolios.find((p) => p.id === comparePortfolio);
 
@@ -243,9 +273,15 @@ export default function History() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               {[compareA, compareB].map((tf) => {
                 const days = TIMEFRAME_DAYS[tf];
-                const pRet = parseFloat(getPortfolioReturn(selectedPortfolio.holdings, days));
+                const real = realReturnsMap[selectedPortfolio.id];
+                const realLabel = LABEL_MAP[tf];
+                const pRet = real?.portfolio?.[realLabel] != null
+                  ? real.portfolio[realLabel]
+                  : parseFloat(getPortfolioReturn(selectedPortfolio.holdings, days));
                 const bRet = selectedPortfolio.primary_benchmark
-                  ? parseFloat(getReturn(selectedPortfolio.primary_benchmark, days))
+                  ? (real?.benchmark?.[realLabel] != null
+                      ? real.benchmark[realLabel]
+                      : parseFloat(getReturn(selectedPortfolio.primary_benchmark, days)))
                   : null;
                 const alpha = bRet !== null ? pRet - bRet : null;
 

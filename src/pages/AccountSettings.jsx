@@ -59,6 +59,23 @@ export default function AccountSettings() {
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Account Settings</h1>
 
+      {/* Profile */}
+      <SectionCard title="Profile" onSave={() => persist('Profile')}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Display Name</label>
+            <input
+              type="text"
+              className="input"
+              placeholder="e.g. Akiva Ackerman"
+              value={settings.display_name ?? ''}
+              onChange={(e) => set('display_name', e.target.value)}
+            />
+            <p className="text-xs text-slate-400 mt-1">Shown to clients in messages instead of your email address.</p>
+          </div>
+        </div>
+      </SectionCard>
+
       {/* Benchmark Defaults */}
       <SectionCard title="Benchmark Defaults" onSave={() => persist('Benchmark defaults')}>
         <div className="space-y-4">

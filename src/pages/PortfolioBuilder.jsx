@@ -12,6 +12,8 @@ import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import ConfirmModal from '../components/ConfirmModal';
 import MessagePanel from '../components/MessagePanel';
 import TickerSummaryModal from '../components/TickerSummaryModal';
+import SchwabLinkButton from '../components/SchwabLinkButton';
+import { isConfigured as isSchwabConfigured } from '../lib/schwab';
 import { useToast } from '../context/ToastContext';
 import { useMarketData } from '../context/MarketDataContext';
 
@@ -58,6 +60,11 @@ export default function PortfolioBuilder() {
   const [linkedClient, setLinkedClient]   = useState(null);  // { email, accepted } linked via invite
   const [summaryTicker, setSummaryTicker] = useState(null);
 
+  // Schwab brokerage integration state
+  const [schwabAccountHash, setSchwabAccountHash] = useState(null);
+  const [schwabPositions, setSchwabPositions]     = useState(null);  // { totalValue, positions }
+  const hasSchwab = !!schwabAccountHash && !!schwabPositions;
+
   // Collapsible section toggles
   const [holdingsOpen, setHoldingsOpen]     = useState(true);
   const [allocBreakOpen, setAllocBreakOpen] = useState(true);
@@ -92,6 +99,7 @@ export default function PortfolioBuilder() {
         setCashPercent(p.cash_percent ?? 0);
         setStartingValue(p.starting_value ?? 100_000);
         setWeightHistory(p.weight_history ?? []);
+        setSchwabAccountHash(p.schwab_account_hash ?? null);
       }
     }
   }, [id, user, isNew]);
@@ -306,6 +314,7 @@ export default function PortfolioBuilder() {
       starting_value:      startingValue,
       created_at:          createdAt ?? new Date().toISOString(),
       weight_history:      updatedHistory,
+      schwab_account_hash: schwabAccountHash || null,
     };
     savePortfolio(portfolio);
     logActivity(user.id, {
@@ -558,6 +567,16 @@ export default function PortfolioBuilder() {
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Invite Client</span>
             </button>
           )}
+          {isSchwabConfigured() && (
+            <SchwabLinkButton
+              userId={user?.id}
+              portfolioId={portfolioId}
+              schwabAccountHash={schwabAccountHash}
+              onAccountLinked={(hash) => { setSchwabAccountHash(hash); }}
+              onAccountUnlinked={() => { setSchwabAccountHash(null); setSchwabPositions(null); }}
+              onPositionsLoaded={(data) => { setSchwabPositions(data); }}
+            />
+          )}
           <button className="btn-secondary" onClick={handleDuplicate} disabled={isNew}>
             <Copy className="w-4 h-4" /><span className="hidden sm:inline">Duplicate</span>
           </button>
@@ -760,6 +779,9 @@ export default function PortfolioBuilder() {
                         <th className="th text-right">Target %</th>
                         <th className="th text-right hidden sm:table-cell">Current %</th>
                         <th className="th text-right hidden sm:table-cell">Est. Value</th>
+                        {hasSchwab && <th className="th text-right hidden md:table-cell">Actual %</th>}
+                        {hasSchwab && <th className="th text-right hidden md:table-cell">Actual Value</th>}
+                        {hasSchwab && <th className="th text-right hidden md:table-cell">Drift</th>}
                         <th className="th w-10" />
                       </tr>
                     </thead>
@@ -863,6 +885,32 @@ export default function PortfolioBuilder() {
                               );
                             })()}
                           </td>
+                          {hasSchwab && (() => {
+                            const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                            if (!sp) return (
+                              <>
+                                <td className="td text-right text-slate-300 text-xs hidden md:table-cell">—</td>
+                                <td className="td text-right text-slate-300 text-xs hidden md:table-cell">—</td>
+                                <td className="td text-right text-slate-300 text-xs hidden md:table-cell">—</td>
+                              </>
+                            );
+                            const drift = sp.actualWeight - h.weight_percent;
+                            const absDrift = Math.abs(drift);
+                            const driftColor = absDrift <= 1 ? 'text-green-600' : absDrift <= 3 ? 'text-amber-500' : 'text-red-500';
+                            return (
+                              <>
+                                <td className="td text-right font-mono text-sm text-slate-700 hidden md:table-cell">
+                                  {sp.actualWeight.toFixed(2)}%
+                                </td>
+                                <td className="td text-right font-mono text-sm text-slate-700 hidden md:table-cell">
+                                  ${Math.round(sp.marketValue).toLocaleString('en-US')}
+                                </td>
+                                <td className={`td text-right font-mono text-sm font-semibold hidden md:table-cell ${driftColor}`}>
+                                  {drift > 0 ? '+' : ''}{drift.toFixed(2)}%
+                                </td>
+                              </>
+                            );
+                          })()}
                           <td className="td">
                             <button
                               className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
@@ -891,11 +939,44 @@ export default function PortfolioBuilder() {
                         <td className="td text-right font-semibold font-mono text-sm text-slate-700 hidden sm:table-cell">
                           ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                         </td>
+                        {hasSchwab && <td className="td text-right hidden md:table-cell" />}
+                        {hasSchwab && (
+                          <td className="td text-right font-semibold font-mono text-sm text-emerald-700 hidden md:table-cell">
+                            ${Math.round(schwabPositions.totalValue).toLocaleString('en-US')}
+                          </td>
+                        )}
+                        {hasSchwab && <td className="td hidden md:table-cell" />}
                         <td />{/* Delete button column */}
                       </tr>
                     </tfoot>
                   </table>
                 </div>
+
+                {/* Unmodeled Schwab positions — holdings in Schwab but not in the target model */}
+                {hasSchwab && (() => {
+                  const modelTickers = new Set(holdings.map(h => h.ticker));
+                  const unmodeled = schwabPositions.positions.filter(
+                    p => !modelTickers.has(p.ticker) && p.marketValue > 0
+                  );
+                  if (!unmodeled.length) return null;
+                  return (
+                    <div className="mt-3 p-3 bg-amber-50/60 border border-amber-200 rounded-lg">
+                      <h4 className="text-xs font-semibold text-amber-700 mb-2">
+                        Unmodeled Positions ({unmodeled.length})
+                        <span className="ml-1 font-normal text-amber-500">in Schwab but not in target model</span>
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {unmodeled.map(p => (
+                          <span key={p.ticker} className="inline-flex items-center gap-1 text-xs bg-white px-2 py-1 rounded border border-amber-200 font-mono text-amber-800">
+                            {p.ticker}
+                            <span className="text-amber-500">{p.actualWeight.toFixed(1)}%</span>
+                            <span className="text-amber-400">${Math.round(p.marketValue).toLocaleString('en-US')}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Weight error banner */}
                 {!isFullyAllocated && holdings.length > 0 && (
@@ -1310,6 +1391,7 @@ export default function PortfolioBuilder() {
               portfolioId={portfolioId}
               userId={user.id}
               userEmail={user.email}
+              userName={getSettings(user.id).display_name || ''}
               userRole={role}
             />
           )}

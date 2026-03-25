@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth, getInvite, acceptInvite } from '../context/AuthContext';
+import { useAuth, getInvite, acceptInvite, getSettings } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
 import PerformanceChart from '../components/PerformanceChart';
 import MessagePanel from '../components/MessagePanel';
@@ -274,6 +274,7 @@ export default function InviteView() {
                 portfolioId={invite.portfolio_ids?.[0] ?? invite.portfolio_snapshot?.id}
                 userId={user.id}
                 userEmail={user.email}
+                userName={getSettings(user.id).display_name || ''}
                 userRole="client"
                 showApprovalActions={true}
               />

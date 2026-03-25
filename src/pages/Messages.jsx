@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { MessageCircle, Send, CheckCircle, AlertTriangle, User } from 'lucide-react';
-import { useAuth, getPortfolios, getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
+import { useAuth, getPortfolios, getMessages, sendMessage, fetchMessagesFromSupabase, getSettings } from '../context/AuthContext';
 
 export default function Messages() {
   const { user, role } = useAuth();
@@ -47,10 +47,12 @@ export default function Messages() {
   function handleSend(type = 'comment') {
     if (!text.trim() && type === 'comment') return;
     if (!selectedPortfolioId) return;
+    const displayName = user ? (getSettings(user.id).display_name || '') : '';
     const msg = sendMessage({
       portfolio_id: selectedPortfolioId,
       sender_id: user.id,
       sender_email: user.email,
+      sender_name: displayName,
       sender_role: role,
       type,
       text: text.trim() || (type === 'approval' ? 'Approved the portfolio' : 'Requested changes'),
@@ -170,7 +172,7 @@ export default function Messages() {
                           <span className="text-green-700 text-sm font-medium">Portfolio approved</span>
                         </div>
                         <span className="block text-xs text-green-500 mt-0.5">
-                          {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
+                          {msg.sender_name || msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                         </span>
                         {msg.text && msg.text !== 'Approved the portfolio' && (
                           <p className="text-sm text-green-600 mt-1">{msg.text}</p>
@@ -187,7 +189,7 @@ export default function Messages() {
                           <span className="text-amber-700 text-sm font-medium">Changes requested</span>
                         </div>
                         <span className="block text-xs text-amber-500 mt-0.5">
-                          {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
+                          {msg.sender_name || msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                         </span>
                         {msg.text && msg.text !== 'Requested changes' && (
                           <p className="text-sm text-amber-600 mt-1">{msg.text}</p>
@@ -206,7 +208,7 @@ export default function Messages() {
                       }`}>
                         <div className="flex items-baseline gap-2 mb-0.5">
                           <span className={`text-xs font-semibold ${isMe ? 'text-blue-100' : 'text-slate-600'}`}>
-                            {isMe ? 'You' : msg.sender_email}
+                            {isMe ? 'You' : (msg.sender_name || msg.sender_email)}
                           </span>
                           <span className={`text-[10px] ${isMe ? 'text-blue-200' : (msg.sender_role === 'advisor' ? 'text-blue-400' : 'text-green-500')}`}>
                             {msg.sender_role}
