@@ -104,7 +104,7 @@ export async function getCandles(ticker, fromDate, toDate) {
   if (!res.ok) throw new Error(`Candle fetch failed for ${ticker}: ${res.status}`);
 
   const raw = await res.json();
-  if (raw.s !== 'ok' || !raw.c?.length) return [];
+  if (raw.s !== 'ok' || !raw.c?.length || !raw.t?.length) return [];
 
   const data = raw.t.map((ts, i) => {
     const d = new Date(ts * 1000);

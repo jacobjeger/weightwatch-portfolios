@@ -46,39 +46,45 @@ export default function Benchmarks() {
   const [realBenchRiskMetrics, setRealBenchRiskMetrics] = useState({});
   const [realChartData, setRealChartData]       = useState(null);
 
-  // Fetch real returns for each benchmark ticker
+  // Fetch real returns for each benchmark ticker (in parallel)
   useEffect(() => {
     if (!live) return;
     let cancelled = false;
-    async function fetchAll() {
+    Promise.all(
+      BENCHMARKS.map((ticker) =>
+        getRealPerformanceReturns([{ ticker, weight_percent: 100 }], null)
+          .then((data) => [ticker, data?.portfolio ?? null])
+          .catch(() => [ticker, null])
+      )
+    ).then((entries) => {
+      if (cancelled) return;
       const results = {};
-      for (const ticker of BENCHMARKS) {
-        try {
-          const data = await getRealPerformanceReturns([{ ticker, weight_percent: 100 }], null);
-          if (data?.portfolio) results[ticker] = data.portfolio;
-        } catch { /* skip, fall back to mock */ }
+      for (const [ticker, data] of entries) {
+        if (data) results[ticker] = data;
       }
-      if (!cancelled) setRealBenchReturns(results);
-    }
-    fetchAll();
+      setRealBenchReturns(results);
+    });
     return () => { cancelled = true; };
   }, [live]);
 
-  // Fetch real risk metrics for each benchmark
+  // Fetch real risk metrics for each benchmark (in parallel)
   useEffect(() => {
     if (!isConfigured()) return;
     let cancelled = false;
-    async function fetchRisk() {
+    Promise.all(
+      BENCHMARKS.map((ticker) =>
+        getRealRiskMetrics([{ ticker, weight_percent: 100 }], null, '1Y')
+          .then((data) => [ticker, data?.portfolio ?? null])
+          .catch(() => [ticker, null])
+      )
+    ).then((entries) => {
+      if (cancelled) return;
       const results = {};
-      for (const ticker of BENCHMARKS) {
-        try {
-          const data = await getRealRiskMetrics([{ ticker, weight_percent: 100 }], null, '1Y');
-          if (data?.portfolio) results[ticker] = data.portfolio;
-        } catch { /* skip, fall back to mock */ }
+      for (const [ticker, data] of entries) {
+        if (data) results[ticker] = data;
       }
-      if (!cancelled) setRealBenchRiskMetrics(results);
-    }
-    fetchRisk();
+      setRealBenchRiskMetrics(results);
+    });
     return () => { cancelled = true; };
   }, []);
 

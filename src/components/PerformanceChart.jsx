@@ -44,7 +44,7 @@ function CustomTooltip({ active, payload, label, createdAt }) {
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
           <span className="text-slate-600 capitalize">{String(p.name ?? p.dataKey ?? '')}:</span>
           <span className="font-semibold" style={{ color: p.color }}>
-            {(Number(p.value) || 0) >= 0 ? '+' : ''}{(Number(p.value) || 0).toFixed(2)}%
+            {(isFinite(Number(p.value)) ? Number(p.value) : 0) >= 0 ? '+' : ''}{(isFinite(Number(p.value)) ? Number(p.value) : 0).toFixed(2)}%
           </span>
         </div>
       ))}

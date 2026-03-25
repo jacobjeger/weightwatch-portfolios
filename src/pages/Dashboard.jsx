@@ -40,22 +40,25 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, [user]);
 
-  // Fetch real returns for all portfolios
+  // Fetch real returns for all portfolios (in parallel)
   useEffect(() => {
     if (!isFinnhubConfigured() || !portfolios.length) return;
     let cancelled = false;
-    async function fetchAll() {
+    const promises = portfolios
+      .filter((p) => p.holdings?.length)
+      .map((p) =>
+        getRealPerformanceReturns(p.holdings, p.primary_benchmark || null)
+          .then((data) => [p.id, data])
+          .catch(() => [p.id, null])
+      );
+    Promise.all(promises).then((entries) => {
+      if (cancelled) return;
       const results = {};
-      for (const p of portfolios) {
-        if (!p.holdings?.length) continue;
-        try {
-          const data = await getRealPerformanceReturns(p.holdings, p.primary_benchmark || null);
-          if (data) results[p.id] = data;
-        } catch { /* fall back to mock */ }
+      for (const [id, data] of entries) {
+        if (data) results[id] = data;
       }
-      if (!cancelled) setRealReturnsMap(results);
-    }
-    fetchAll();
+      setRealReturnsMap(results);
+    });
     return () => { cancelled = true; };
   }, [portfolios]);
 
