@@ -41,7 +41,7 @@ function Field({ label, type, value, onChange, error }) {
 }
 
 export default function Login() {
-  const { signIn, user, role } = useAuth();
+  const { signIn, user, role, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,10 +49,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
-  // If already logged in, redirect based on role
+  // If already logged in AND auth is settled, redirect based on role
   useEffect(() => {
-    if (user) navigate(role === 'client' ? '/client-portal' : '/', { replace: true });
-  }, [user, role, navigate]);
+    if (user && !authLoading) navigate(role === 'client' ? '/client-portal' : '/', { replace: true });
+  }, [user, role, authLoading, navigate]);
 
   useEffect(() => {
     if (cooldown <= 0) return;

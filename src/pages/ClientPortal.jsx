@@ -12,7 +12,7 @@ import MessagePanel from '../components/MessagePanel';
 import TickerSummaryModal from '../components/TickerSummaryModal';
 
 export default function ClientPortal() {
-  const { user, role } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [portfolios, setPortfolios] = useState([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -82,6 +82,14 @@ export default function ClientPortal() {
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
 
   if (!user || role !== 'client') {
     return (

@@ -185,7 +185,9 @@ export function AuthProvider({ children }) {
           // Supabase session is live — clear any pending localStorage session
           localStorage.removeItem(LS.session);
           setUser(u);
-          if (_event === 'SIGNED_IN') {
+          // Block rendering during sign-in and password recovery until sync
+          // restores the client map — prevents role from defaulting to 'advisor'
+          if (_event === 'SIGNED_IN' || _event === 'PASSWORD_RECOVERY' || _event === 'USER_UPDATED') {
             setLoading(true);
             syncFromSupabase(u.id, u.email).finally(() => { setSyncDone((v) => !v); setLoading(false); });
           } else {
