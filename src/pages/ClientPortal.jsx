@@ -108,19 +108,19 @@ export default function ClientPortal() {
 
   // Compute performance metrics — prefer real returns from Finnhub, fall back to mock
   const ytdReturn = holdings.length
-    ? (realReturns?.portfolio?.YTD != null ? realReturns.portfolio.YTD : parseFloat(getPortfolioYTDReturn(holdings)))
+    ? (realReturns?.portfolio?.YTD != null ? Number(realReturns.portfolio.YTD) : parseFloat(getPortfolioYTDReturn(holdings)))
     : null;
   const sinceReturn = portfolio?.created_at && holdings.length ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at)) : null;
   const oneYearReturn = holdings.length
-    ? (realReturns?.portfolio?.['1Y'] != null ? realReturns.portfolio['1Y'] : parseFloat(getPortfolioReturn(holdings, 252)))
+    ? (realReturns?.portfolio?.['1Y'] != null ? Number(realReturns.portfolio['1Y']) : parseFloat(getPortfolioReturn(holdings, 252)))
     : null;
   const benchYtd = benchmark
-    ? (realReturns?.benchmark?.YTD != null ? realReturns.benchmark.YTD : parseFloat(getYTDReturn(benchmark)))
+    ? (realReturns?.benchmark?.YTD != null ? Number(realReturns.benchmark.YTD) : parseFloat(getYTDReturn(benchmark)))
     : null;
 
   // Dynamic portfolio value based on live quotes
   const currentPortfolioValue = useMemo(() => {
-    const startVal = portfolio?.starting_value;
+    const startVal = Number(portfolio?.starting_value) || 0;
     if (!startVal || !holdings.length) return startVal || null;
     const cashPct = portfolio?.cash_percent ?? 0;
     const investedFrac = 1 - cashPct / 100;
@@ -263,7 +263,7 @@ export default function ClientPortal() {
             </p>
             {portfolio?.starting_value && currentPortfolioValue && currentPortfolioValue !== portfolio.starting_value && (
               <p className={`text-xs mt-1 font-medium ${currentPortfolioValue > portfolio.starting_value ? 'text-green-600' : 'text-red-500'}`}>
-                {currentPortfolioValue > portfolio.starting_value ? '+' : ''}${Math.round(currentPortfolioValue - portfolio.starting_value).toLocaleString()} from start
+                {`${currentPortfolioValue > portfolio.starting_value ? '+' : ''}$${Math.round(currentPortfolioValue - portfolio.starting_value).toLocaleString()} from start`}
               </p>
             )}
             <p className="text-xs text-slate-400 mt-0.5">{holdings.length} holdings</p>
