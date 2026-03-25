@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3, Search, Star } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, getSettings, saveSettings } from '../context/AuthContext';
 import { getPortfolioReturn, getPortfolioYTDReturn } from '../lib/mockData';
+import { isConfigured as isFinnhubConfigured, getRealPerformanceReturns } from '../lib/finnhub';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import NewPortfolioModal from '../components/NewPortfolioModal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const [contextMenu, setContextMenu] = useState(null);
   const [favVersion, setFavVersion] = useState(0);
   const longPressedRef = useRef(false);
+  const [realReturnsMap, setRealReturnsMap] = useState({});
 
   // Clients should always see the client portal, never the advisor dashboard
   useEffect(() => {
@@ -37,6 +39,25 @@ export default function Dashboard() {
   }
 
   useEffect(() => { load(); }, [user]);
+
+  // Fetch real returns for all portfolios
+  useEffect(() => {
+    if (!isFinnhubConfigured() || !portfolios.length) return;
+    let cancelled = false;
+    async function fetchAll() {
+      const results = {};
+      for (const p of portfolios) {
+        if (!p.holdings?.length) continue;
+        try {
+          const data = await getRealPerformanceReturns(p.holdings, p.primary_benchmark || null);
+          if (data) results[p.id] = data;
+        } catch { /* fall back to mock */ }
+      }
+      if (!cancelled) setRealReturnsMap(results);
+    }
+    fetchAll();
+    return () => { cancelled = true; };
+  }, [portfolios]);
 
   // Pre-fetch real quotes for all tickers visible on the dashboard
   useEffect(() => {
@@ -170,9 +191,15 @@ export default function Dashboard() {
   const days = TIMEFRAME_DAYS[perfTimeframe] ?? 252;
 
   // Compute portfolio performance for the selected timeframe.
+  // Prefer real Finnhub returns, fall back to live quotes for 1D, then mock.
   function portfolioPerf(portfolio) {
     const holdings = portfolio.holdings ?? [];
     if (!holdings.length) return null;
+    // Check real returns first
+    const real = realReturnsMap[portfolio.id];
+    if (real?.portfolio?.[perfTimeframe] != null) {
+      return real.portfolio[perfTimeframe];
+    }
     if (live && perfTimeframe === '1D') {
       let weightedReturn = 0;
       let coveredWeight  = 0;

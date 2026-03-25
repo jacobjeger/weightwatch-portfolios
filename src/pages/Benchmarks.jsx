@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
 import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getYTDReturn, getRiskMetrics } from '../lib/mockData';
-import { getRealPerformanceReturns, getRealHoldingsChartData, isConfigured } from '../lib/finnhub';
+import { getRealPerformanceReturns, getRealHoldingsChartData, getRealRiskMetrics, isConfigured } from '../lib/finnhub';
 import { useMarketData } from '../context/MarketDataContext';
 import { useToast } from '../context/ToastContext';
 import {
@@ -43,6 +43,7 @@ export default function Benchmarks() {
 
   // Real benchmark returns: { SPY: { '1D': 0.45, 'YTD': ... }, ... }
   const [realBenchReturns, setRealBenchReturns] = useState({});
+  const [realBenchRiskMetrics, setRealBenchRiskMetrics] = useState({});
   const [realChartData, setRealChartData]       = useState(null);
 
   // Fetch real returns for each benchmark ticker
@@ -62,6 +63,24 @@ export default function Benchmarks() {
     fetchAll();
     return () => { cancelled = true; };
   }, [live]);
+
+  // Fetch real risk metrics for each benchmark
+  useEffect(() => {
+    if (!isConfigured()) return;
+    let cancelled = false;
+    async function fetchRisk() {
+      const results = {};
+      for (const ticker of BENCHMARKS) {
+        try {
+          const data = await getRealRiskMetrics([{ ticker, weight_percent: 100 }], null, '1Y');
+          if (data?.portfolio) results[ticker] = data.portfolio;
+        } catch { /* skip, fall back to mock */ }
+      }
+      if (!cancelled) setRealBenchRiskMetrics(results);
+    }
+    fetchRisk();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch real chart data for benchmark comparison
   useEffect(() => {
@@ -184,7 +203,7 @@ export default function Benchmarks() {
               {BENCHMARKS.map((ticker) => {
                 const meta = BENCHMARK_META[ticker];
                 const inst = INSTRUMENTS.find((i) => i.ticker === ticker);
-                const metrics = getRiskMetrics(ticker, 252);
+                const metrics = realBenchRiskMetrics[ticker] ?? getRiskMetrics(ticker, 252);
                 return (
                   <tr key={ticker} className="hover:bg-slate-50">
                     <td className="td">
