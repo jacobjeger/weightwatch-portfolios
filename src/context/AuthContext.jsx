@@ -132,31 +132,31 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('advisor'); // 'advisor' | 'client'
+  const [syncDone, setSyncDone] = useState(false);
 
-  // Detect role when user changes.
+  // Detect role when user changes AND after sync completes.
   // An account is only a "client" if it was explicitly created as one AND does
   // not own any portfolios.  Advisors who test their own invite links get an
   // entry in the clients map but should still behave as advisors.
+  // We re-run after syncDone flips so that freshly-synced client entries
+  // (from Supabase invites) are picked up on password-reset / new-device flows.
   useEffect(() => {
-    if (user) {
-      const clients = lsGet(LS.clients, {});
-      const clientEntry = clients[user.id];
-      const portfolios = lsGet(LS.portfolios, []);
-      const ownsPortfolios = portfolios.some((p) => p.owner === user.id);
+    if (!user) { setRole('advisor'); return; }
+    const clients = lsGet(LS.clients, {});
+    const clientEntry = clients[user.id];
+    const portfolios = lsGet(LS.portfolios, []);
+    const ownsPortfolios = portfolios.some((p) => p.owner === user.id);
 
-      // If the user owns portfolios, they are an advisor regardless of
-      // whether they also appear in the clients map.
-      if (ownsPortfolios) {
-        setRole('advisor');
-      } else if (clientEntry) {
-        setRole('client');
-      } else {
-        setRole('advisor');
-      }
+    // If the user owns portfolios, they are an advisor regardless of
+    // whether they also appear in the clients map.
+    if (ownsPortfolios) {
+      setRole('advisor');
+    } else if (clientEntry) {
+      setRole('client');
     } else {
       setRole('advisor');
     }
-  }, [user]);
+  }, [user, syncDone]);
 
   // Initialise session
   useEffect(() => {
@@ -173,7 +173,7 @@ export function AuthProvider({ children }) {
           }
         }
         setUser(u);
-        if (u) syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
+        if (u) syncFromSupabase(u.id, u.email).finally(() => { setSyncDone((v) => !v); setLoading(false); });
         else setLoading(false);
       }).catch((err) => {
         console.error('[Auth] Session fetch failed:', err);
@@ -187,9 +187,9 @@ export function AuthProvider({ children }) {
           setUser(u);
           if (_event === 'SIGNED_IN') {
             setLoading(true);
-            syncFromSupabase(u.id, u.email).finally(() => setLoading(false));
+            syncFromSupabase(u.id, u.email).finally(() => { setSyncDone((v) => !v); setLoading(false); });
           } else {
-            syncFromSupabase(u.id, u.email);
+            syncFromSupabase(u.id, u.email).finally(() => setSyncDone((v) => !v));
           }
         } else if (_event === 'SIGNED_OUT') {
           // Explicit sign-out — clear pending session too
