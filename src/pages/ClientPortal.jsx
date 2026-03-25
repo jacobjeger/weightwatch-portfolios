@@ -4,6 +4,7 @@ import { BarChart3, MessageCircle, CheckCircle, AlertTriangle, ChevronDown, Refr
 import { useAuth, getPortfolios, getMessages, getLatestApproval, syncFromSupabase, getSettings } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { BENCHMARK_META, getPortfolioReturn, getPortfolioYTDReturn, getReturn, getYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
+import { isConfigured as isFinnhubConfigured, getRealPerformanceReturns, clearMarketCaches, getQuote } from '../lib/finnhub';
 import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
@@ -17,11 +18,14 @@ export default function ClientPortal() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [summaryTicker, setSummaryTicker] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [realReturns, setRealReturns] = useState(null);
+  const [liveQuotes, setLiveQuotes] = useState({});
 
   const handleRefresh = useCallback(async () => {
     if (isSupabaseConfigured && user) {
       await syncFromSupabase(user.id);
     }
+    clearMarketCaches();
     setRefreshKey((k) => k + 1);
     if (user) setPortfolios(getPortfolios(user.id));
   }, [user]);
@@ -33,19 +37,51 @@ export default function ClientPortal() {
     }
   }, [user]);
 
-  // Auto-refresh every 5 minutes during market hours
+  const portfolio = portfolios[selectedIdx] || null;
+  const holdings = portfolio?.holdings ?? [];
+  const benchmark = portfolio?.primary_benchmark;
+  const approval = portfolio ? getLatestApproval(portfolio.id) : null;
+
+  // Fetch real performance returns (same source as advisor)
+  useEffect(() => {
+    if (!holdings.length || !isFinnhubConfigured()) return;
+    let cancelled = false;
+    getRealPerformanceReturns(holdings, benchmark || null)
+      .then((data) => { if (!cancelled && data) setRealReturns(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [holdings, benchmark, refreshKey]);
+
+  // Fetch live quotes for dynamic portfolio value
+  useEffect(() => {
+    if (!holdings.length || !isFinnhubConfigured()) return;
+    let cancelled = false;
+    Promise.all(
+      holdings.map((h) =>
+        getQuote(h.ticker).then((q) => [h.ticker, q]).catch(() => [h.ticker, null])
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const quotes = {};
+      for (const [ticker, q] of results) {
+        if (q?.c) quotes[ticker] = q.c;
+      }
+      setLiveQuotes(quotes);
+    });
+    return () => { cancelled = true; };
+  }, [holdings, refreshKey]);
+
+  // Auto-refresh every 5 minutes during market hours (with cache clear)
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
       const day = now.getDay();
       if (day === 0 || day === 6) return;
+      clearMarketCaches();
       setRefreshKey((k) => k + 1);
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
-
-  const portfolio = portfolios[selectedIdx] || null;
-  const approval = portfolio ? getLatestApproval(portfolio.id) : null;
 
   if (!user || role !== 'client') {
     return (
@@ -68,15 +104,34 @@ export default function ClientPortal() {
     );
   }
 
-  const holdings = portfolio?.holdings ?? [];
-  const benchmark = portfolio?.primary_benchmark;
   const benchLabel = benchmark ? (BENCHMARK_META[benchmark]?.label ?? benchmark) : null;
 
-  // Compute performance metrics
-  const ytdReturn = holdings.length ? parseFloat(getPortfolioYTDReturn(holdings)) : null;
+  // Compute performance metrics — prefer real returns from Finnhub, fall back to mock
+  const ytdReturn = holdings.length
+    ? (realReturns?.portfolio?.YTD != null ? realReturns.portfolio.YTD : parseFloat(getPortfolioYTDReturn(holdings)))
+    : null;
   const sinceReturn = portfolio?.created_at && holdings.length ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at)) : null;
-  const oneYearReturn = holdings.length ? parseFloat(getPortfolioReturn(holdings, 252)) : null;
-  const benchYtd = benchmark ? parseFloat(getYTDReturn(benchmark)) : null;
+  const oneYearReturn = holdings.length
+    ? (realReturns?.portfolio?.['1Y'] != null ? realReturns.portfolio['1Y'] : parseFloat(getPortfolioReturn(holdings, 252)))
+    : null;
+  const benchYtd = benchmark
+    ? (realReturns?.benchmark?.YTD != null ? realReturns.benchmark.YTD : parseFloat(getYTDReturn(benchmark)))
+    : null;
+
+  // Dynamic portfolio value based on live quotes
+  const currentPortfolioValue = useMemo(() => {
+    const startVal = portfolio?.starting_value;
+    if (!startVal || !holdings.length) return startVal || null;
+    const cashPct = portfolio?.cash_percent ?? 0;
+    const investedFrac = 1 - cashPct / 100;
+    const growthFactor = holdings.reduce((s, h) => {
+      const currentPrice = liveQuotes[h.ticker] || h.last_price;
+      const entryPrice = h.entry_price ?? h.last_price;
+      const ratio = entryPrice > 0 ? currentPrice / entryPrice : 1;
+      return s + (h.weight_percent / 100) * ratio;
+    }, 0);
+    return startVal * (growthFactor * investedFrac + cashPct / 100);
+  }, [holdings, liveQuotes, portfolio]);
 
   const totalWeight = holdings.reduce((s, h) => s + (h.weight_percent || 0), 0);
   const isFullyAllocated = Math.abs(totalWeight - 100) < 0.01;
@@ -204,9 +259,14 @@ export default function ClientPortal() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <p className="text-xs font-medium text-slate-500 mb-1">Portfolio Value</p>
             <p className="text-xl font-bold text-slate-800">
-              {portfolio?.starting_value ? `$${Math.round(portfolio.starting_value).toLocaleString()}` : '--'}
+              {currentPortfolioValue ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
             </p>
-            <p className="text-xs text-slate-400 mt-1">{holdings.length} holdings</p>
+            {portfolio?.starting_value && currentPortfolioValue && currentPortfolioValue !== portfolio.starting_value && (
+              <p className={`text-xs mt-1 font-medium ${currentPortfolioValue > portfolio.starting_value ? 'text-green-600' : 'text-red-500'}`}>
+                {currentPortfolioValue > portfolio.starting_value ? '+' : ''}${Math.round(currentPortfolioValue - portfolio.starting_value).toLocaleString()} from start
+              </p>
+            )}
+            <p className="text-xs text-slate-400 mt-0.5">{holdings.length} holdings</p>
           </div>
         </div>
 
