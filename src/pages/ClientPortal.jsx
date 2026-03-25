@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, MessageCircle, CheckCircle, AlertTriangle, ChevronDown, RefreshCw } from 'lucide-react';
-import { useAuth, getPortfolios, getMessages, getLatestApproval, syncFromSupabase } from '../context/AuthContext';
+import { useAuth, getPortfolios, getMessages, getLatestApproval, syncFromSupabase, getSettings } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { BENCHMARK_META, getPortfolioReturn, getPortfolioYTDReturn, getReturn, getYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
 import PerformanceChart from '../components/PerformanceChart';
@@ -277,6 +277,7 @@ export default function ClientPortal() {
             portfolioId={portfolio.id}
             userId={user.id}
             userEmail={user.email}
+            userName={getSettings(user.id).display_name || ''}
             userRole="client"
             showApprovalActions={true}
           />

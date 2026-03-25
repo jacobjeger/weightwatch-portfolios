@@ -639,6 +639,7 @@ const DEFAULT_SETTINGS = {
   confirm_deletes: true,
   activity_log_granularity: 'standard',
   favorite_portfolio_ids: [],
+  display_name: '',
 };
 
 export function getSettings(userId) {

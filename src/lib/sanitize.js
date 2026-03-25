@@ -45,6 +45,7 @@ export function sanitizeMessage(m) {
     sender: typeof m.sender === 'string' ? m.sender : '',
     sender_id: typeof m.sender_id === 'string' ? m.sender_id : String(m.sender_id ?? ''),
     sender_email: typeof m.sender_email === 'string' ? m.sender_email : '',
+    sender_name: typeof m.sender_name === 'string' ? m.sender_name : '',
     sender_role: typeof m.sender_role === 'string' ? m.sender_role : '',
     created_at: typeof m.created_at === 'string' ? m.created_at : '',
   };

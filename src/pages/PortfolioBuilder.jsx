@@ -1391,6 +1391,7 @@ export default function PortfolioBuilder() {
               portfolioId={portfolioId}
               userId={user.id}
               userEmail={user.email}
+              userName={getSettings(user.id).display_name || ''}
               userRole={role}
             />
           )}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, ChevronDown, CheckCircle, AlertTriangle } from 'lucide-react';
 import { getMessages, sendMessage, fetchMessagesFromSupabase } from '../context/AuthContext';
 
-export default function MessagePanel({ portfolioId, userId, userEmail, userRole, showApprovalActions = false, defaultOpen = false }) {
+export default function MessagePanel({ portfolioId, userId, userEmail, userName, userRole, showApprovalActions = false, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -44,6 +44,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
       portfolio_id: portfolioId,
       sender_id: userId,
       sender_email: userEmail,
+      sender_name: userName || '',
       sender_role: userRole,
       type,
       text: text.trim() || (type === 'approval' ? 'Approved the portfolio' : 'Requested changes'),
@@ -101,7 +102,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                       </span>
                     </div>
                     <span className="block text-xs text-green-500 mt-0.5">
-                      {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
+                      {msg.sender_name || msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </span>
                     {msg.text && msg.text !== 'Approved the portfolio' && (
                       <p className="text-sm text-green-600 mt-1">{msg.text}</p>
@@ -120,7 +121,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                       </span>
                     </div>
                     <span className="block text-xs text-amber-500 mt-0.5">
-                      {msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
+                      {msg.sender_name || msg.sender_email} &middot; {(isNaN(new Date(msg.created_at).getTime()) ? '' : new Date(msg.created_at).toLocaleString())}
                     </span>
                     {msg.text && msg.text !== 'Requested changes' && (
                       <p className="text-sm text-amber-600 mt-1">{msg.text}</p>
@@ -140,7 +141,7 @@ export default function MessagePanel({ portfolioId, userId, userEmail, userRole,
                   }`}>
                     <div className="flex items-baseline gap-2 mb-0.5">
                       <span className="text-xs font-semibold">
-                        {isMe ? 'You' : msg.sender_email}
+                        {isMe ? 'You' : (msg.sender_name || msg.sender_email)}
                       </span>
                       <span className={`text-[10px] ${
                         msg.sender_role === 'advisor' ? 'text-blue-400' : 'text-green-500'
