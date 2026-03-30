@@ -296,11 +296,14 @@ function annualizedVolatility(prices) {
 function maxDrawdown(prices) {
   if (prices.length < 2) return 0;
   let peak = prices[0];
+  if (peak <= 0) return 0;
   let worstDd = 0;
   for (let i = 1; i < prices.length; i++) {
     if (prices[i] > peak) peak = prices[i];
-    const dd = (prices[i] - peak) / peak;
-    if (dd < worstDd) worstDd = dd;
+    if (peak > 0) {
+      const dd = (prices[i] - peak) / peak;
+      if (dd < worstDd) worstDd = dd;
+    }
   }
   return worstDd * 100; // as %
 }
@@ -338,8 +341,10 @@ function sortinoRatio(prices, tradingDays) {
 function drawdownSeries(datesPrices) {
   if (datesPrices.length < 2) return [];
   let peak = datesPrices[0].price;
+  if (peak <= 0) peak = 1;
   return datesPrices.map(({ date, price }) => {
     if (price > peak) peak = price;
+    if (peak <= 0) return { date, drawdown: 0 };
     return { date, drawdown: parseFloat(((price - peak) / peak * 100).toFixed(2)) };
   });
 }
