@@ -99,7 +99,7 @@ export function useClientPortfolio(user, role, refreshClientPortfolios) {
         return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
       });
       const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
-      if (!denom) return {};
+      if (!denom || !isFinite(denom)) return {};
       return Object.fromEntries(rows.map((r) => [r.ticker, {
         driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
         ratio: r.ratio,

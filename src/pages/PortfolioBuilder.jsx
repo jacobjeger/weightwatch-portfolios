@@ -181,7 +181,7 @@ export default function PortfolioBuilder() {
       return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
     });
     const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
-    if (!denom) return {};
+    if (!denom || !isFinite(denom)) return {};
     return Object.fromEntries(rows.map((r) => [r.ticker, {
       driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
       ratio: r.ratio,
@@ -1516,13 +1516,13 @@ export default function PortfolioBuilder() {
                     </div>
                     <div className="text-right">
                       <div className="font-mono text-sm text-slate-700">
-                        ${h.displayPrice?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {h.displayPrice != null ? `$${h.displayPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
                       </div>
                       <div className={`text-xs font-medium flex items-center gap-0.5 justify-end ${
                         h.dailyChange > 0 ? 'text-green-600' : h.dailyChange < 0 ? 'text-red-500' : 'text-slate-400'
                       }`}>
                         {h.dailyChange > 0 ? <TrendingUp className="w-3 h-3" /> : h.dailyChange < 0 ? <TrendingDown className="w-3 h-3" /> : null}
-                        {h.dailyChange > 0 ? '+' : ''}{h.dailyChange.toFixed(2)}%
+                        {h.dailyChange != null && !isNaN(h.dailyChange) ? `${h.dailyChange > 0 ? '+' : ''}${h.dailyChange.toFixed(2)}%` : '—'}
                       </div>
                     </div>
                   </div>

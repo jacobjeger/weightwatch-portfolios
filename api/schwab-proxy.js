@@ -38,8 +38,7 @@ async function refreshTokens(supabase, row) {
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    console.error('[schwab-proxy] Token refresh failed:', res.status, body);
+    console.error('[schwab-proxy] Token refresh failed:', res.status);
     return null; // caller should return reauth_required
   }
 

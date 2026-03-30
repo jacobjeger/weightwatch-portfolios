@@ -29,9 +29,11 @@ export default async function handler(req, res) {
 
     // Cache for 5 minutes on Vercel CDN, serve stale for 1 minute while revalidating
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const allowedOrigin = process.env.CORS_ORIGIN || 'https://www.ajawealthmanagement.com';
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     return res.status(resp.ok ? 200 : resp.status).json(data);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('[yahoo-chart] Fetch failed:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch chart data' });
   }
 }

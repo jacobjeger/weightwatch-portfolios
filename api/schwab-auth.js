@@ -55,8 +55,7 @@ export default async function handler(req, res) {
     });
 
     if (!tokenRes.ok) {
-      const errBody = await tokenRes.text();
-      console.error('[schwab-auth] Token exchange failed:', tokenRes.status, errBody);
+      console.error('[schwab-auth] Token exchange failed:', tokenRes.status);
       return res.redirect(`/?schwab_error=token_exchange_failed`);
     }
 
