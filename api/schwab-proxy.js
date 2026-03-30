@@ -85,7 +85,21 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing action or user_id' });
   }
 
+  // ── Verify the caller is the authenticated user ────────────────────────────
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing auth token' });
+  }
+
   const supabase = getSupabase();
+
+  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(authHeader.split(' ')[1]);
+  if (authError || !authUser) {
+    return res.status(401).json({ error: 'Invalid auth token' });
+  }
+  if (authUser.id !== userId) {
+    return res.status(403).json({ error: 'Forbidden — cannot access another user\'s data' });
+  }
 
   // ── Unlink ──────────────────────────────────────────────────────────────────
   if (req.method === 'DELETE' || action === 'unlink') {

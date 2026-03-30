@@ -471,12 +471,12 @@ export function getReturn(ticker, tradingDays) {
   return ((hist[hist.length - 1].price / hist[0].price - 1) * 100).toFixed(2);
 }
 
-// YTD = from Jan 1 to today
+// YTD = from Jan 1 to today (use UTC to avoid timezone drift)
 export function getYTDReturn(ticker) {
-  const today = new Date();
-  const start = new Date(today.getFullYear(), 0, 1);
-  const diffMs = today - start;
+  const now = new Date();
+  const diffMs = now.getTime() - Date.UTC(now.getUTCFullYear(), 0, 1);
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return '0.00';
   const tradingDays = Math.round(diffDays * (252 / 365));
   return getReturn(ticker, Math.max(tradingDays, 1));
 }

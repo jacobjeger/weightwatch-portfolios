@@ -319,11 +319,6 @@ async function getQuoteBasedReturns(holdings, benchmarkTicker) {
     }
   });
 
-  // Normalize: if only partial holdings have data, scale up proportionally
-  if (validWeight > 0 && validWeight < 100) {
-    portfolioRet = portfolioRet / (validWeight / 100);
-  }
-
   let benchRet = null;
   if (benchmarkTicker && quotes[benchmarkTicker]) {
     const q = quotes[benchmarkTicker];
@@ -429,11 +424,6 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
       }
     });
 
-    // Normalize: if only partial holdings have data, scale up proportionally
-    if (validWeight > 0 && validWeight < 100) {
-      portfolioRet = portfolioRet / (validWeight / 100);
-    }
-
     // Benchmark return
     let benchRet = null;
     if (benchmarkTicker) {
@@ -458,8 +448,9 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
     result.benchmark[label] = r.benchmark;
   }
 
-  // YTD: compute from Jan 1 of the current year
-  const ytdDays = Math.floor((Date.now() - new Date(`${new Date().getFullYear()}-01-01`).getTime()) / 86_400_000);
+  // YTD: compute from Jan 1 of the current year (use UTC to avoid timezone drift)
+  const now = new Date();
+  const ytdDays = Math.floor((now.getTime() - Date.UTC(now.getUTCFullYear(), 0, 1)) / 86_400_000);
   if (ytdDays > 0) {
     const ytdR = computeReturn(ytdDays);
     result.portfolio['YTD'] = ytdR.portfolio;

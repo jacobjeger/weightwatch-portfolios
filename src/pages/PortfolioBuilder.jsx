@@ -207,6 +207,8 @@ export default function PortfolioBuilder() {
 
   // ── Holdings mutations ──────────────────────────────────────────────────────
   function addTicker(instrument) {
+    // Validate ticker format: 1-15 uppercase alphanumeric chars, dots, hyphens
+    if (!instrument.ticker || !/^[A-Z0-9.\-]{1,15}$/i.test(instrument.ticker)) return;
     if (holdings.find((h) => h.ticker === instrument.ticker)) return;
     // Capture entry price at time of adding — used for drift / rebalance calculations
     const entryPrice = (live && prices[instrument.ticker]?.price)
@@ -249,11 +251,12 @@ export default function PortfolioBuilder() {
   }
 
   function normalize() {
-    if (totalWeight === 0) return;
+    const safeTotal = holdings.reduce((s, h) => s + (Number(h.weight_percent) || 0), 0);
+    if (!safeTotal || !isFinite(safeTotal)) return;
     setHoldings((prev) =>
       prev.map((h) => ({
         ...h,
-        weight_percent: parseFloat(((h.weight_percent / totalWeight) * 100).toFixed(4)),
+        weight_percent: parseFloat((((Number(h.weight_percent) || 0) / safeTotal) * 100).toFixed(4)),
       }))
     );
     setWeightErrors({});
@@ -261,7 +264,9 @@ export default function PortfolioBuilder() {
 
   // ── Save ────────────────────────────────────────────────────────────────────
   function handleSave() {
-    if (!name.trim()) return;
+    if (!name.trim() || name.length > 200) return;
+    if (startingValue && (!Number.isFinite(startingValue) || startingValue < 0 || startingValue > 1_000_000_000)) return;
+    if (cashPercent < 0 || cashPercent > 100) return;
     setSaving(true);
 
     // ── Weight history diffing ────────────────────────────────────────────────

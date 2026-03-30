@@ -247,7 +247,7 @@ export default function ClientPortal() {
               {ytdReturn != null ? `${ytdReturn > 0 ? '+' : ''}${ytdReturn.toFixed(2)}%` : '--'}
             </p>
             {benchYtd != null && (
-              <p className="text-xs text-slate-400 mt-1">
+              <p className={`text-xs font-medium mt-1 ${benchYtd > 0 ? 'text-green-600' : benchYtd < 0 ? 'text-red-500' : 'text-slate-400'}`}>
                 {benchLabel}: {benchYtd > 0 ? '+' : ''}{benchYtd.toFixed(2)}%
               </p>
             )}
@@ -267,7 +267,7 @@ export default function ClientPortal() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <p className="text-xs font-medium text-slate-500 mb-1">Portfolio Value</p>
             <p className="text-xl font-bold text-slate-800">
-              {currentPortfolioValue ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
+              {currentPortfolioValue != null ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
             </p>
             {portfolio?.starting_value && currentPortfolioValue && currentPortfolioValue !== portfolio.starting_value && (
               <p className={`text-xs mt-1 font-medium ${currentPortfolioValue > portfolio.starting_value ? 'text-green-600' : 'text-red-500'}`}>
