@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User, X } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, unlinkClient, sendInviteEmail, getClientStatusForPortfolio } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
-import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn, getPortfolioRiskMetrics, getRiskMetrics } from '../lib/mockData';
+import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META } from '../lib/mockData';
 import { getRealPerformanceReturns, getRealRiskMetrics, clearMarketCaches } from '../lib/finnhub';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
@@ -503,7 +503,7 @@ export default function PortfolioBuilder() {
       return {
         ...h,
         displayPrice:  realQuote?.price       ?? h.last_price,
-        dailyChange:   realQuote?.changePercent ?? parseFloat(getReturn(h.ticker, 1)),
+        dailyChange:   realQuote?.changePercent ?? null,
         isLive:        !!realQuote,
       };
     });
@@ -514,12 +514,12 @@ export default function PortfolioBuilder() {
         const cp = prices[h.ticker]?.changePercent;
         return sum + (cp != null ? cp * (h.weight_percent / 100) : 0);
       }, 0)
-    : parseFloat(getPortfolioReturn(holdings, 1));
+    : null;
 
   const benchmarkReturn1D = benchmark
     ? (live && prices[benchmark]?.changePercent != null
         ? prices[benchmark].changePercent
-        : parseFloat(getReturn(benchmark, 1)))
+        : null)
     : null;
 
   // Weighted expense ratio and dividend yield (adjusted for cash allocation)
@@ -1198,15 +1198,11 @@ export default function PortfolioBuilder() {
                 ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000 * (252 / 365))
                 : 0;
 
-              // Build the "Since Creation" tracker data
-              const sinceCreationData = createdAt && holdings.length > 0 ? (() => {
-                const portfolioRet = parseFloat(getPortfolioSinceReturn(holdings, createdAt));
-                const benchRet = benchmark ? (() => {
-                  const diffMs = Date.now() - new Date(createdAt).getTime();
-                  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                  const tradingDays = Math.max(1, Math.round(diffDays * (252 / 365)));
-                  return parseFloat(getReturn(benchmark, tradingDays));
-                })() : null;
+              // Build the "Since Creation" tracker data — real data only
+              const sinceCreationData = createdAt && holdings.length > 0 && realReturns?.portfolio?.['Since Inception'] != null ? (() => {
+                const portfolioRet = Number(realReturns.portfolio['Since Inception']);
+                const benchRet = realReturns?.benchmark?.['Since Inception'] != null
+                  ? Number(realReturns.benchmark['Since Inception']) : null;
                 return { portfolioRet, benchRet, outperf: benchRet !== null ? portfolioRet - benchRet : null };
               })() : null;
 
@@ -1214,27 +1210,18 @@ export default function PortfolioBuilder() {
                 <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                   {TIMEFRAMES.map(({ label, days }) => {
-                    // Prefer real Finnhub data, fall back to mock
+                    // Real market data only — no simulated fallbacks
                     const hasReal = realReturns?.portfolio?.[label] != null;
-                    const portfolioRet = hasReal
-                      ? realReturns.portfolio[label]
-                      : label === 'YTD'
-                        ? parseFloat(getPortfolioYTDReturn(holdings))
-                        : parseFloat(getPortfolioReturn(holdings, days));
+                    const portfolioRet = hasReal ? realReturns.portfolio[label] : null;
                     const benchRet = hasReal && realReturns.benchmark?.[label] != null
-                      ? realReturns.benchmark[label]
-                      : (benchmark
-                          ? (label === 'YTD'
-                              ? parseFloat(getYTDReturn(benchmark))
-                              : parseFloat(getReturn(benchmark, days)))
-                          : null);
-                    const outperf = benchRet !== null ? portfolioRet - benchRet : null;
-                    const isBacktested = !hasReal && label !== 'YTD' && (!createdAt || portfolioAgeTradingDays < days);
+                      ? realReturns.benchmark[label] : null;
+                    const outperf = (portfolioRet != null && benchRet != null) ? portfolioRet - benchRet : null;
+                    const isBacktested = false;
                     return (
                       <div key={label} className={`rounded p-3 text-center ${hasReal ? 'bg-green-50/50' : isBacktested ? 'bg-amber-50/40 border border-amber-100' : 'bg-slate-50'}`}>
                         <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
-                        <div className={`text-sm font-bold ${portfolioRet > 0 ? 'text-green-600' : portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-                          {holdings.length > 0 ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
+                        <div className={`text-sm font-bold ${portfolioRet != null && portfolioRet > 0 ? 'text-green-600' : portfolioRet != null && portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                          {portfolioRet != null ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
                         </div>
                         {benchRet !== null && (
                           <div className="text-xs text-slate-400 mt-0.5">{BENCHMARK_META[benchmark]?.label ?? benchmark}: {benchRet > 0 ? '+' : ''}{benchRet.toFixed(2)}%</div>
@@ -1281,9 +1268,18 @@ export default function PortfolioBuilder() {
 
                 {/* Risk Metrics */}
                 {holdings.length > 0 && (() => {
-                  const metrics = realRiskMetrics?.portfolio ?? getPortfolioRiskMetrics(holdings, 252);
-                  const benchMetrics = realRiskMetrics?.benchmark ?? (benchmark ? getRiskMetrics(benchmark, 252) : null);
+                  const metrics = realRiskMetrics?.portfolio ?? null;
+                  const benchMetrics = realRiskMetrics?.benchmark ?? null;
                   const isReal = !!realRiskMetrics;
+                  if (!metrics) return (
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk Metrics (1Y)</h3>
+                        <span className="text-xs text-amber-500">Data unavailable</span>
+                      </div>
+                      <p className="text-xs text-slate-400">Connect Finnhub API for real risk metrics.</p>
+                    </div>
+                  );
                   return (
                     <div className="mt-4 pt-4 border-t border-slate-100">
                       <div className="flex items-center gap-2 mb-3">

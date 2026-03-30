@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
-import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getYTDReturn, getRiskMetrics } from '../lib/mockData';
+import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META } from '../lib/mockData';
 import { getRealPerformanceReturns, getRealHoldingsChartData, getRealRiskMetrics, isConfigured } from '../lib/finnhub';
 import { useMarketData } from '../context/MarketDataContext';
 import { useToast } from '../context/ToastContext';
@@ -170,9 +170,7 @@ export default function Benchmarks() {
                     <td className="td text-slate-600">{meta?.label ?? inst?.name ?? ticker}</td>
                     {TIMEFRAMES.map((tf) => {
                       const realRet = realBenchReturns[ticker]?.[tf.label];
-                      const ret = realRet != null
-                        ? realRet.toFixed(2)
-                        : (tf.label === 'YTD' ? getYTDReturn(ticker) : getReturn(ticker, tf.days));
+                      const ret = realRet != null ? realRet.toFixed(2) : null;
                       return (
                         <td key={tf.label} className="td text-right">
                           <PctCell val={ret} />
@@ -209,7 +207,7 @@ export default function Benchmarks() {
               {BENCHMARKS.map((ticker) => {
                 const meta = BENCHMARK_META[ticker];
                 const inst = INSTRUMENTS.find((i) => i.ticker === ticker);
-                const metrics = realBenchRiskMetrics[ticker] ?? getRiskMetrics(ticker, 252);
+                const metrics = realBenchRiskMetrics[ticker] ?? null;
                 return (
                   <tr key={ticker} className="hover:bg-slate-50">
                     <td className="td">
@@ -217,21 +215,21 @@ export default function Benchmarks() {
                     </td>
                     <td className="td text-slate-600">{meta?.label ?? inst?.name ?? ticker}</td>
                     <td className="td text-right">
-                      <span className="font-mono font-medium text-slate-700">{metrics.volatility.toFixed(1)}%</span>
+                      <span className="font-mono font-medium text-slate-700">{metrics ? `${metrics.volatility.toFixed(1)}%` : '--'}</span>
                     </td>
                     <td className="td text-right">
-                      <span className={`font-mono font-medium ${metrics.maxDrawdown < -10 ? 'text-red-500' : metrics.maxDrawdown < -5 ? 'text-amber-600' : 'text-slate-700'}`}>
-                        {metrics.maxDrawdown.toFixed(1)}%
+                      <span className={`font-mono font-medium ${metrics && metrics.maxDrawdown < -10 ? 'text-red-500' : metrics && metrics.maxDrawdown < -5 ? 'text-amber-600' : 'text-slate-700'}`}>
+                        {metrics ? `${metrics.maxDrawdown.toFixed(1)}%` : '--'}
                       </span>
                     </td>
                     <td className="td text-right">
-                      <span className={`font-mono font-medium ${metrics.sharpe > 1 ? 'text-green-600' : metrics.sharpe > 0 ? 'text-slate-700' : 'text-red-500'}`}>
-                        {metrics.sharpe.toFixed(2)}
+                      <span className={`font-mono font-medium ${metrics && metrics.sharpe > 1 ? 'text-green-600' : metrics && metrics.sharpe > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                        {metrics ? metrics.sharpe.toFixed(2) : '--'}
                       </span>
                     </td>
                     <td className="td text-right">
-                      <span className={`font-mono font-medium ${metrics.sortino > 1.5 ? 'text-green-600' : metrics.sortino > 0 ? 'text-slate-700' : 'text-red-500'}`}>
-                        {metrics.sortino >= 99 ? '>99' : metrics.sortino.toFixed(2)}
+                      <span className={`font-mono font-medium ${metrics && metrics.sortino > 1.5 ? 'text-green-600' : metrics && metrics.sortino > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                        {metrics ? (metrics.sortino >= 99 ? '>99' : metrics.sortino.toFixed(2)) : '--'}
                       </span>
                     </td>
                   </tr>

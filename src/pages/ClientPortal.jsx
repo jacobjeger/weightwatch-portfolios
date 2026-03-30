@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart3, MessageCircle, CheckCircle, AlertTriangle, ChevronDown, RefreshCw } from 'lucide-react';
 import { useAuth, getPortfolios, getMessages, getLatestApproval, syncFromSupabase, getSettings } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { BENCHMARK_META, getPortfolioReturn, getPortfolioYTDReturn, getReturn, getYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
+import { BENCHMARK_META } from '../lib/mockData';
 import { isConfigured as isFinnhubConfigured, getRealPerformanceReturns, clearMarketCaches, getQuote } from '../lib/finnhub';
 import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
@@ -114,17 +114,15 @@ export default function ClientPortal() {
 
   const benchLabel = benchmark ? (BENCHMARK_META[benchmark]?.label ?? benchmark) : null;
 
-  // Compute performance metrics — prefer real returns from Finnhub, fall back to mock
-  const ytdReturn = holdings.length
-    ? (realReturns?.portfolio?.YTD != null ? Number(realReturns.portfolio.YTD) : parseFloat(getPortfolioYTDReturn(holdings)))
-    : null;
-  const sinceReturn = portfolio?.created_at && holdings.length ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at)) : null;
-  const oneYearReturn = holdings.length
-    ? (realReturns?.portfolio?.['1Y'] != null ? Number(realReturns.portfolio['1Y']) : parseFloat(getPortfolioReturn(holdings, 252)))
-    : null;
-  const benchYtd = benchmark
-    ? (realReturns?.benchmark?.YTD != null ? Number(realReturns.benchmark.YTD) : parseFloat(getYTDReturn(benchmark)))
-    : null;
+  // Compute performance metrics — real market data only, no simulated fallbacks
+  const ytdReturn = holdings.length && realReturns?.portfolio?.YTD != null
+    ? Number(realReturns.portfolio.YTD) : null;
+  const sinceReturn = holdings.length && realReturns?.portfolio?.['Since Inception'] != null
+    ? Number(realReturns.portfolio['Since Inception']) : null;
+  const oneYearReturn = holdings.length && realReturns?.portfolio?.['1Y'] != null
+    ? Number(realReturns.portfolio['1Y']) : null;
+  const benchYtd = benchmark && realReturns?.benchmark?.YTD != null
+    ? Number(realReturns.benchmark.YTD) : null;
 
   // Dynamic portfolio value based on live quotes
   const currentPortfolioValue = useMemo(() => {

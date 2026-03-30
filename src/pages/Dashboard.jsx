@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3, Search, Star } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, getSettings, saveSettings } from '../context/AuthContext';
-import { getPortfolioReturn, getPortfolioYTDReturn } from '../lib/mockData';
 import { isConfigured as isFinnhubConfigured, getRealPerformanceReturns } from '../lib/finnhub';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import NewPortfolioModal from '../components/NewPortfolioModal';
@@ -194,7 +193,7 @@ export default function Dashboard() {
   const days = TIMEFRAME_DAYS[perfTimeframe] ?? 252;
 
   // Compute portfolio performance for the selected timeframe.
-  // Prefer real Finnhub returns, fall back to live quotes for 1D, then mock.
+  // Uses real market data only — returns null if unavailable.
   function portfolioPerf(portfolio) {
     const holdings = portfolio.holdings ?? [];
     if (!holdings.length) return null;
@@ -203,6 +202,7 @@ export default function Dashboard() {
     if (real?.portfolio?.[perfTimeframe] != null) {
       return real.portfolio[perfTimeframe];
     }
+    // Fall back to live quote data for 1D only
     if (live && perfTimeframe === '1D') {
       let weightedReturn = 0;
       let coveredWeight  = 0;
@@ -215,10 +215,7 @@ export default function Dashboard() {
       });
       if (coveredWeight >= 50) return weightedReturn;
     }
-    if (perfTimeframe === 'YTD') {
-      return parseFloat(getPortfolioYTDReturn(holdings));
-    }
-    return parseFloat(getPortfolioReturn(holdings, days));
+    return null; // No real data available
   }
 
   // Compute current portfolio value using live prices when available
@@ -236,8 +233,15 @@ export default function Dashboard() {
     return sv * (growthFactor * investedFrac + cashPct / 100);
   }
 
+  const dataUnavailable = !isFinnhubConfigured() && portfolios.some(p => p.holdings?.length);
+
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-8">
+      {dataUnavailable && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <strong>Market data unavailable.</strong> Performance figures cannot be displayed. Please check your Finnhub API configuration.
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>

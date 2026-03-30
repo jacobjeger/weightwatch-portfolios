@@ -4,7 +4,6 @@ import {
   Legend, ResponsiveContainer, ReferenceLine, ReferenceArea, Label,
 } from 'recharts';
 import { RefreshCw } from 'lucide-react';
-import { getPortfolioChartData, getPortfolioDrawdownData } from '../lib/mockData';
 import { isConfigured, getRealPortfolioChartData } from '../lib/finnhub';
 import { BENCHMARK_META } from '../lib/mockData';
 
@@ -139,18 +138,14 @@ export default function PerformanceChart({
               setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
               setDataIsReal(true);
             } else {
-              const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
-              const clipped = clipToCreation(raw);
-              setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
+              setData([]);
               setDataIsReal(false);
             }
             setLastRefresh(new Date());
           }
         } catch {
           if (!cancelled) {
-            const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
-            const clipped = clipToCreation(raw);
-            setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
+            setData([]);
             setDataIsReal(false);
             setLastRefresh(new Date());
           }
@@ -158,11 +153,8 @@ export default function PerformanceChart({
           if (!cancelled) setLoading(false);
         }
       } else {
-        const raw = getPortfolioChartData(holdings, benchmarkTicker, range);
-        const clipped = clipToCreation(raw);
-        setData(applyCashAndDrip(clipped, cashPercent, drip, clipped.length));
+        setData([]);
         setDataIsReal(false);
-        setLastRefresh(new Date());
       }
     }
 
@@ -237,20 +229,24 @@ export default function PerformanceChart({
     if (dataIsReal && rangeExceedsHistory) {
       return `Live data · includes backtest before account start`;
     }
-    if (!createdAt) return 'Simulated data';
-    if (historyDays <= 1) return `${historyDays} day of history · Simulated`;
-    if (historyDays < 30) return `${historyDays} days of history · Simulated`;
-    if (historyDays < 365) return `${Math.floor(historyDays / 30)}mo of history · Simulated`;
-    return `${(historyDays / 365).toFixed(1)}yr of history · Simulated`;
+    return 'Market data unavailable';
   }, [dataIsReal, rangeExceedsHistory, createdAt, historyDays]);
 
   const [showDrawdown, setShowDrawdown] = useState(false);
 
-  // Drawdown chart data (mock fallback)
+  // Drawdown chart data — only available with real data
   const drawdownData = useMemo(() => {
-    if (!showDrawdown || !holdings?.length) return [];
-    return getPortfolioDrawdownData(holdings, benchmarkTicker, range === 'Since' ? 'Max' : range);
-  }, [showDrawdown, holdings, benchmarkTicker, range]);
+    if (!showDrawdown || !holdings?.length || !dataIsReal) return [];
+    // Compute drawdown from the real chart data
+    if (!data.length) return [];
+    let peak = 0;
+    return data.map(d => {
+      const val = d.portfolio ?? 0;
+      if (val > peak) peak = val;
+      const dd = peak > 0 ? ((val - peak) / (100 + peak)) * 100 : 0;
+      return { date: d.date, portfolio: parseFloat(dd.toFixed(2)) };
+    });
+  }, [showDrawdown, data, dataIsReal, holdings]);
 
   return (
     <div>

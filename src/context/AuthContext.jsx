@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { createDemoPortfolios } from '../lib/mockData';
 import { sanitizePortfolio, sanitizeMessage, sanitizeApproval, sanitizeInvite } from '../lib/sanitize';
 
 // ─── localStorage keys ────────────────────────────────────────────────────────
@@ -49,11 +48,7 @@ function mockSignUp(email, password, accountType = 'advisor') {
     // Auto-accept any pending invites for this email
     autoLinkInvites(user.id, email);
   } else {
-    // Seed demo portfolios for advisors only
-    const existing = lsGet(LS.portfolios, []);
-    if (!existing.find((p) => p.owner === user.id)) {
-      lsSet(LS.portfolios, [...existing, ...createDemoPortfolios(user.id)]);
-    }
+    // No demo portfolios — advisors start with an empty dashboard
   }
   return user;
 }
