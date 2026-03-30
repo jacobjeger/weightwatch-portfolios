@@ -39,7 +39,7 @@ function NavItem({ to, label, onClick }) {
 }
 
 export default function Nav() {
-  const { user, signOut, isMockMode, role } = useAuth();
+  const { user, signOut, role } = useAuth();
   const LINKS = role === 'client' ? CLIENT_LINKS : ADVISOR_LINKS;
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -71,12 +71,6 @@ export default function Nav() {
 
           {/* Right side */}
           <div className="flex items-center gap-3 ml-auto">
-            {isMockMode && (
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Demo mode
-              </span>
-            )}
-
             {user ? (
               <div className="flex items-center gap-2">
                 <span className="hidden sm:block text-xs text-slate-400 max-w-[140px] truncate">

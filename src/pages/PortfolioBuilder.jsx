@@ -494,7 +494,7 @@ export default function PortfolioBuilder() {
   }
 
   // ── Live snapshot daily moves ────────────────────────────────────────────────
-  // Uses real Finnhub prices when configured, falls back to mock data
+  // Uses real Finnhub prices when configured
   const topHoldings = [...holdings]
     .sort((a, b) => b.weight_percent - a.weight_percent)
     .slice(0, 5)
@@ -1176,7 +1176,7 @@ export default function PortfolioBuilder() {
                 <span className={`text-xs italic ${realReturns ? 'text-green-500' : 'text-slate-400'}`}>
                   {realReturns
                     ? `● Live · real market data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
-                    : (live ? 'Loading real data…' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated'))}
+                    : (live ? 'Loading real data…' : 'Market data unavailable')}
                 </span>
                 {live && (
                   <button
@@ -1239,7 +1239,7 @@ export default function PortfolioBuilder() {
                         {!hasReal && holdings.length > 0 && (
                           <div
                             className="text-xs text-slate-400 italic mt-1 cursor-help"
-                            title={realReturns ? 'Candle data unavailable for this timeframe' : 'Return is simulated — connect Finnhub API for real market data'}
+                            title={realReturns ? 'Candle data unavailable for this timeframe' : 'Market data unavailable — connect Finnhub API'}
                           >
                             {realReturns ? 'Est.' : (isBacktested ? 'Backtested' : '')}
                           </div>
@@ -1285,7 +1285,7 @@ export default function PortfolioBuilder() {
                       <div className="flex items-center gap-2 mb-3">
                         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk Metrics (1Y)</h3>
                         <span className={`text-xs ${isReal ? 'text-green-500' : 'text-slate-400'}`}>
-                          {isReal ? '● Real' : 'Simulated'}
+                          {isReal ? '● Real' : 'Unavailable'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1501,7 +1501,7 @@ export default function PortfolioBuilder() {
             </button>
             {liveSnapOpen && <>
             <p className="text-xs text-slate-400 mb-4 mt-2">
-              Top holdings by weight · {live ? 'real-time prices' : 'simulated daily moves'}
+              Top holdings by weight · {live ? 'real-time prices' : 'prices unavailable'}
             </p>
 
             {topHoldings.length === 0 ? (
@@ -1542,7 +1542,7 @@ export default function PortfolioBuilder() {
                   </span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
-                  <span className="text-slate-500 cursor-help" title="Estimated portfolio value based on starting value and simulated growth">Est. Value</span>
+                  <span className="text-slate-500 cursor-help" title="Estimated portfolio value based on starting value and market performance">Est. Value</span>
                   <span className="font-semibold text-slate-800">
                     ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                   </span>

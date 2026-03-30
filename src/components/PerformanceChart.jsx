@@ -103,7 +103,7 @@ export default function PerformanceChart({
     if (!ranges.includes(range)) setRange('1Y');
   }, [ranges]);
 
-  // Fetch (real or mock) whenever inputs change or refreshKey bumps
+  // Fetch real data whenever inputs change or refreshKey bumps
   useEffect(() => {
     let cancelled = false;
 
@@ -215,7 +215,7 @@ export default function PerformanceChart({
 
   // Determine if the selected range exceeds the actual account history
   const rangeExceedsHistory = useMemo(() => {
-    if (!createdAt) return true; // no creation date = everything is simulated
+    if (!createdAt) return true; // no creation date = data predates portfolio
     if (range === 'Since') return false; // "Since creation" is always within history
     const rangeDays = RANGE_CALENDAR_DAYS[range] ?? 365;
     return rangeDays > historyDays;

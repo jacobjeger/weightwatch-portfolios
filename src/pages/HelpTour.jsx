@@ -53,8 +53,8 @@ const SECTIONS = [
     title: 'Performance & Real Market Data',
     content: [
       'Performance Summary shows returns across 1D, 7D, 1M, 3M, 6M, and 1Y periods.',
-      'When Finnhub API is configured, returns are calculated from real daily closing prices — labeled "Real" with a green background.',
-      'Without Finnhub, returns are simulated using a realistic random walk model — labeled "Simulated".',
+      'Returns are calculated from real daily closing prices via the Finnhub API — labeled "Real" with a green background.',
+      'If market data is unavailable, returns will show as "--" until the data source is connected.',
       'Portfolio return = weighted sum of each holding\'s individual return over the period.',
       'Alpha = Portfolio return − Benchmark return. Positive alpha (▲ green) means outperformance.',
       'The Performance Chart plots your portfolio vs. benchmark over time with selectable ranges.',
@@ -102,7 +102,7 @@ const SECTIONS = [
       'Advisors can invite clients via the "Invite Client" button — this generates a unique invite URL.',
       'When a client opens the invite link, they can sign up or log in to accept the invitation.',
       'Accepted clients see the advisor\'s portfolio as read-only on their Dashboard.',
-      'The invite link works across browsers — invite data is encoded in the URL for demo mode.',
+      'The invite link works across browsers — invite data is encoded in the URL.',
     ],
   },
   {
@@ -130,11 +130,10 @@ const SECTIONS = [
     icon: <Shield className="w-5 h-5" />,
     title: 'Data & Cross-Browser Sync',
     content: [
-      'Demo mode: all data stored in localStorage — works instantly with no setup.',
-      'Supabase mode: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env for real cloud sync.',
-      'With Supabase connected, portfolios sync across browsers automatically on login.',
-      'Finnhub API: set VITE_FINNHUB_API_KEY for real-time prices, search, and performance data.',
-      'Without Finnhub, the app uses realistic simulated market data from our built-in model.',
+      'Data is stored securely via Supabase cloud database with real-time sync across devices.',
+      'Portfolios sync across browsers automatically on login.',
+      'Real-time market data is provided via the Finnhub API for prices, search, and performance.',
+      'All performance figures are based on real market data — no simulated or estimated returns are shown.',
     ],
   },
   {
@@ -208,9 +207,9 @@ export default function HelpTour() {
 
       {/* Footer note */}
       <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-        <strong>About data sources:</strong> When a Finnhub API key is configured, AJA uses real market data
-        for prices, charts, and performance returns. Without it, the app runs in simulation mode with realistic
-        modeled data. No real trades are ever placed — this is a portfolio planning and visualization tool.
+        <strong>About data sources:</strong> AJA Wealth Management uses real market data
+        for all prices, charts, and performance returns via the Finnhub API.
+        No simulated or estimated data is ever displayed. No real trades are placed — this is a portfolio planning and visualization tool.
       </div>
     </div>
   );

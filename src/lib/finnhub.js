@@ -1,6 +1,6 @@
 // ─── Finnhub market data client ───────────────────────────────────────────────
-// API key is exposed client-side (VITE_ prefix). Acceptable for a personal/demo
-// app on the free tier — the key only grants market data read access.
+// API key is exposed client-side (VITE_ prefix). Acceptable for a read-only
+// market data key on the free tier — the key only grants market data read access.
 //
 // Historical candle data: tries Finnhub first; if the free-tier returns 403,
 // automatically falls back to Yahoo Finance (via /api/yahoo-chart proxy) for

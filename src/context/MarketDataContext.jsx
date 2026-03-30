@@ -31,7 +31,7 @@ export function MarketDataProvider({ children }) {
           setPrices((prev) => ({ ...prev, [ticker]: q }));
           loadedRef.current.add(ticker);
         } catch {
-          /* silently ignore; caller falls back to mock */
+          /* silently ignore — price unavailable */
         }
       })
     );
