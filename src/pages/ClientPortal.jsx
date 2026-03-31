@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart3, MessageCircle, CheckCircle, AlertTriangle, ChevronDown, RefreshCw } from 'lucide-react';
 import { useAuth, getPortfolios, getMessages, getLatestApproval, syncFromSupabase, getSettings } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { BENCHMARK_META, getPortfolioReturn, getPortfolioYTDReturn, getReturn, getYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
+import { BENCHMARK_META } from '../lib/mockData';
 import { isConfigured as isFinnhubConfigured, getRealPerformanceReturns, clearMarketCaches, getQuote } from '../lib/finnhub';
+import { isConfigured as isSchwabConfigured, getSchwabPositions } from '../lib/schwab';
 import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
@@ -12,7 +13,7 @@ import MessagePanel from '../components/MessagePanel';
 import TickerSummaryModal from '../components/TickerSummaryModal';
 
 export default function ClientPortal() {
-  const { user, role } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [portfolios, setPortfolios] = useState([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -20,6 +21,7 @@ export default function ClientPortal() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [realReturns, setRealReturns] = useState(null);
   const [liveQuotes, setLiveQuotes] = useState({});
+  const [schwabValue, setSchwabValue] = useState(null);
 
   const handleRefresh = useCallback(async () => {
     if (isSupabaseConfigured && user) {
@@ -71,6 +73,19 @@ export default function ClientPortal() {
     return () => { cancelled = true; };
   }, [holdings, refreshKey]);
 
+  // Fetch Schwab account value if portfolio is linked
+  useEffect(() => {
+    if (!isSchwabConfigured() || !user || !portfolio?.schwab_account_hash) {
+      setSchwabValue(null);
+      return;
+    }
+    let cancelled = false;
+    getSchwabPositions(user.id, portfolio.schwab_account_hash)
+      .then(data => { if (!cancelled && data?.totalValue != null) setSchwabValue(data.totalValue); })
+      .catch(() => { if (!cancelled) setSchwabValue(null); });
+    return () => { cancelled = true; };
+  }, [user, portfolio, refreshKey]);
+
   // Auto-refresh every 5 minutes during market hours (with cache clear)
   useEffect(() => {
     const interval = setInterval(() => {
@@ -82,6 +97,14 @@ export default function ClientPortal() {
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
 
   if (!user || role !== 'client') {
     return (
@@ -106,20 +129,19 @@ export default function ClientPortal() {
 
   const benchLabel = benchmark ? (BENCHMARK_META[benchmark]?.label ?? benchmark) : null;
 
-  // Compute performance metrics — prefer real returns from Finnhub, fall back to mock
-  const ytdReturn = holdings.length
-    ? (realReturns?.portfolio?.YTD != null ? Number(realReturns.portfolio.YTD) : parseFloat(getPortfolioYTDReturn(holdings)))
-    : null;
-  const sinceReturn = portfolio?.created_at && holdings.length ? parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at)) : null;
-  const oneYearReturn = holdings.length
-    ? (realReturns?.portfolio?.['1Y'] != null ? Number(realReturns.portfolio['1Y']) : parseFloat(getPortfolioReturn(holdings, 252)))
-    : null;
-  const benchYtd = benchmark
-    ? (realReturns?.benchmark?.YTD != null ? Number(realReturns.benchmark.YTD) : parseFloat(getYTDReturn(benchmark)))
-    : null;
+  // Compute performance metrics — real market data only, no simulated fallbacks
+  const ytdReturn = holdings.length && realReturns?.portfolio?.YTD != null
+    ? Number(realReturns.portfolio.YTD) : null;
+  const sinceReturn = holdings.length && realReturns?.portfolio?.['Since Inception'] != null
+    ? Number(realReturns.portfolio['Since Inception']) : null;
+  const oneYearReturn = holdings.length && realReturns?.portfolio?.['1Y'] != null
+    ? Number(realReturns.portfolio['1Y']) : null;
+  const benchYtd = benchmark && realReturns?.benchmark?.YTD != null
+    ? Number(realReturns.benchmark.YTD) : null;
 
-  // Dynamic portfolio value based on live quotes
+  // Dynamic portfolio value — use Schwab real value when available
   const currentPortfolioValue = useMemo(() => {
+    if (schwabValue != null) return schwabValue;
     const startVal = Number(portfolio?.starting_value) || 0;
     if (!startVal || !holdings.length) return startVal || null;
     const cashPct = portfolio?.cash_percent ?? 0;
@@ -131,7 +153,8 @@ export default function ClientPortal() {
       return s + (h.weight_percent / 100) * ratio;
     }, 0);
     return startVal * (growthFactor * investedFrac + cashPct / 100);
-  }, [holdings, liveQuotes, portfolio]);
+  }, [holdings, liveQuotes, portfolio, schwabValue]);
+  const hasSchwab = schwabValue != null;
 
   const totalWeight = holdings.reduce((s, h) => s + (h.weight_percent || 0), 0);
   const isFullyAllocated = Math.abs(totalWeight - 100) < 0.01;
@@ -239,7 +262,7 @@ export default function ClientPortal() {
               {ytdReturn != null ? `${ytdReturn > 0 ? '+' : ''}${ytdReturn.toFixed(2)}%` : '--'}
             </p>
             {benchYtd != null && (
-              <p className="text-xs text-slate-400 mt-1">
+              <p className={`text-xs font-medium mt-1 ${benchYtd > 0 ? 'text-green-600' : benchYtd < 0 ? 'text-red-500' : 'text-slate-400'}`}>
                 {benchLabel}: {benchYtd > 0 ? '+' : ''}{benchYtd.toFixed(2)}%
               </p>
             )}
@@ -256,10 +279,13 @@ export default function ClientPortal() {
               {oneYearReturn != null ? `${oneYearReturn > 0 ? '+' : ''}${oneYearReturn.toFixed(2)}%` : '--'}
             </p>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <p className="text-xs font-medium text-slate-500 mb-1">Portfolio Value</p>
-            <p className="text-xl font-bold text-slate-800">
-              {currentPortfolioValue ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
+          <div className={`bg-white rounded-xl border shadow-sm p-4 ${hasSchwab ? 'border-emerald-200' : 'border-slate-200'}`}>
+            <p className="text-xs font-medium text-slate-500 mb-1">
+              {hasSchwab ? 'Account Value' : 'Portfolio Value'}
+              {hasSchwab && <span className="ml-1 text-emerald-500">● Schwab</span>}
+            </p>
+            <p className={`text-xl font-bold ${hasSchwab ? 'text-emerald-700' : 'text-slate-800'}`}>
+              {currentPortfolioValue != null ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
             </p>
             {portfolio?.starting_value && currentPortfolioValue && currentPortfolioValue !== portfolio.starting_value && (
               <p className={`text-xs mt-1 font-medium ${currentPortfolioValue > portfolio.starting_value ? 'text-green-600' : 'text-red-500'}`}>

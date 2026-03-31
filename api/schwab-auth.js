@@ -27,10 +27,14 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server misconfigured — missing Schwab or Supabase env vars' });
   }
 
-  // state = "userId" or "userId:portfolioId"
+  // state = "userId" or "userId:portfolioId" — validate UUID format
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const [userId, portfolioId] = state.split(':');
-  if (!userId) {
-    return res.status(400).json({ error: 'Invalid state parameter' });
+  if (!userId || !UUID_RE.test(userId)) {
+    return res.redirect(`/?schwab_error=invalid_state`);
+  }
+  if (portfolioId && !UUID_RE.test(portfolioId)) {
+    return res.redirect(`/?schwab_error=invalid_state`);
   }
 
   // Exchange authorization code for tokens
@@ -51,8 +55,7 @@ export default async function handler(req, res) {
     });
 
     if (!tokenRes.ok) {
-      const errBody = await tokenRes.text();
-      console.error('[schwab-auth] Token exchange failed:', tokenRes.status, errBody);
+      console.error('[schwab-auth] Token exchange failed:', tokenRes.status);
       return res.redirect(`/?schwab_error=token_exchange_failed`);
     }
 

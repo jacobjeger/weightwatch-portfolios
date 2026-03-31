@@ -6,10 +6,20 @@
 // The VITE_SCHWAB_CLIENT_ID env var is the only client-side credential needed
 // (used to construct the OAuth authorization URL).
 
+import { supabase } from './supabase';
+
 const CLIENT_ID = import.meta.env.VITE_SCHWAB_CLIENT_ID;
 
 /** True if Schwab integration is configured (client ID available). */
 export const isConfigured = () => Boolean(CLIENT_ID);
+
+/** Get the current Supabase auth token for API calls. */
+async function getAuthHeaders() {
+  if (!supabase) return {};
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return {};
+  return { 'Authorization': `Bearer ${session.access_token}` };
+}
 
 // ── In-memory caches ─────────────────────────────────────────────────────────
 const positionsCache = new Map(); // accountHash → { data, ts }
@@ -67,7 +77,8 @@ export async function getSchwabAccounts(userId) {
   const cached = accountsCache.get(userId);
   if (cached && Date.now() - cached.ts < ACCOUNTS_TTL) return cached.data;
 
-  const res = await fetch(`/api/schwab-proxy?action=accounts&user_id=${encodeURIComponent(userId)}`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/schwab-proxy?action=accounts&user_id=${encodeURIComponent(userId)}`, { headers });
   if (res.status === 404) return null; // not linked
   if (res.status === 401) {
     const body = await res.json().catch(() => ({}));
@@ -90,8 +101,10 @@ export async function getSchwabPositions(userId, accountHash) {
   const cached = positionsCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < POSITIONS_TTL) return cached.data;
 
+  const headers = await getAuthHeaders();
   const res = await fetch(
-    `/api/schwab-proxy?action=positions&user_id=${encodeURIComponent(userId)}&account=${encodeURIComponent(accountHash)}`
+    `/api/schwab-proxy?action=positions&user_id=${encodeURIComponent(userId)}&account=${encodeURIComponent(accountHash)}`,
+    { headers }
   );
   if (res.status === 401) {
     const body = await res.json().catch(() => ({}));
@@ -119,9 +132,10 @@ export async function getSchwabPositions(userId, accountHash) {
  * Unlink Schwab account for a user (deletes stored tokens).
  */
 export async function unlinkSchwab(userId) {
+  const headers = await getAuthHeaders();
   const res = await fetch(
     `/api/schwab-proxy?action=unlink&user_id=${encodeURIComponent(userId)}`,
-    { method: 'DELETE' }
+    { method: 'DELETE', headers }
   );
   if (!res.ok) throw new Error('Failed to unlink Schwab account');
   clearSchwabCache();

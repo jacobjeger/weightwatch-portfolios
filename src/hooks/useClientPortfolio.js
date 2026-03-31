@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getPortfolios, getMessages, getLatestApproval } from '../context/AuthContext';
-import { BENCHMARK_META, getPortfolioReturn, getPortfolioYTDReturn, getReturn, getYTDReturn, getPortfolioSinceReturn } from '../lib/mockData';
+import { BENCHMARK_META } from '../lib/mockData';
 import { getRealPerformanceReturns } from '../lib/finnhub';
 import { useMarketData } from '../context/MarketDataContext';
 
@@ -99,7 +99,7 @@ export function useClientPortfolio(user, role, refreshClientPortfolios) {
         return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
       });
       const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
-      if (!denom) return {};
+      if (!denom || !isFinite(denom)) return {};
       return Object.fromEntries(rows.map((r) => [r.ticker, {
         driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
         ratio: r.ratio,
@@ -109,13 +109,11 @@ export function useClientPortfolio(user, role, refreshClientPortfolios) {
     }
   }, [holdings, prices, live]);
 
-  // Performance metrics
+  // Performance metrics — real market data only, no simulated fallbacks
   const ytdReturn = useMemo(() => {
-    try {
-      const val = realReturns?.portfolio?.['YTD'] ?? (holdings.length ? parseFloat(getPortfolioYTDReturn(holdings)) : null);
-      return typeof val === 'number' && !isNaN(val) ? val : null;
-    } catch { return null; }
-  }, [realReturns, holdings]);
+    const val = realReturns?.portfolio?.['YTD'];
+    return val != null && !isNaN(Number(val)) ? Number(val) : null;
+  }, [realReturns]);
 
   const sinceReturn = useMemo(() => {
     try {
@@ -126,27 +124,19 @@ export function useClientPortfolio(user, role, refreshClientPortfolios) {
         const val = parseFloat(((growthFactor - 1) * 100).toFixed(2));
         return isNaN(val) ? null : val;
       }
-      if (portfolio?.created_at && holdings.length) {
-        const val = parseFloat(getPortfolioSinceReturn(holdings, portfolio.created_at));
-        return isNaN(val) ? null : val;
-      }
       return null;
     } catch { return null; }
-  }, [live, holdings, currentWeights, portfolio]);
+  }, [live, holdings, currentWeights]);
 
   const oneYearReturn = useMemo(() => {
-    try {
-      const val = realReturns?.portfolio?.['1Y'] ?? (holdings.length ? parseFloat(getPortfolioReturn(holdings, 252)) : null);
-      return typeof val === 'number' && !isNaN(val) ? val : null;
-    } catch { return null; }
-  }, [realReturns, holdings]);
+    const val = realReturns?.portfolio?.['1Y'];
+    return val != null && !isNaN(Number(val)) ? Number(val) : null;
+  }, [realReturns]);
 
   const benchYtd = useMemo(() => {
-    try {
-      const val = realReturns?.benchmark?.['YTD'] ?? (benchmark ? parseFloat(getYTDReturn(benchmark)) : null);
-      return typeof val === 'number' && !isNaN(val) ? val : null;
-    } catch { return null; }
-  }, [realReturns, benchmark]);
+    const val = realReturns?.benchmark?.['YTD'];
+    return val != null && !isNaN(Number(val)) ? Number(val) : null;
+  }, [realReturns]);
 
   const cashPercent = portfolio?.cash_percent ?? 0;
 

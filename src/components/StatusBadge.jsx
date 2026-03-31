@@ -19,7 +19,7 @@ export default function StatusBadge({ status, totalWeight }) {
 
   let label = status;
   if (status === 'Not Fully Allocated' && totalWeight !== undefined) {
-    label = `${Math.round(totalWeight)}% allocated`;
+    label = `${totalWeight.toFixed(1)}% allocated`;
   }
 
   return (

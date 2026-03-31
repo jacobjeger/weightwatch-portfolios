@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth, getSettings, saveSettings } from '../context/AuthContext';
-import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getYTDReturn, getRiskMetrics } from '../lib/mockData';
+import { BENCHMARKS, BENCHMARK_META } from '../lib/mockData';
 import { getRealPerformanceReturns, getRealHoldingsChartData, getRealRiskMetrics, isConfigured } from '../lib/finnhub';
 import { useMarketData } from '../context/MarketDataContext';
 import { useToast } from '../context/ToastContext';
@@ -27,6 +27,9 @@ function pctColor(v) {
 }
 
 function PctCell({ val }) {
+  if (val == null || isNaN(parseFloat(val))) {
+    return <span className="font-mono font-medium text-slate-400">--</span>;
+  }
   return (
     <span className={`font-mono font-medium ${pctColor(val)}`}>
       {parseFloat(val) > 0 ? '+' : ''}{parseFloat(val).toFixed(2)}%
@@ -46,39 +49,45 @@ export default function Benchmarks() {
   const [realBenchRiskMetrics, setRealBenchRiskMetrics] = useState({});
   const [realChartData, setRealChartData]       = useState(null);
 
-  // Fetch real returns for each benchmark ticker
+  // Fetch real returns for each benchmark ticker (in parallel)
   useEffect(() => {
     if (!live) return;
     let cancelled = false;
-    async function fetchAll() {
+    Promise.all(
+      BENCHMARKS.map((ticker) =>
+        getRealPerformanceReturns([{ ticker, weight_percent: 100 }], null)
+          .then((data) => [ticker, data?.portfolio ?? null])
+          .catch(() => [ticker, null])
+      )
+    ).then((entries) => {
+      if (cancelled) return;
       const results = {};
-      for (const ticker of BENCHMARKS) {
-        try {
-          const data = await getRealPerformanceReturns([{ ticker, weight_percent: 100 }], null);
-          if (data?.portfolio) results[ticker] = data.portfolio;
-        } catch { /* skip, fall back to mock */ }
+      for (const [ticker, data] of entries) {
+        if (data) results[ticker] = data;
       }
-      if (!cancelled) setRealBenchReturns(results);
-    }
-    fetchAll();
+      setRealBenchReturns(results);
+    });
     return () => { cancelled = true; };
   }, [live]);
 
-  // Fetch real risk metrics for each benchmark
+  // Fetch real risk metrics for each benchmark (in parallel)
   useEffect(() => {
     if (!isConfigured()) return;
     let cancelled = false;
-    async function fetchRisk() {
+    Promise.all(
+      BENCHMARKS.map((ticker) =>
+        getRealRiskMetrics([{ ticker, weight_percent: 100 }], null, '1Y')
+          .then((data) => [ticker, data?.portfolio ?? null])
+          .catch(() => [ticker, null])
+      )
+    ).then((entries) => {
+      if (cancelled) return;
       const results = {};
-      for (const ticker of BENCHMARKS) {
-        try {
-          const data = await getRealRiskMetrics([{ ticker, weight_percent: 100 }], null, '1Y');
-          if (data?.portfolio) results[ticker] = data.portfolio;
-        } catch { /* skip, fall back to mock */ }
+      for (const [ticker, data] of entries) {
+        if (data) results[ticker] = data;
       }
-      if (!cancelled) setRealBenchRiskMetrics(results);
-    }
-    fetchRisk();
+      setRealBenchRiskMetrics(results);
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -96,34 +105,6 @@ export default function Benchmarks() {
 
   const hasRealReturns = Object.keys(realBenchReturns).length > 0;
 
-  // Build multi-line chart data for all 6 benchmarks (mock fallback)
-  const multiChartData = (() => {
-    const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252, '2Y': 504, 'Max': 756 };
-    const numDays = RANGE_DAYS[chartRange] ?? 252;
-
-    // Import at top level won't work in closure, so we inline the logic
-    // using the pre-imported functions
-    const histories = BENCHMARKS.map((t) => {
-      // Indices (^ prefix) don't have an INSTRUMENTS entry — just use 100 as base
-      const inst = INSTRUMENTS.find((i) => i.ticker === t);
-      const currentPrice = inst?.last_price ?? 100;
-      const prices = generateMockHistory(t, currentPrice, numDays);
-      return { ticker: t, prices };
-    });
-
-    if (!histories[0]) return [];
-    const dates = generateTradingDates(numDays);
-
-    return dates.map((date, i) => {
-      const entry = { date };
-      histories.forEach((h) => {
-        // Return % change from start (0 = flat, positive = gain)
-        entry[h.ticker] = parseFloat(((h.prices[i] / h.prices[0] - 1) * 100).toFixed(2));
-      });
-      return entry;
-    });
-  })();
-
   function handleSave() {
     if (user) {
       saveSettings(user.id, settings);
@@ -140,7 +121,7 @@ export default function Benchmarks() {
         <div className="px-3 sm:px-5 py-3 sm:py-4 border-b border-slate-100">
           <h2 className="section-title">Benchmark Performance</h2>
           <p className="text-xs text-slate-400">
-            {hasRealReturns ? '● Real market data' : 'Simulated returns — not real market data'}
+            {hasRealReturns ? '● Real market data' : 'Market data unavailable'}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -155,18 +136,15 @@ export default function Benchmarks() {
             <tbody className="divide-y divide-slate-100">
               {BENCHMARKS.map((ticker) => {
                 const meta = BENCHMARK_META[ticker];
-                const inst = INSTRUMENTS.find((i) => i.ticker === ticker);
                 return (
                   <tr key={ticker} className="hover:bg-slate-50">
                     <td className="td">
                       <span className="font-semibold text-slate-900">{ticker}</span>
                     </td>
-                    <td className="td text-slate-600">{meta?.label ?? inst?.name ?? ticker}</td>
+                    <td className="td text-slate-600">{meta?.label ?? ticker}</td>
                     {TIMEFRAMES.map((tf) => {
                       const realRet = realBenchReturns[ticker]?.[tf.label];
-                      const ret = realRet != null
-                        ? realRet.toFixed(2)
-                        : (tf.label === 'YTD' ? getYTDReturn(ticker) : getReturn(ticker, tf.days));
+                      const ret = realRet != null ? realRet.toFixed(2) : null;
                       return (
                         <td key={tf.label} className="td text-right">
                           <PctCell val={ret} />
@@ -202,30 +180,29 @@ export default function Benchmarks() {
             <tbody className="divide-y divide-slate-100">
               {BENCHMARKS.map((ticker) => {
                 const meta = BENCHMARK_META[ticker];
-                const inst = INSTRUMENTS.find((i) => i.ticker === ticker);
-                const metrics = realBenchRiskMetrics[ticker] ?? getRiskMetrics(ticker, 252);
+                const metrics = realBenchRiskMetrics[ticker] ?? null;
                 return (
                   <tr key={ticker} className="hover:bg-slate-50">
                     <td className="td">
                       <span className="font-semibold text-slate-900">{ticker}</span>
                     </td>
-                    <td className="td text-slate-600">{meta?.label ?? inst?.name ?? ticker}</td>
+                    <td className="td text-slate-600">{meta?.label ?? ticker}</td>
                     <td className="td text-right">
-                      <span className="font-mono font-medium text-slate-700">{metrics.volatility.toFixed(1)}%</span>
+                      <span className="font-mono font-medium text-slate-700">{metrics ? `${metrics.volatility.toFixed(1)}%` : '--'}</span>
                     </td>
                     <td className="td text-right">
-                      <span className={`font-mono font-medium ${metrics.maxDrawdown < -10 ? 'text-red-500' : metrics.maxDrawdown < -5 ? 'text-amber-600' : 'text-slate-700'}`}>
-                        {metrics.maxDrawdown.toFixed(1)}%
+                      <span className={`font-mono font-medium ${metrics && metrics.maxDrawdown < -10 ? 'text-red-500' : metrics && metrics.maxDrawdown < -5 ? 'text-amber-600' : 'text-slate-700'}`}>
+                        {metrics ? `${metrics.maxDrawdown.toFixed(1)}%` : '--'}
                       </span>
                     </td>
                     <td className="td text-right">
-                      <span className={`font-mono font-medium ${metrics.sharpe > 1 ? 'text-green-600' : metrics.sharpe > 0 ? 'text-slate-700' : 'text-red-500'}`}>
-                        {metrics.sharpe.toFixed(2)}
+                      <span className={`font-mono font-medium ${metrics && metrics.sharpe > 1 ? 'text-green-600' : metrics && metrics.sharpe > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                        {metrics ? metrics.sharpe.toFixed(2) : '--'}
                       </span>
                     </td>
                     <td className="td text-right">
-                      <span className={`font-mono font-medium ${metrics.sortino > 1.5 ? 'text-green-600' : metrics.sortino > 0 ? 'text-slate-700' : 'text-red-500'}`}>
-                        {metrics.sortino >= 99 ? '>99' : metrics.sortino.toFixed(2)}
+                      <span className={`font-mono font-medium ${metrics && metrics.sortino > 1.5 ? 'text-green-600' : metrics && metrics.sortino > 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                        {metrics ? (metrics.sortino >= 99 ? '>99' : metrics.sortino.toFixed(2)) : '--'}
                       </span>
                     </td>
                   </tr>
@@ -255,8 +232,9 @@ export default function Benchmarks() {
           </div>
         </div>
         <div className="h-[250px] sm:h-[300px]">
+        {realChartData?.length ? (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={realChartData ?? multiChartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+          <LineChart data={realChartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="date"
@@ -267,7 +245,7 @@ export default function Benchmarks() {
                 if (isNaN(d.getTime())) return v ?? '';
                 return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
               }}
-              interval={Math.max(1, Math.floor(multiChartData.length / 6) - 1)}
+              interval={Math.max(1, Math.floor(realChartData.length / 6) - 1)}
             />
             <YAxis
               tickFormatter={(v) => v == null ? '' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%`}
@@ -299,6 +277,11 @@ export default function Benchmarks() {
             ))}
           </LineChart>
         </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-sm text-slate-400">
+            {isConfigured() ? 'Loading chart data...' : 'Market data unavailable — connect Finnhub API to view charts'}
+          </div>
+        )}
         </div>
       </div>
 
@@ -348,37 +331,3 @@ export default function Benchmarks() {
   );
 }
 
-// ─── Inline helpers (mirrors mockData.js logic without import overhead) ────────
-function seedRand(seed) {
-  let s = Math.abs(seed) || 1;
-  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-}
-function tickerHash(t) {
-  let h = 5381;
-  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) & 0x7fffffff;
-  return h;
-}
-function generateMockHistory(ticker, currentPrice, numDays) {
-  const isIndex = ticker.startsWith('^');
-  const vol = isIndex || ['SPY','QQQ','IWM','EFA','ACWI','AGG','VOO','VTI','BND','TLT','DIA','EEM','HYG','LQD','TIPS','SLV'].includes(ticker) ? 0.007 : 0.016;
-  const drift = 0.00035;
-  const rand = seedRand(tickerHash(ticker));
-  const returns = Array.from({ length: numDays - 1 }, () => {
-    const u1 = Math.max(rand(), 1e-9), u2 = rand();
-    const n = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    return drift + vol * n;
-  });
-  const prices = [currentPrice];
-  for (let i = returns.length - 1; i >= 0; i--) prices.unshift(prices[0] / (1 + returns[i]));
-  return prices;
-}
-function generateTradingDates(numDays) {
-  const dates = [];
-  let d = new Date();
-  while (dates.length < numDays) {
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) dates.unshift(d.toISOString().split('T')[0]);
-    d = new Date(d.getTime() - 86400000);
-  }
-  return dates;
-}

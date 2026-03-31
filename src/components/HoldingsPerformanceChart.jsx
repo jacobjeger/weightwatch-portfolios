@@ -3,7 +3,6 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { generateHistory } from '../lib/mockData';
 import { isConfigured, getRealHoldingsChartData } from '../lib/finnhub';
 
 const RANGES = ['1M', '3M', '6M', '1Y', '2Y', 'Max'];
@@ -76,29 +75,11 @@ export default function HoldingsPerformanceChart({ holdings }) {
     return () => { cancelled = true; };
   }, [holdings, range, usingReal]);
 
-  // Fall back to mock data if no real data
+  // Real data only — no simulated fallback
   const chartData = useMemo(() => {
     if (realData?.length) return realData;
-    if (!holdings?.length) return [];
-    const numDays = RANGE_DAYS[range] ?? 126;
-
-    const histories = holdings.map((h) => ({
-      ticker: h.ticker,
-      data: generateHistory(h.ticker, numDays),
-    }));
-
-    const dates = histories[0].data.map((d) => d.date);
-
-    return dates.map((date, i) => {
-      const entry = { date };
-      histories.forEach((h) => {
-        const startPrice = h.data[0]?.price ?? 1;
-        const currentPrice = h.data[i]?.price ?? startPrice;
-        entry[h.ticker] = parseFloat(((currentPrice / startPrice - 1) * 100).toFixed(2));
-      });
-      return entry;
-    });
-  }, [holdings, range, realData]);
+    return [];
+  }, [realData]);
 
   const tickInterval = Math.max(1, Math.floor(chartData.length / 8));
   const ticks = chartData
@@ -125,7 +106,7 @@ export default function HoldingsPerformanceChart({ holdings }) {
           </button>
         ))}
         <span className="ml-auto text-[10px] sm:text-xs text-slate-400">
-          {loading ? 'Loading...' : realData ? '● Live' : 'Simulated'}
+          {loading ? 'Loading...' : realData ? '● Live' : 'Data unavailable'}
         </span>
       </div>
 

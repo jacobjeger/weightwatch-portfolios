@@ -1,6 +1,6 @@
 // ─── Finnhub market data client ───────────────────────────────────────────────
-// API key is exposed client-side (VITE_ prefix). Acceptable for a personal/demo
-// app on the free tier — the key only grants market data read access.
+// API key is exposed client-side (VITE_ prefix). Acceptable for a read-only
+// market data key on the free tier — the key only grants market data read access.
 //
 // Historical candle data: tries Finnhub first; if the free-tier returns 403,
 // automatically falls back to Yahoo Finance (via /api/yahoo-chart proxy) for
@@ -104,7 +104,7 @@ export async function getCandles(ticker, fromDate, toDate) {
   if (!res.ok) throw new Error(`Candle fetch failed for ${ticker}: ${res.status}`);
 
   const raw = await res.json();
-  if (raw.s !== 'ok' || !raw.c?.length) return [];
+  if (raw.s !== 'ok' || !raw.c?.length || !raw.t?.length) return [];
 
   const data = raw.t.map((ts, i) => {
     const d = new Date(ts * 1000);
@@ -303,14 +303,10 @@ async function getQuoteBasedReturns(holdings, benchmarkTicker) {
   const allTickers = benchmarkTicker ? [...tickers, benchmarkTicker] : tickers;
 
   const quotes = {};
-  for (let i = 0; i < allTickers.length; i++) {
-    if (i > 0) await new Promise(r => setTimeout(r, 150));
-    try {
-      quotes[allTickers[i]] = await getQuote(allTickers[i]);
-    } catch {
-      // skip
-    }
-  }
+  const quoteResults = await Promise.all(
+    allTickers.map(t => getQuote(t).catch(() => null))
+  );
+  allTickers.forEach((t, i) => { if (quoteResults[i]) quotes[t] = quoteResults[i]; });
 
   let portfolioRet = 0;
   let validWeight  = 0;
@@ -322,6 +318,7 @@ async function getQuoteBasedReturns(holdings, benchmarkTicker) {
       validWeight  += h.weight_percent;
     }
   });
+
   let benchRet = null;
   if (benchmarkTicker && quotes[benchmarkTicker]) {
     const q = quotes[benchmarkTicker];
@@ -399,12 +396,20 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
   const latestDate = allDates[allDates.length - 1];
 
   function computeReturn(daysBack) {
-    // Find the date approximately N calendar days ago
-    const targetDate = new Date(Date.now() - daysBack * 86_400_000).toISOString().slice(0, 10);
-    // Find the closest trading date >= targetDate
-    const startIdx = allDates.findIndex(d => d >= targetDate);
-    if (startIdx < 0 || startIdx >= allDates.length) return { portfolio: null, benchmark: null };
-    const startDate = allDates[startIdx];
+    let startDate;
+
+    if (daysBack <= 1) {
+      // For 1D: use the second-to-last trading date (previous close → latest close)
+      if (allDates.length < 2) return { portfolio: null, benchmark: null };
+      startDate = allDates[allDates.length - 2];
+    } else {
+      // Find the date approximately N calendar days ago
+      const targetDate = new Date(Date.now() - daysBack * 86_400_000).toISOString().slice(0, 10);
+      // Find the closest trading date >= targetDate
+      const startIdx = allDates.findIndex(d => d >= targetDate);
+      if (startIdx < 0 || startIdx >= allDates.length) return { portfolio: null, benchmark: null };
+      startDate = allDates[startIdx];
+    }
 
     // Portfolio weighted return
     let portfolioRet = 0;
@@ -443,17 +448,19 @@ export async function getRealPerformanceReturns(holdings, benchmarkTicker) {
     result.benchmark[label] = r.benchmark;
   }
 
-  // YTD: compute from Jan 1 of the current year
-  const ytdDays = Math.floor((Date.now() - new Date(`${new Date().getFullYear()}-01-01`).getTime()) / 86_400_000);
+  // YTD: compute from Jan 1 of the current year (use UTC to avoid timezone drift)
+  const now = new Date();
+  const ytdDays = Math.floor((now.getTime() - Date.UTC(now.getUTCFullYear(), 0, 1)) / 86_400_000);
   if (ytdDays > 0) {
     const ytdR = computeReturn(ytdDays);
     result.portfolio['YTD'] = ytdR.portfolio;
     result.benchmark['YTD'] = ytdR.benchmark;
   }
 
-  // If candle-based 1D is null (no recent candle), supplement with quote data
-  if (result.portfolio['1D'] == null) {
-    const quoteRet = await getQuoteBasedReturns(holdings, benchmarkTicker);
+  // Always prefer live quote data for 1D — candle closes may be stale during
+  // market hours or delayed.  Quote-based returns use real-time price vs prevClose.
+  const quoteRet = await getQuoteBasedReturns(holdings, benchmarkTicker);
+  if (quoteRet.portfolio != null) {
     result.portfolio['1D'] = quoteRet.portfolio;
     result.benchmark['1D'] = quoteRet.benchmark;
   }
@@ -513,10 +520,13 @@ export async function getRealRiskMetrics(holdings, benchmarkTicker, range = '1Y'
     const vol = Math.sqrt(variance * 252) * 100;
     // Max drawdown
     let peak = prices[0], worstDd = 0;
+    if (peak <= 0) peak = 1;
     for (let i = 1; i < prices.length; i++) {
       if (prices[i] > peak) peak = prices[i];
-      const dd = (prices[i] - peak) / peak;
-      if (dd < worstDd) worstDd = dd;
+      if (peak > 0) {
+        const dd = (prices[i] - peak) / peak;
+        if (dd < worstDd) worstDd = dd;
+      }
     }
     // Sharpe
     const totalReturn = prices[prices.length - 1] / prices[0] - 1;
@@ -541,8 +551,10 @@ export async function getRealRiskMetrics(holdings, benchmarkTicker, range = '1Y'
 
   const result = { portfolio: computeMetrics(portfolioPrices, dates.length) };
 
-  if (benchmarkTicker && benchCandles.length > 1) {
-    result.benchmark = computeMetrics(benchCandles.map(d => d.price), benchCandles.length);
+  if (benchmarkTicker) {
+    result.benchmark = benchCandles.length > 1
+      ? computeMetrics(benchCandles.map(d => d.price), benchCandles.length)
+      : null;
   }
 
   return result;

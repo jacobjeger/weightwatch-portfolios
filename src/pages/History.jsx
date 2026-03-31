@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, getActivity, getPortfolios } from '../context/AuthContext';
-import { getPortfolioReturn, getReturn } from '../lib/mockData';
 import { isConfigured, getRealPerformanceReturns } from '../lib/finnhub';
 import { formatDistanceToNow, format, isValid } from 'date-fns';
 import { Download, ExternalLink } from 'lucide-react';
@@ -31,29 +30,32 @@ export default function History() {
   const activity = useMemo(() => (user ? getActivity(user.id) : []), [user]);
   const portfolios = useMemo(() => (user ? getPortfolios(user.id) : []), [user]);
 
-  // Fetch real returns for all portfolios
+  // Fetch real returns for all portfolios (in parallel)
   const [realReturnsMap, setRealReturnsMap] = useState({});
   useEffect(() => {
     if (!isConfigured() || !portfolios.length) return;
     let cancelled = false;
-    async function fetchAll() {
+    const promises = portfolios
+      .filter((p) => p.holdings?.length)
+      .map((p) =>
+        getRealPerformanceReturns(p.holdings, p.primary_benchmark || null)
+          .then((data) => [p.id, data])
+          .catch(() => [p.id, null])
+      );
+    Promise.all(promises).then((entries) => {
+      if (cancelled) return;
       const results = {};
-      for (const p of portfolios) {
-        if (!p.holdings?.length) continue;
-        try {
-          const data = await getRealPerformanceReturns(p.holdings, p.primary_benchmark || null);
-          if (data) results[p.id] = data;
-        } catch { /* fall back to mock */ }
+      for (const [id, data] of entries) {
+        if (data) results[id] = data;
       }
-      if (!cancelled) setRealReturnsMap(results);
-    }
-    fetchAll();
+      setRealReturnsMap(results);
+    });
     return () => { cancelled = true; };
   }, [portfolios]);
 
   const LABEL_MAP = { '1M': '1M', '3M': '3M', '6M': '6M', '1Y': '1Y' };
 
-  // Generate snapshots — prefer real data, fall back to mock
+  // Generate snapshots — real market data only
   const snapshots = useMemo(() => {
     return portfolios.flatMap((p) =>
       Object.entries(TIMEFRAME_DAYS).map(([tf, days]) => {
@@ -61,11 +63,11 @@ export default function History() {
         const realLabel = LABEL_MAP[tf];
         const pRet = real?.portfolio?.[realLabel] != null
           ? real.portfolio[realLabel]
-          : parseFloat(getPortfolioReturn(p.holdings, days));
+          : null;
         const bRet = p.primary_benchmark
           ? (real?.benchmark?.[realLabel] != null
               ? real.benchmark[realLabel]
-              : parseFloat(getReturn(p.primary_benchmark, days)))
+              : null)
           : null;
         return {
           id: `${p.id}-${tf}`,
@@ -277,13 +279,13 @@ export default function History() {
                 const realLabel = LABEL_MAP[tf];
                 const pRet = real?.portfolio?.[realLabel] != null
                   ? real.portfolio[realLabel]
-                  : parseFloat(getPortfolioReturn(selectedPortfolio.holdings, days));
+                  : null;
                 const bRet = selectedPortfolio.primary_benchmark
                   ? (real?.benchmark?.[realLabel] != null
                       ? real.benchmark[realLabel]
-                      : parseFloat(getReturn(selectedPortfolio.primary_benchmark, days)))
+                      : null)
                   : null;
-                const alpha = bRet !== null ? pRet - bRet : null;
+                const alpha = (pRet != null && bRet != null) ? pRet - bRet : null;
 
                 return (
                   <div key={tf} className="card p-5">

@@ -4,7 +4,7 @@ import { BarChart3, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function ResetPassword() {
-  const { resetPassword, isMockMode } = useAuth();
+  const { resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -49,20 +49,12 @@ export default function ResetPassword() {
           </p>
         </div>
 
-        {isMockMode && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700">
-            <strong>Demo mode:</strong> No email will actually be sent. Reset will succeed for any registered account email.
-          </div>
-        )}
-
         {sent ? (
           <div className="card p-6 text-center">
             <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
             <h2 className="font-semibold text-slate-900 mb-1">Check your inbox</h2>
             <p className="text-sm text-slate-500 mb-4">
-              {isMockMode
-                ? 'In demo mode, password reset is simulated. No real email was sent.'
-                : `A password reset link has been sent to ${email}.`}
+              A password reset link has been sent to {email}.
             </p>
             <Link to="/" className="btn-primary inline-flex">
               Back to app

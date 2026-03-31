@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Copy, Save, AlertTriangle, TrendingUp, TrendingDown, DollarSign, Share2, ChevronDown, RefreshCw, User, X } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, createShareToken, inviteClient, getLatestApproval, getSettings, getLinkedClient, unlinkClient, sendInviteEmail, getClientStatusForPortfolio } from '../context/AuthContext';
 import AllocationPieChart from '../components/AllocationPieChart';
-import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META, getReturn, getPortfolioReturn, getYTDReturn, getPortfolioYTDReturn, getPortfolioSinceReturn, getPortfolioRiskMetrics, getRiskMetrics } from '../lib/mockData';
+import { INSTRUMENTS, BENCHMARKS, BENCHMARK_META } from '../lib/mockData';
 import { getRealPerformanceReturns, getRealRiskMetrics, clearMarketCaches } from '../lib/finnhub';
 import TickerSearch from '../components/TickerSearch';
 import PerformanceChart from '../components/PerformanceChart';
@@ -181,7 +181,7 @@ export default function PortfolioBuilder() {
       return { ticker: h.ticker, targetWeight: h.weight_percent, ratio };
     });
     const denom = rows.reduce((s, r) => s + (r.targetWeight / 100) * r.ratio, 0);
-    if (!denom) return {};
+    if (!denom || !isFinite(denom)) return {};
     return Object.fromEntries(rows.map((r) => [r.ticker, {
       driftedWeight: parseFloat(((r.targetWeight / 100) * r.ratio / denom * 100).toFixed(2)),
       ratio: r.ratio,
@@ -189,14 +189,16 @@ export default function PortfolioBuilder() {
   }, [holdings, prices, live]);
 
   // Current estimated portfolio value in dollars
+  // When Schwab is linked, use real account value; otherwise estimate from starting_value
   const currentPortfolioValue = useMemo(() => {
+    if (schwabPositions?.totalValue != null) return schwabPositions.totalValue;
     if (!holdings.length) return startingValue;
     const investedFrac = 1 - cashPercent / 100;
     const growthFactor = holdings.reduce(
       (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
     );
     return startingValue * (growthFactor * investedFrac + cashPercent / 100);
-  }, [holdings, currentWeights, startingValue, cashPercent]);
+  }, [holdings, currentWeights, startingValue, cashPercent, schwabPositions]);
 
   // Show Rebalance button when any holding has drifted ≥ 0.5% from its target
   const needsRebalance = useMemo(() =>
@@ -207,6 +209,8 @@ export default function PortfolioBuilder() {
 
   // ── Holdings mutations ──────────────────────────────────────────────────────
   function addTicker(instrument) {
+    // Validate ticker format: 1-15 uppercase alphanumeric chars, dots, hyphens
+    if (!instrument.ticker || !/^[A-Z0-9.\-]{1,15}$/i.test(instrument.ticker)) return;
     if (holdings.find((h) => h.ticker === instrument.ticker)) return;
     // Capture entry price at time of adding — used for drift / rebalance calculations
     const entryPrice = (live && prices[instrument.ticker]?.price)
@@ -249,11 +253,12 @@ export default function PortfolioBuilder() {
   }
 
   function normalize() {
-    if (totalWeight === 0) return;
+    const safeTotal = holdings.reduce((s, h) => s + (Number(h.weight_percent) || 0), 0);
+    if (!safeTotal || !isFinite(safeTotal)) return;
     setHoldings((prev) =>
       prev.map((h) => ({
         ...h,
-        weight_percent: parseFloat(((h.weight_percent / totalWeight) * 100).toFixed(4)),
+        weight_percent: parseFloat((((Number(h.weight_percent) || 0) / safeTotal) * 100).toFixed(4)),
       }))
     );
     setWeightErrors({});
@@ -261,7 +266,9 @@ export default function PortfolioBuilder() {
 
   // ── Save ────────────────────────────────────────────────────────────────────
   function handleSave() {
-    if (!name.trim()) return;
+    if (!name.trim() || name.length > 200) return;
+    if (startingValue && (!Number.isFinite(startingValue) || startingValue < 0 || startingValue > 1_000_000_000)) return;
+    if (cashPercent < 0 || cashPercent > 100) return;
     setSaving(true);
 
     // ── Weight history diffing ────────────────────────────────────────────────
@@ -489,7 +496,7 @@ export default function PortfolioBuilder() {
   }
 
   // ── Live snapshot daily moves ────────────────────────────────────────────────
-  // Uses real Finnhub prices when configured, falls back to mock data
+  // Uses real Finnhub prices when configured
   const topHoldings = [...holdings]
     .sort((a, b) => b.weight_percent - a.weight_percent)
     .slice(0, 5)
@@ -498,7 +505,7 @@ export default function PortfolioBuilder() {
       return {
         ...h,
         displayPrice:  realQuote?.price       ?? h.last_price,
-        dailyChange:   realQuote?.changePercent ?? parseFloat(getReturn(h.ticker, 1)),
+        dailyChange:   realQuote?.changePercent ?? null,
         isLive:        !!realQuote,
       };
     });
@@ -509,12 +516,12 @@ export default function PortfolioBuilder() {
         const cp = prices[h.ticker]?.changePercent;
         return sum + (cp != null ? cp * (h.weight_percent / 100) : 0);
       }, 0)
-    : parseFloat(getPortfolioReturn(holdings, 1));
+    : null;
 
   const benchmarkReturn1D = benchmark
     ? (live && prices[benchmark]?.changePercent != null
         ? prices[benchmark].changePercent
-        : parseFloat(getReturn(benchmark, 1)))
+        : null)
     : null;
 
   // Weighted expense ratio and dividend yield (adjusted for cash allocation)
@@ -608,6 +615,103 @@ export default function PortfolioBuilder() {
       <div className="space-y-4 sm:space-y-6">
         {/* Main column — full width so holdings table is never squeezed */}
         <div className="space-y-4 sm:space-y-6">
+
+          {/* Schwab Account Summary — real brokerage data */}
+          {hasSchwab && (
+            <div className="card p-5 border-emerald-200 bg-emerald-50/30">
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="section-title text-emerald-800">Schwab Account Overview</h2>
+                <span className="text-xs text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Live</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Account Value</div>
+                  <div className="text-lg font-bold text-emerald-700">
+                    ${Math.round(schwabPositions.totalValue).toLocaleString('en-US')}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Model Value</div>
+                  <div className="text-lg font-bold text-slate-700">
+                    ${Math.round(startingValue).toLocaleString('en-US')}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5">starting value</div>
+                </div>
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Positions</div>
+                  <div className="text-lg font-bold text-slate-700">
+                    {schwabPositions.positions.length}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    {holdings.length} in model
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Max Drift</div>
+                  {(() => {
+                    const drifts = holdings.map(h => {
+                      const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                      return sp ? Math.abs(sp.actualWeight - h.weight_percent) : 0;
+                    });
+                    const maxDrift = Math.max(0, ...drifts);
+                    const driftColor = maxDrift <= 1 ? 'text-green-600' : maxDrift <= 3 ? 'text-amber-500' : 'text-red-500';
+                    return (
+                      <>
+                        <div className={`text-lg font-bold ${driftColor}`}>{maxDrift.toFixed(1)}%</div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {maxDrift <= 1 ? 'on target' : maxDrift <= 3 ? 'minor drift' : 'needs rebalance'}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+              {/* Quick allocation comparison */}
+              {holdings.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-emerald-100">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Target vs Actual Allocation</h3>
+                  <div className="space-y-1.5">
+                    {holdings
+                      .sort((a, b) => b.weight_percent - a.weight_percent)
+                      .slice(0, 10)
+                      .map(h => {
+                        const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                        const actual = sp?.actualWeight ?? 0;
+                        const target = h.weight_percent;
+                        const drift = actual - target;
+                        const driftColor = Math.abs(drift) <= 1 ? 'text-green-600' : Math.abs(drift) <= 3 ? 'text-amber-500' : 'text-red-500';
+                        return (
+                          <div key={h.ticker} className="flex items-center gap-2 text-xs">
+                            <span className="w-14 font-mono font-semibold text-slate-700 text-right">{h.ticker}</span>
+                            <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden relative">
+                              {/* Target bar */}
+                              <div
+                                className="absolute inset-y-0 left-0 bg-blue-200 rounded-full"
+                                style={{ width: `${Math.min(target, 100)}%` }}
+                              />
+                              {/* Actual bar */}
+                              <div
+                                className="absolute inset-y-0 left-0 bg-emerald-400 rounded-full opacity-70"
+                                style={{ width: `${Math.min(actual, 100)}%` }}
+                              />
+                            </div>
+                            <span className="w-12 text-right font-mono text-slate-500">{target.toFixed(1)}%</span>
+                            <span className="w-12 text-right font-mono text-emerald-600">{actual.toFixed(1)}%</span>
+                            <span className={`w-14 text-right font-mono font-semibold ${driftColor}`}>
+                              {drift > 0 ? '+' : ''}{drift.toFixed(1)}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1 pl-16">
+                      <span className="inline-block w-3 h-2 bg-blue-200 rounded-sm" /> Target
+                      <span className="inline-block w-3 h-2 bg-emerald-400 rounded-sm ml-2" /> Actual (Schwab)
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Portfolio meta */}
           <div className="card p-5 space-y-4">
@@ -1171,7 +1275,7 @@ export default function PortfolioBuilder() {
                 <span className={`text-xs italic ${realReturns ? 'text-green-500' : 'text-slate-400'}`}>
                   {realReturns
                     ? `● Live · real market data${Object.values(realReturns.portfolio).some(v => v == null) ? ' (partial)' : ''}`
-                    : (live ? 'Loading real data…' : (createdAt ? 'Simulated · connect Finnhub for real data' : 'All figures simulated'))}
+                    : (live ? 'Loading real data…' : 'Market data unavailable')}
                 </span>
                 {live && (
                   <button
@@ -1193,15 +1297,11 @@ export default function PortfolioBuilder() {
                 ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000 * (252 / 365))
                 : 0;
 
-              // Build the "Since Creation" tracker data
-              const sinceCreationData = createdAt && holdings.length > 0 ? (() => {
-                const portfolioRet = parseFloat(getPortfolioSinceReturn(holdings, createdAt));
-                const benchRet = benchmark ? (() => {
-                  const diffMs = Date.now() - new Date(createdAt).getTime();
-                  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                  const tradingDays = Math.max(1, Math.round(diffDays * (252 / 365)));
-                  return parseFloat(getReturn(benchmark, tradingDays));
-                })() : null;
+              // Build the "Since Creation" tracker data — real data only
+              const sinceCreationData = createdAt && holdings.length > 0 && realReturns?.portfolio?.['Since Inception'] != null ? (() => {
+                const portfolioRet = Number(realReturns.portfolio['Since Inception']);
+                const benchRet = realReturns?.benchmark?.['Since Inception'] != null
+                  ? Number(realReturns.benchmark['Since Inception']) : null;
                 return { portfolioRet, benchRet, outperf: benchRet !== null ? portfolioRet - benchRet : null };
               })() : null;
 
@@ -1209,27 +1309,18 @@ export default function PortfolioBuilder() {
                 <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
                   {TIMEFRAMES.map(({ label, days }) => {
-                    // Prefer real Finnhub data, fall back to mock
+                    // Real market data only — no simulated fallbacks
                     const hasReal = realReturns?.portfolio?.[label] != null;
-                    const portfolioRet = hasReal
-                      ? realReturns.portfolio[label]
-                      : label === 'YTD'
-                        ? parseFloat(getPortfolioYTDReturn(holdings))
-                        : parseFloat(getPortfolioReturn(holdings, days));
+                    const portfolioRet = hasReal ? realReturns.portfolio[label] : null;
                     const benchRet = hasReal && realReturns.benchmark?.[label] != null
-                      ? realReturns.benchmark[label]
-                      : (benchmark
-                          ? (label === 'YTD'
-                              ? parseFloat(getYTDReturn(benchmark))
-                              : parseFloat(getReturn(benchmark, days)))
-                          : null);
-                    const outperf = benchRet !== null ? portfolioRet - benchRet : null;
-                    const isBacktested = !hasReal && label !== 'YTD' && (!createdAt || portfolioAgeTradingDays < days);
+                      ? realReturns.benchmark[label] : null;
+                    const outperf = (portfolioRet != null && benchRet != null) ? portfolioRet - benchRet : null;
+                    const isBacktested = false;
                     return (
                       <div key={label} className={`rounded p-3 text-center ${hasReal ? 'bg-green-50/50' : isBacktested ? 'bg-amber-50/40 border border-amber-100' : 'bg-slate-50'}`}>
                         <div className="text-xs font-medium text-slate-500 mb-2">{label}</div>
-                        <div className={`text-sm font-bold ${portfolioRet > 0 ? 'text-green-600' : portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
-                          {holdings.length > 0 ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
+                        <div className={`text-sm font-bold ${portfolioRet != null && portfolioRet > 0 ? 'text-green-600' : portfolioRet != null && portfolioRet < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                          {portfolioRet != null ? `${portfolioRet > 0 ? '+' : ''}${portfolioRet.toFixed(2)}%` : '—'}
                         </div>
                         {benchRet !== null && (
                           <div className="text-xs text-slate-400 mt-0.5">{BENCHMARK_META[benchmark]?.label ?? benchmark}: {benchRet > 0 ? '+' : ''}{benchRet.toFixed(2)}%</div>
@@ -1247,7 +1338,7 @@ export default function PortfolioBuilder() {
                         {!hasReal && holdings.length > 0 && (
                           <div
                             className="text-xs text-slate-400 italic mt-1 cursor-help"
-                            title={realReturns ? 'Candle data unavailable for this timeframe' : 'Return is simulated — connect Finnhub API for real market data'}
+                            title={realReturns ? 'Candle data unavailable for this timeframe' : 'Market data unavailable — connect Finnhub API'}
                           >
                             {realReturns ? 'Est.' : (isBacktested ? 'Backtested' : '')}
                           </div>
@@ -1276,15 +1367,24 @@ export default function PortfolioBuilder() {
 
                 {/* Risk Metrics */}
                 {holdings.length > 0 && (() => {
-                  const metrics = realRiskMetrics?.portfolio ?? getPortfolioRiskMetrics(holdings, 252);
-                  const benchMetrics = realRiskMetrics?.benchmark ?? (benchmark ? getRiskMetrics(benchmark, 252) : null);
+                  const metrics = realRiskMetrics?.portfolio ?? null;
+                  const benchMetrics = realRiskMetrics?.benchmark ?? null;
                   const isReal = !!realRiskMetrics;
+                  if (!metrics) return (
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk Metrics (1Y)</h3>
+                        <span className="text-xs text-amber-500">Data unavailable</span>
+                      </div>
+                      <p className="text-xs text-slate-400">Connect Finnhub API for real risk metrics.</p>
+                    </div>
+                  );
                   return (
                     <div className="mt-4 pt-4 border-t border-slate-100">
                       <div className="flex items-center gap-2 mb-3">
                         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Risk Metrics (1Y)</h3>
                         <span className={`text-xs ${isReal ? 'text-green-500' : 'text-slate-400'}`}>
-                          {isReal ? '● Real' : 'Simulated'}
+                          {isReal ? '● Real' : 'Unavailable'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1500,7 +1600,7 @@ export default function PortfolioBuilder() {
             </button>
             {liveSnapOpen && <>
             <p className="text-xs text-slate-400 mb-4 mt-2">
-              Top holdings by weight · {live ? 'real-time prices' : 'simulated daily moves'}
+              Top holdings by weight · {live ? 'real-time prices' : 'prices unavailable'}
             </p>
 
             {topHoldings.length === 0 ? (
@@ -1515,13 +1615,13 @@ export default function PortfolioBuilder() {
                     </div>
                     <div className="text-right">
                       <div className="font-mono text-sm text-slate-700">
-                        ${h.displayPrice?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {h.displayPrice != null ? `$${h.displayPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
                       </div>
                       <div className={`text-xs font-medium flex items-center gap-0.5 justify-end ${
                         h.dailyChange > 0 ? 'text-green-600' : h.dailyChange < 0 ? 'text-red-500' : 'text-slate-400'
                       }`}>
                         {h.dailyChange > 0 ? <TrendingUp className="w-3 h-3" /> : h.dailyChange < 0 ? <TrendingDown className="w-3 h-3" /> : null}
-                        {h.dailyChange > 0 ? '+' : ''}{h.dailyChange.toFixed(2)}%
+                        {h.dailyChange != null && !isNaN(h.dailyChange) ? `${h.dailyChange > 0 ? '+' : ''}${h.dailyChange.toFixed(2)}%` : '—'}
                       </div>
                     </div>
                   </div>
@@ -1541,8 +1641,11 @@ export default function PortfolioBuilder() {
                   </span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
-                  <span className="text-slate-500 cursor-help" title="Estimated portfolio value based on starting value and simulated growth">Est. Value</span>
-                  <span className="font-semibold text-slate-800">
+                  <span className="text-slate-500 cursor-help" title={hasSchwab ? 'Real account value from Schwab' : 'Estimated portfolio value based on starting value and market performance'}>
+                    {hasSchwab ? 'Account Value' : 'Est. Value'}
+                    {hasSchwab && <span className="ml-1 text-emerald-500 text-xs">● Schwab</span>}
+                  </span>
+                  <span className={`font-semibold ${hasSchwab ? 'text-emerald-700' : 'text-slate-800'}`}>
                     ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                   </span>
                 </div>
