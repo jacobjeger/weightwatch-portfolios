@@ -189,14 +189,16 @@ export default function PortfolioBuilder() {
   }, [holdings, prices, live]);
 
   // Current estimated portfolio value in dollars
+  // When Schwab is linked, use real account value; otherwise estimate from starting_value
   const currentPortfolioValue = useMemo(() => {
+    if (schwabPositions?.totalValue != null) return schwabPositions.totalValue;
     if (!holdings.length) return startingValue;
     const investedFrac = 1 - cashPercent / 100;
     const growthFactor = holdings.reduce(
       (s, h) => s + (h.weight_percent / 100) * (currentWeights[h.ticker]?.ratio ?? 1), 0
     );
     return startingValue * (growthFactor * investedFrac + cashPercent / 100);
-  }, [holdings, currentWeights, startingValue, cashPercent]);
+  }, [holdings, currentWeights, startingValue, cashPercent, schwabPositions]);
 
   // Show Rebalance button when any holding has drifted ≥ 0.5% from its target
   const needsRebalance = useMemo(() =>
@@ -613,6 +615,103 @@ export default function PortfolioBuilder() {
       <div className="space-y-4 sm:space-y-6">
         {/* Main column — full width so holdings table is never squeezed */}
         <div className="space-y-4 sm:space-y-6">
+
+          {/* Schwab Account Summary — real brokerage data */}
+          {hasSchwab && (
+            <div className="card p-5 border-emerald-200 bg-emerald-50/30">
+              <div className="flex items-center gap-2 mb-4">
+                <h2 className="section-title text-emerald-800">Schwab Account Overview</h2>
+                <span className="text-xs text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Live</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Account Value</div>
+                  <div className="text-lg font-bold text-emerald-700">
+                    ${Math.round(schwabPositions.totalValue).toLocaleString('en-US')}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Model Value</div>
+                  <div className="text-lg font-bold text-slate-700">
+                    ${Math.round(startingValue).toLocaleString('en-US')}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5">starting value</div>
+                </div>
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Positions</div>
+                  <div className="text-lg font-bold text-slate-700">
+                    {schwabPositions.positions.length}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    {holdings.length} in model
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
+                  <div className="text-xs text-slate-500 mb-1">Max Drift</div>
+                  {(() => {
+                    const drifts = holdings.map(h => {
+                      const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                      return sp ? Math.abs(sp.actualWeight - h.weight_percent) : 0;
+                    });
+                    const maxDrift = Math.max(0, ...drifts);
+                    const driftColor = maxDrift <= 1 ? 'text-green-600' : maxDrift <= 3 ? 'text-amber-500' : 'text-red-500';
+                    return (
+                      <>
+                        <div className={`text-lg font-bold ${driftColor}`}>{maxDrift.toFixed(1)}%</div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {maxDrift <= 1 ? 'on target' : maxDrift <= 3 ? 'minor drift' : 'needs rebalance'}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+              {/* Quick allocation comparison */}
+              {holdings.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-emerald-100">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Target vs Actual Allocation</h3>
+                  <div className="space-y-1.5">
+                    {holdings
+                      .sort((a, b) => b.weight_percent - a.weight_percent)
+                      .slice(0, 10)
+                      .map(h => {
+                        const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                        const actual = sp?.actualWeight ?? 0;
+                        const target = h.weight_percent;
+                        const drift = actual - target;
+                        const driftColor = Math.abs(drift) <= 1 ? 'text-green-600' : Math.abs(drift) <= 3 ? 'text-amber-500' : 'text-red-500';
+                        return (
+                          <div key={h.ticker} className="flex items-center gap-2 text-xs">
+                            <span className="w-14 font-mono font-semibold text-slate-700 text-right">{h.ticker}</span>
+                            <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden relative">
+                              {/* Target bar */}
+                              <div
+                                className="absolute inset-y-0 left-0 bg-blue-200 rounded-full"
+                                style={{ width: `${Math.min(target, 100)}%` }}
+                              />
+                              {/* Actual bar */}
+                              <div
+                                className="absolute inset-y-0 left-0 bg-emerald-400 rounded-full opacity-70"
+                                style={{ width: `${Math.min(actual, 100)}%` }}
+                              />
+                            </div>
+                            <span className="w-12 text-right font-mono text-slate-500">{target.toFixed(1)}%</span>
+                            <span className="w-12 text-right font-mono text-emerald-600">{actual.toFixed(1)}%</span>
+                            <span className={`w-14 text-right font-mono font-semibold ${driftColor}`}>
+                              {drift > 0 ? '+' : ''}{drift.toFixed(1)}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1 pl-16">
+                      <span className="inline-block w-3 h-2 bg-blue-200 rounded-sm" /> Target
+                      <span className="inline-block w-3 h-2 bg-emerald-400 rounded-sm ml-2" /> Actual (Schwab)
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Portfolio meta */}
           <div className="card p-5 space-y-4">
@@ -1542,8 +1641,11 @@ export default function PortfolioBuilder() {
                   </span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
-                  <span className="text-slate-500 cursor-help" title="Estimated portfolio value based on starting value and market performance">Est. Value</span>
-                  <span className="font-semibold text-slate-800">
+                  <span className="text-slate-500 cursor-help" title={hasSchwab ? 'Real account value from Schwab' : 'Estimated portfolio value based on starting value and market performance'}>
+                    {hasSchwab ? 'Account Value' : 'Est. Value'}
+                    {hasSchwab && <span className="ml-1 text-emerald-500 text-xs">● Schwab</span>}
+                  </span>
+                  <span className={`font-semibold ${hasSchwab ? 'text-emerald-700' : 'text-slate-800'}`}>
                     ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                   </span>
                 </div>

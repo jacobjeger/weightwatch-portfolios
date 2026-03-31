@@ -5,6 +5,7 @@ import { useAuth, getPortfolios, getMessages, getLatestApproval, syncFromSupabas
 import { isSupabaseConfigured } from '../lib/supabase';
 import { BENCHMARK_META } from '../lib/mockData';
 import { isConfigured as isFinnhubConfigured, getRealPerformanceReturns, clearMarketCaches, getQuote } from '../lib/finnhub';
+import { isConfigured as isSchwabConfigured, getSchwabPositions } from '../lib/schwab';
 import PerformanceChart from '../components/PerformanceChart';
 import HoldingsPerformanceChart from '../components/HoldingsPerformanceChart';
 import AllocationPieChart from '../components/AllocationPieChart';
@@ -20,6 +21,7 @@ export default function ClientPortal() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [realReturns, setRealReturns] = useState(null);
   const [liveQuotes, setLiveQuotes] = useState({});
+  const [schwabValue, setSchwabValue] = useState(null);
 
   const handleRefresh = useCallback(async () => {
     if (isSupabaseConfigured && user) {
@@ -70,6 +72,19 @@ export default function ClientPortal() {
     });
     return () => { cancelled = true; };
   }, [holdings, refreshKey]);
+
+  // Fetch Schwab account value if portfolio is linked
+  useEffect(() => {
+    if (!isSchwabConfigured() || !user || !portfolio?.schwab_account_hash) {
+      setSchwabValue(null);
+      return;
+    }
+    let cancelled = false;
+    getSchwabPositions(user.id, portfolio.schwab_account_hash)
+      .then(data => { if (!cancelled && data?.totalValue != null) setSchwabValue(data.totalValue); })
+      .catch(() => { if (!cancelled) setSchwabValue(null); });
+    return () => { cancelled = true; };
+  }, [user, portfolio, refreshKey]);
 
   // Auto-refresh every 5 minutes during market hours (with cache clear)
   useEffect(() => {
@@ -124,8 +139,9 @@ export default function ClientPortal() {
   const benchYtd = benchmark && realReturns?.benchmark?.YTD != null
     ? Number(realReturns.benchmark.YTD) : null;
 
-  // Dynamic portfolio value based on live quotes
+  // Dynamic portfolio value — use Schwab real value when available
   const currentPortfolioValue = useMemo(() => {
+    if (schwabValue != null) return schwabValue;
     const startVal = Number(portfolio?.starting_value) || 0;
     if (!startVal || !holdings.length) return startVal || null;
     const cashPct = portfolio?.cash_percent ?? 0;
@@ -137,7 +153,8 @@ export default function ClientPortal() {
       return s + (h.weight_percent / 100) * ratio;
     }, 0);
     return startVal * (growthFactor * investedFrac + cashPct / 100);
-  }, [holdings, liveQuotes, portfolio]);
+  }, [holdings, liveQuotes, portfolio, schwabValue]);
+  const hasSchwab = schwabValue != null;
 
   const totalWeight = holdings.reduce((s, h) => s + (h.weight_percent || 0), 0);
   const isFullyAllocated = Math.abs(totalWeight - 100) < 0.01;
@@ -262,9 +279,12 @@ export default function ClientPortal() {
               {oneYearReturn != null ? `${oneYearReturn > 0 ? '+' : ''}${oneYearReturn.toFixed(2)}%` : '--'}
             </p>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <p className="text-xs font-medium text-slate-500 mb-1">Portfolio Value</p>
-            <p className="text-xl font-bold text-slate-800">
+          <div className={`bg-white rounded-xl border shadow-sm p-4 ${hasSchwab ? 'border-emerald-200' : 'border-slate-200'}`}>
+            <p className="text-xs font-medium text-slate-500 mb-1">
+              {hasSchwab ? 'Account Value' : 'Portfolio Value'}
+              {hasSchwab && <span className="ml-1 text-emerald-500">● Schwab</span>}
+            </p>
+            <p className={`text-xl font-bold ${hasSchwab ? 'text-emerald-700' : 'text-slate-800'}`}>
               {currentPortfolioValue != null ? `$${Math.round(currentPortfolioValue).toLocaleString()}` : '--'}
             </p>
             {portfolio?.starting_value && currentPortfolioValue && currentPortfolioValue !== portfolio.starting_value && (

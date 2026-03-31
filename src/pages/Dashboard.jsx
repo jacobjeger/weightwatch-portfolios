@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3, Search, Star } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, getSettings, saveSettings } from '../context/AuthContext';
 import { isConfigured as isFinnhubConfigured, getRealPerformanceReturns } from '../lib/finnhub';
+import { isConfigured as isSchwabConfigured, getSchwabPositions } from '../lib/schwab';
 import StatusBadge, { getPortfolioStatus } from '../components/StatusBadge';
 import NewPortfolioModal from '../components/NewPortfolioModal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [favVersion, setFavVersion] = useState(0);
   const longPressedRef = useRef(false);
   const [realReturnsMap, setRealReturnsMap] = useState({});
+  const [schwabValues, setSchwabValues] = useState({});  // portfolioId → totalValue
 
   // Clients should always see the client portal, never the advisor dashboard
   useEffect(() => {
@@ -60,6 +62,29 @@ export default function Dashboard() {
     });
     return () => { cancelled = true; };
   }, [portfolios]);
+
+  // Fetch Schwab account values for linked portfolios
+  useEffect(() => {
+    if (!isSchwabConfigured() || !user || !portfolios.length) return;
+    let cancelled = false;
+    const linked = portfolios.filter(p => p.schwab_account_hash);
+    if (!linked.length) return;
+    Promise.all(
+      linked.map(p =>
+        getSchwabPositions(user.id, p.schwab_account_hash)
+          .then(data => [p.id, data?.totalValue ?? null])
+          .catch(() => [p.id, null])
+      )
+    ).then(entries => {
+      if (cancelled) return;
+      const values = {};
+      for (const [id, val] of entries) {
+        if (val != null) values[id] = val;
+      }
+      setSchwabValues(values);
+    });
+    return () => { cancelled = true; };
+  }, [user, portfolios]);
 
   // Pre-fetch real quotes for all tickers visible on the dashboard
   useEffect(() => {
@@ -218,8 +243,9 @@ export default function Dashboard() {
     return null; // No real data available
   }
 
-  // Compute current portfolio value using live prices when available
+  // Compute current portfolio value — use Schwab real value when available
   function computeValue(p) {
+    if (schwabValues[p.id] != null) return schwabValues[p.id];
     const sv = p.starting_value || 0;
     if (!(p.holdings?.length) || !sv) return sv;
     const cashPct = p.cash_percent ?? 0;
@@ -376,7 +402,7 @@ export default function Dashboard() {
                       {ret != null ? `${ret > 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
                     </div>
                     <div className="text-xs text-slate-400">
-                      {p.starting_value ? `$${Math.round(computeValue(p)).toLocaleString()} · ` : ''}{p.holdings?.length ?? 0} holdings
+                      {(p.starting_value || schwabValues[p.id]) ? `$${Math.round(computeValue(p)).toLocaleString()}${schwabValues[p.id] != null ? ' ●' : ''} · ` : ''}{p.holdings?.length ?? 0} holdings
                     </div>
                   </div>
                 </div>
@@ -462,8 +488,8 @@ export default function Dashboard() {
                             <span className="text-slate-400 text-xs">No holdings</span>
                           )}
                         </td>
-                        <td className="td text-right font-mono text-slate-700 text-sm">
-                          {p.starting_value
+                        <td className={`td text-right font-mono text-sm ${schwabValues[p.id] != null ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          {(p.starting_value || schwabValues[p.id])
                             ? `$${Math.round(computeValue(p)).toLocaleString()}`
                             : '—'}
                         </td>
