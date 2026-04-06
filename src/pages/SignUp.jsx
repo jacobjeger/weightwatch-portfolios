@@ -61,13 +61,13 @@ export default function SignUp() {
     if (cooldown <= 0) return;
     const id = setInterval(() => setCooldown((c) => c - 1), 1000);
     return () => clearInterval(id);
-  }, [cooldown > 0]);
+  }, [cooldown]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const id = setInterval(() => setResendCooldown((c) => c - 1), 1000);
     return () => clearInterval(id);
-  }, [resendCooldown > 0]);
+  }, [resendCooldown]);
 
   function validate() {
     const errs = {};

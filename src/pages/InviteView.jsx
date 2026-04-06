@@ -28,7 +28,7 @@ export default function InviteView() {
     if (cooldown <= 0) return;
     const id = setInterval(() => setCooldown((c) => c - 1), 1000);
     return () => clearInterval(id);
-  }, [cooldown > 0]);
+  }, [cooldown]);
 
   useEffect(() => {
     getInvite(token).then((inv) => {

@@ -11,6 +11,7 @@ const ADVISOR_LINKS = [
   { to: '/meetings',   label: 'Meetings' },
   { to: '/history',    label: 'History' },
   { to: '/settings',   label: 'Settings' },
+  { to: '/error-logs', label: 'Error Logs' },
   { to: '/help',       label: 'Help' },
 ];
 

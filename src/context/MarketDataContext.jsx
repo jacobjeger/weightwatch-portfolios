@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useRef, useCallback, useMemo } from 'react';
 import { isConfigured, getQuote, subscribeToTrades } from '../lib/finnhub';
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ export function MarketDataProvider({ children }) {
   }, [live]);
 
   return (
-    <MarketDataContext.Provider value={{ live, prices, priceVersion, loadTickers, subscribeTickers }}>
+    <MarketDataContext.Provider value={useMemo(() => ({ live, prices, priceVersion, loadTickers, subscribeTickers }), [live, prices, priceVersion, loadTickers, subscribeTickers])}>
       {children}
     </MarketDataContext.Provider>
   );

@@ -17,6 +17,10 @@ import InviteView from './pages/InviteView';
 import ClientPortal from './pages/ClientPortal';
 import Messages from './pages/Messages';
 import MeetingScheduler from './pages/MeetingScheduler';
+import ErrorLogs from './pages/ErrorLogs';
+import { initErrorLogging } from './lib/errorLogger';
+
+initErrorLogging();
 
 export default function App() {
   return (
@@ -50,6 +54,7 @@ export default function App() {
                   <Route path="/portfolio/:id" element={<PortfolioBuilder />} />
                   <Route path="/benchmarks" element={<Benchmarks />} />
                   <Route path="/history" element={<History />} />
+                  <Route path="/error-logs" element={<ErrorLogs />} />
                 </Route>
               </Route>
 

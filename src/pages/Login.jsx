@@ -58,7 +58,7 @@ export default function Login() {
     if (cooldown <= 0) return;
     const id = setInterval(() => setCooldown((c) => c - 1), 1000);
     return () => clearInterval(id);
-  }, [cooldown > 0]);
+  }, [cooldown]);
 
   async function handleSubmit(e) {
     e.preventDefault();
