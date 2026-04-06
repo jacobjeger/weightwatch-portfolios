@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Link2, Unlink, ChevronDown } from 'lucide-react';
+import { RefreshCw, Link2, Unlink, AlertTriangle } from 'lucide-react';
 import {
   isConfigured,
   startOAuthFlow,
@@ -15,9 +15,10 @@ import ConfirmModal from './ConfirmModal';
  * SchwabLinkButton — shows link/unlink UI and manages Schwab account selection.
  *
  * Props:
- *   userId         — current user id
- *   portfolioId    — current portfolio id
- *   schwabAccountHash — currently linked account hash (from portfolio)
+ *   userId              — current user id
+ *   portfolioId         — current portfolio id
+ *   schwabAccountHash   — currently linked account hash (from portfolio)
+ *   allPortfolios       — all user portfolios (for 1:1 enforcement)
  *   onAccountLinked(accountHash)  — called when user picks an account
  *   onAccountUnlinked()           — called when user unlinks
  *   onPositionsLoaded({ totalValue, positions }) — called when positions arrive
@@ -26,6 +27,7 @@ export default function SchwabLinkButton({
   userId,
   portfolioId,
   schwabAccountHash,
+  allPortfolios = [],
   onAccountLinked,
   onAccountUnlinked,
   onPositionsLoaded,
@@ -38,15 +40,22 @@ export default function SchwabLinkButton({
   const [lastSynced, setLastSynced] = useState(null);
   const [error, setError] = useState(null);
 
-  if (!isConfigured()) return null;
+  const configured = isConfigured();
+
+  // Build set of Schwab account hashes already used by OTHER portfolios
+  const usedHashes = new Set(
+    allPortfolios
+      .filter(p => p.id !== portfolioId && p.schwab_account_hash)
+      .map(p => p.schwab_account_hash)
+  );
 
   // Check Schwab link status on mount
   useEffect(() => {
-    if (!userId) return;
+    if (!configured || !userId) return;
     checkSchwabLinked(userId).then(accts => {
       if (accts && accts.length > 0) setAccounts(accts);
     });
-  }, [userId]);
+  }, [configured, userId]);
 
   // Fetch positions when we have a linked account
   const fetchPositions = useCallback(async () => {
@@ -74,6 +83,8 @@ export default function SchwabLinkButton({
     if (schwabAccountHash) fetchPositions();
   }, [schwabAccountHash, fetchPositions]);
 
+  if (!configured) return null;
+
   // Find linked account info
   const linkedAccount = accounts?.find(a => a.hashValue === schwabAccountHash);
   const accountSuffix = linkedAccount?.accountNumber
@@ -82,9 +93,14 @@ export default function SchwabLinkButton({
 
   function handleLinkClick() {
     if (accounts && accounts.length > 0) {
-      // Already authenticated — show account picker
-      if (accounts.length === 1) {
-        onAccountLinked?.(accounts[0].hashValue);
+      // Filter out accounts already linked to other portfolios
+      const available = accounts.filter(a => !usedHashes.has(a.hashValue));
+      if (available.length === 0) {
+        setError('All Schwab accounts are already linked to other portfolios');
+        return;
+      }
+      if (available.length === 1) {
+        onAccountLinked?.(available[0].hashValue);
       } else {
         setShowPicker(true);
       }
@@ -96,8 +112,6 @@ export default function SchwabLinkButton({
 
   async function handleUnlink() {
     try {
-      await unlinkSchwab(userId);
-      setAccounts(null);
       onAccountUnlinked?.();
       setShowUnlink(false);
       setLastSynced(null);
@@ -124,24 +138,46 @@ export default function SchwabLinkButton({
           Link Schwab
         </button>
 
+        {error && (
+          <span className="text-xs text-red-500 ml-2">{error}</span>
+        )}
+
         {/* Account picker modal */}
-        {showPicker && accounts && accounts.length > 1 && (
+        {showPicker && accounts && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="bg-white rounded-lg shadow-xl p-5 max-w-sm w-full mx-4">
               <h3 className="text-sm font-semibold text-slate-900 mb-3">Select Schwab Account</h3>
+              <p className="text-xs text-slate-500 mb-3">Each Schwab account can only be linked to one portfolio.</p>
               <div className="space-y-2">
-                {accounts.map(a => (
-                  <button
-                    key={a.hashValue}
-                    className="w-full text-left px-3 py-2 rounded border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-sm"
-                    onClick={() => {
-                      onAccountLinked?.(a.hashValue);
-                      setShowPicker(false);
-                    }}
-                  >
-                    <span className="font-mono">...{a.accountNumber?.slice(-4)}</span>
-                  </button>
-                ))}
+                {accounts.map(a => {
+                  const inUse = usedHashes.has(a.hashValue);
+                  const linkedTo = inUse
+                    ? allPortfolios.find(p => p.schwab_account_hash === a.hashValue)?.name
+                    : null;
+                  return (
+                    <button
+                      key={a.hashValue}
+                      className={`w-full text-left px-3 py-2 rounded border transition-colors text-sm ${
+                        inUse
+                          ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed'
+                          : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50'
+                      }`}
+                      onClick={() => {
+                        if (inUse) return;
+                        onAccountLinked?.(a.hashValue);
+                        setShowPicker(false);
+                      }}
+                      disabled={inUse}
+                    >
+                      <span className="font-mono">...{a.accountNumber?.slice(-4)}</span>
+                      {inUse && (
+                        <span className="ml-2 text-xs text-slate-400">
+                          linked to {linkedTo || 'another portfolio'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
               <button
                 className="mt-3 text-xs text-slate-400 hover:text-slate-600"
@@ -191,7 +227,7 @@ export default function SchwabLinkButton({
       <ConfirmModal
         open={showUnlink}
         title="Unlink Schwab Account"
-        message="This will remove the Schwab connection. Actual holdings data will no longer be shown. You can re-link at any time."
+        message="This will disconnect the Schwab account from this portfolio. Target allocations will be preserved. You can re-link at any time."
         confirmLabel="Unlink"
         onConfirm={handleUnlink}
         onCancel={() => setShowUnlink(false)}

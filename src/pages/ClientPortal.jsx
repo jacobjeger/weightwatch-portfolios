@@ -40,8 +40,8 @@ export default function ClientPortal() {
     }
   }, [user]);
 
-  const portfolio = portfolios[selectedIdx] || null;
-  const holdings = portfolio?.holdings ?? [];
+  const portfolio = useMemo(() => portfolios[selectedIdx] || null, [portfolios, selectedIdx]);
+  const holdings = useMemo(() => portfolio?.holdings ?? [], [portfolio]);
   const benchmark = portfolio?.primary_benchmark;
   const approval = portfolio ? getLatestApproval(portfolio.id) : null;
 
