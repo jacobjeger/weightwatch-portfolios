@@ -84,7 +84,7 @@ export default function ClientPortal() {
       .then(data => { if (!cancelled && data?.totalValue != null) setSchwabValue(data.totalValue); })
       .catch(() => { if (!cancelled) setSchwabValue(null); });
     return () => { cancelled = true; };
-  }, [user, portfolio, refreshKey]);
+  }, [user, portfolio?.schwab_account_hash, refreshKey]);
 
   // Auto-refresh every 5 minutes during market hours (with cache clear)
   useEffect(() => {
