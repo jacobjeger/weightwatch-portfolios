@@ -64,6 +64,7 @@ export default function PortfolioBuilder() {
   const [schwabAccountHash, setSchwabAccountHash] = useState(null);
   const [schwabPositions, setSchwabPositions]     = useState(null);  // { totalValue, positions }
   const hasSchwab = !!schwabAccountHash && !!schwabPositions;
+  const [allPortfolios, setAllPortfolios]         = useState([]);
 
   // Collapsible section toggles
   const [holdingsOpen, setHoldingsOpen]     = useState(true);
@@ -87,6 +88,7 @@ export default function PortfolioBuilder() {
   useEffect(() => {
     if (!isNew && user) {
       const all = getPortfolios(user.id);
+      setAllPortfolios(all);
       const p = all.find((x) => x.id === id);
       if (p) {
         setName(p.name);
@@ -590,8 +592,40 @@ export default function PortfolioBuilder() {
               userId={user?.id}
               portfolioId={portfolioId}
               schwabAccountHash={schwabAccountHash}
-              onAccountLinked={(hash) => { setSchwabAccountHash(hash); }}
-              onAccountUnlinked={() => { setSchwabAccountHash(null); setSchwabPositions(null); }}
+              allPortfolios={allPortfolios}
+              onAccountLinked={(hash) => {
+                setSchwabAccountHash(hash);
+                // Auto-save the link immediately so it persists
+                if (portfolioId && user) {
+                  const p = {
+                    id: portfolioId, owner: user.id, name: name.trim(),
+                    description: description.trim(), primary_benchmark: benchmark || null,
+                    secondary_benchmarks: [], holdings, drip_enabled: drip,
+                    cash_percent: cashPercent, starting_value: startingValue,
+                    created_at: createdAt ?? new Date().toISOString(),
+                    weight_history: weightHistory, schwab_account_hash: hash,
+                  };
+                  savePortfolio(p);
+                  setAllPortfolios(prev => prev.map(x => x.id === portfolioId ? { ...x, schwab_account_hash: hash } : x));
+                }
+              }}
+              onAccountUnlinked={() => {
+                setSchwabAccountHash(null);
+                setSchwabPositions(null);
+                // Auto-save the unlink immediately
+                if (portfolioId && user) {
+                  const p = {
+                    id: portfolioId, owner: user.id, name: name.trim(),
+                    description: description.trim(), primary_benchmark: benchmark || null,
+                    secondary_benchmarks: [], holdings, drip_enabled: drip,
+                    cash_percent: cashPercent, starting_value: startingValue,
+                    created_at: createdAt ?? new Date().toISOString(),
+                    weight_history: weightHistory, schwab_account_hash: null,
+                  };
+                  savePortfolio(p);
+                  setAllPortfolios(prev => prev.map(x => x.id === portfolioId ? { ...x, schwab_account_hash: null } : x));
+                }
+              }}
               onPositionsLoaded={(data) => { setSchwabPositions(data); }}
             />
           )}
