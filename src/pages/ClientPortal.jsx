@@ -338,7 +338,7 @@ export default function ClientPortal() {
               </thead>
               <tbody>
                 {holdings.map((h) => {
-                  const sp = hasSchwab ? schwabData.positions.find(p => p.ticker === h.ticker) : null;
+                  const sp = hasSchwab ? schwabData?.positions?.find(p => p.ticker === h.ticker) : null;
                   const drift = sp ? sp.actualWeight - h.weight_percent : null;
                   const driftColor = drift != null
                     ? (Math.abs(drift) <= 1 ? 'text-green-600' : Math.abs(drift) <= 3 ? 'text-amber-500' : 'text-red-500')
@@ -385,7 +385,7 @@ export default function ClientPortal() {
             </table>
           </div>
           {/* Unmodeled Schwab positions */}
-          {hasSchwab && (() => {
+          {hasSchwab && schwabData?.positions && (() => {
             const modelTickers = new Set(holdings.map(h => h.ticker));
             const unmodeled = schwabData.positions.filter(p => !modelTickers.has(p.ticker) && p.marketValue > 0);
             if (!unmodeled.length) return null;

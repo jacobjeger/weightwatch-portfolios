@@ -7,6 +7,12 @@ const PALETTE = [
   '#14b8a6', '#a855f7', '#fb923c', '#22c55e', '#e11d48',
 ];
 
+const PALETTE_ACTUAL = [
+  '#10b981', '#059669', '#34d399', '#6ee7b7', '#047857',
+  '#065f46', '#14b8a6', '#0d9488', '#2dd4bf', '#0f766e',
+  '#115e59', '#a7f3d0', '#6ee7b7', '#34d399', '#10b981',
+];
+
 const RADIAN = Math.PI / 180;
 
 function PctLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) {
@@ -173,9 +179,3 @@ export default function AllocationPieChart({ holdings, schwabPositions }) {
     </div>
   );
 }
-
-const PALETTE_ACTUAL = [
-  '#10b981', '#059669', '#34d399', '#6ee7b7', '#047857',
-  '#065f46', '#14b8a6', '#0d9488', '#2dd4bf', '#0f766e',
-  '#115e59', '#a7f3d0', '#6ee7b7', '#34d399', '#10b981',
-];

@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { logReactError } from '../lib/errorLogger';
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -12,6 +13,7 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('[ErrorBoundary]', error, errorInfo);
+    logReactError(error, errorInfo);
   }
 
   render() {
@@ -21,7 +23,7 @@ export default class ErrorBoundary extends Component {
       <div className="flex flex-col items-center justify-center h-64 gap-4 px-4">
         <h2 className="text-lg font-semibold text-slate-700">Something went wrong</h2>
         <p className="text-sm text-slate-500 text-center max-w-md">
-          An unexpected error occurred. Try reloading the page.
+          An unexpected error occurred. The error has been automatically reported.
         </p>
         <details className="text-xs text-slate-400 max-w-md">
           <summary className="cursor-pointer hover:text-slate-600">Error details</summary>
