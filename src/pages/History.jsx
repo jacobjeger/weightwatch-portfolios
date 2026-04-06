@@ -15,6 +15,7 @@ const ACTION_COLORS = {
 const TABS = ['Activity Log', 'Performance Snapshots', 'Compare Snapshots'];
 
 const TIMEFRAME_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252 };
+const LABEL_MAP = { '1M': '1M', '3M': '3M', '6M': '6M', '1Y': '1Y' };
 
 export default function History() {
   const { user } = useAuth();
@@ -52,8 +53,6 @@ export default function History() {
     });
     return () => { cancelled = true; };
   }, [portfolios]);
-
-  const LABEL_MAP = { '1M': '1M', '3M': '3M', '6M': '6M', '1Y': '1Y' };
 
   // Generate snapshots — real market data only
   const snapshots = useMemo(() => {

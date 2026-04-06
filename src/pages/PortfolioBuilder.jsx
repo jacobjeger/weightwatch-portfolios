@@ -503,7 +503,7 @@ export default function PortfolioBuilder() {
     .sort((a, b) => b.weight_percent - a.weight_percent)
     .slice(0, 5)
     .map((h) => {
-      const sp = hasSchwab ? schwabPositions.positions.find(p => p.ticker === h.ticker) : null;
+      const sp = hasSchwab ? schwabPositions?.positions?.find(p => p.ticker === h.ticker) : null;
       const realQuote = live ? prices[h.ticker] : null;
       return {
         ...h,
@@ -518,7 +518,7 @@ export default function PortfolioBuilder() {
   const portfolioReturn1D = (() => {
     if (hasSchwab && holdings.length > 0) {
       // Sum Schwab day P&L across all positions relative to total value
-      const totalDayPL = schwabPositions.positions.reduce((sum, p) => sum + (p.dayPL || 0), 0);
+      const totalDayPL = schwabPositions?.positions?.reduce((sum, p) => sum + (p.dayPL || 0), 0);
       const totalVal = schwabPositions.totalValue;
       return totalVal > 0 ? (totalDayPL / totalVal) * 100 : 0;
     }
@@ -685,7 +685,7 @@ export default function PortfolioBuilder() {
                 <div className="rounded-lg bg-white p-3 text-center border border-emerald-100">
                   <div className="text-xs text-slate-500 mb-1">Positions</div>
                   <div className="text-lg font-bold text-slate-700">
-                    {schwabPositions.positions.length}
+                    {schwabPositions?.positions?.length}
                   </div>
                   <div className="text-xs text-slate-400 mt-0.5">
                     {holdings.length} in model
@@ -695,7 +695,7 @@ export default function PortfolioBuilder() {
                   <div className="text-xs text-slate-500 mb-1">Max Drift</div>
                   {(() => {
                     const drifts = holdings.map(h => {
-                      const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                      const sp = schwabPositions?.positions?.find(p => p.ticker === h.ticker);
                       return sp ? Math.abs(sp.actualWeight - h.weight_percent) : 0;
                     });
                     const maxDrift = Math.max(0, ...drifts);
@@ -720,7 +720,7 @@ export default function PortfolioBuilder() {
                       .sort((a, b) => b.weight_percent - a.weight_percent)
                       .slice(0, 10)
                       .map(h => {
-                        const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                        const sp = schwabPositions?.positions?.find(p => p.ticker === h.ticker);
                         const actual = sp?.actualWeight ?? 0;
                         const target = h.weight_percent;
                         const drift = actual - target;
@@ -1005,7 +1005,7 @@ export default function PortfolioBuilder() {
                           <td className="td text-right hidden sm:table-cell">
                             {(() => {
                               if (hasSchwab) {
-                                const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                                const sp = schwabPositions?.positions?.find(p => p.ticker === h.ticker);
                                 if (!sp) return <span className="text-slate-300 text-xs">—</span>;
                                 const diff = sp.actualWeight - h.weight_percent;
                                 return (
@@ -1036,7 +1036,7 @@ export default function PortfolioBuilder() {
                           <td className="td text-right hidden sm:table-cell">
                             {(() => {
                               if (hasSchwab) {
-                                const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                                const sp = schwabPositions?.positions?.find(p => p.ticker === h.ticker);
                                 if (!sp) return <span className="text-slate-300 text-xs">—</span>;
                                 return (
                                   <span className="font-mono text-sm text-emerald-700">
@@ -1056,7 +1056,7 @@ export default function PortfolioBuilder() {
                           </td>
                           {/* Drift from target — only when Schwab linked */}
                           {hasSchwab && (() => {
-                            const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                            const sp = schwabPositions?.positions?.find(p => p.ticker === h.ticker);
                             if (!sp) return <td className="td text-right text-slate-300 text-xs hidden sm:table-cell">—</td>;
                             const drift = sp.actualWeight - h.weight_percent;
                             const absDrift = Math.abs(drift);
@@ -1105,7 +1105,7 @@ export default function PortfolioBuilder() {
                 {/* Unmodeled Schwab positions — holdings in Schwab but not in the target model */}
                 {hasSchwab && (() => {
                   const modelTickers = new Set(holdings.map(h => h.ticker));
-                  const unmodeled = schwabPositions.positions.filter(
+                  const unmodeled = schwabPositions?.positions?.filter(
                     p => !modelTickers.has(p.ticker) && p.marketValue > 0
                   );
                   if (!unmodeled.length) return null;

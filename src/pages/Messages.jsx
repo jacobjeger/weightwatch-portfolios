@@ -74,7 +74,7 @@ export default function Messages() {
     const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
     const unread = msgs.filter((m) => m.sender_id !== user?.id).length;
     return { portfolio: p, lastMsg, messageCount: msgs.length, unread };
-  }), [portfolios, messages.length]);
+  }), [portfolios, messages]);
 
   const selectedPortfolio = portfolios.find((p) => p.id === selectedPortfolioId);
 
