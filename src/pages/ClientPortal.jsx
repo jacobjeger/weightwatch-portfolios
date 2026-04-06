@@ -43,7 +43,8 @@ export default function ClientPortal() {
   const portfolio = useMemo(() => portfolios[selectedIdx] || null, [portfolios, selectedIdx]);
   const holdings = useMemo(() => portfolio?.holdings ?? [], [portfolio]);
   const benchmark = portfolio?.primary_benchmark;
-  const approval = portfolio ? getLatestApproval(portfolio.id) : null;
+  const approval = useMemo(() => portfolio ? getLatestApproval(portfolio.id) : null, [portfolio]);
+  const userName = useMemo(() => user ? (getSettings(user.id).display_name || '') : '', [user]);
 
   // Fetch real performance returns (same source as advisor)
   useEffect(() => {
@@ -415,7 +416,7 @@ export default function ClientPortal() {
             portfolioId={portfolio.id}
             userId={user.id}
             userEmail={user.email}
-            userName={getSettings(user.id).display_name || ''}
+            userName={userName}
             userRole="client"
             showApprovalActions={true}
           />

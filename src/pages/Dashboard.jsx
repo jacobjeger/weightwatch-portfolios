@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, ExternalLink, RefreshCw, BarChart3, Search, Star } from 'lucide-react';
 import { useAuth, getPortfolios, savePortfolio, deletePortfolios, logActivity, getSettings, saveSettings } from '../context/AuthContext';
@@ -109,11 +109,9 @@ export default function Dashboard() {
   }, [contextMenu]);
 
   // Favorites
-  const favoriteIds = new Set(
+  const favoriteIds = useMemo(() => new Set(
     (user ? getSettings(user.id) : {}).favorite_portfolio_ids ?? []
-  );
-  // Force re-read when favVersion changes
-  void favVersion;
+  ), [user, favVersion]);
 
   function toggleFavorite(portfolioId) {
     const current = getSettings(user.id).favorite_portfolio_ids ?? [];

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { sanitizePortfolio, sanitizeMessage, sanitizeApproval, sanitizeInvite } from '../lib/sanitize';
 
@@ -374,8 +374,12 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(LS.session);
   }
 
+  const contextValue = useMemo(() => ({
+    user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, deleteAccount, isMockMode: !isSupabaseConfigured,
+  }), [user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, deleteAccount]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, deleteAccount, isMockMode: !isSupabaseConfigured }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
