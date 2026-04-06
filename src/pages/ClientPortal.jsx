@@ -21,7 +21,8 @@ export default function ClientPortal() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [realReturns, setRealReturns] = useState(null);
   const [liveQuotes, setLiveQuotes] = useState({});
-  const [schwabValue, setSchwabValue] = useState(null);
+  const [schwabData, setSchwabData] = useState(null);  // { totalValue, positions }
+  const schwabValue = schwabData?.totalValue ?? null;
 
   const handleRefresh = useCallback(async () => {
     if (isSupabaseConfigured && user) {
@@ -76,15 +77,15 @@ export default function ClientPortal() {
   // Fetch Schwab account value if portfolio is linked
   useEffect(() => {
     if (!isSchwabConfigured() || !user || !portfolio?.schwab_account_hash) {
-      setSchwabValue(null);
+      setSchwabData(null);
       return;
     }
     let cancelled = false;
     getSchwabPositions(user.id, portfolio.schwab_account_hash)
-      .then(data => { if (!cancelled && data?.totalValue != null) setSchwabValue(data.totalValue); })
-      .catch(() => { if (!cancelled) setSchwabValue(null); });
+      .then(data => { if (!cancelled && data) setSchwabData(data); })
+      .catch(() => { if (!cancelled) setSchwabData(null); });
     return () => { cancelled = true; };
-  }, [user, portfolio, refreshKey]);
+  }, [user, portfolio?.schwab_account_hash, refreshKey]);
 
   // Auto-refresh every 5 minutes during market hours (with cache clear)
   useEffect(() => {
@@ -222,7 +223,7 @@ export default function ClientPortal() {
         {/* Allocation wheel — top of client portal */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">Allocation Wheel</h2>
-          <AllocationPieChart holdings={holdings} />
+          <AllocationPieChart holdings={holdings} schwabPositions={hasSchwab ? schwabData : null} />
           <div className="mt-4 space-y-2">
             {['Core', 'Tilt', 'Satellite'].map((cat) => {
               const COLORS = { Core: 'bg-blue-500', Tilt: 'bg-violet-500', Satellite: 'bg-amber-500' };
@@ -318,7 +319,10 @@ export default function ClientPortal() {
 
         {/* Holdings table */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Your Holdings</h2>
+          <h2 className="text-sm font-semibold text-slate-700 mb-4">
+            Your Holdings
+            {hasSchwab && <span className="ml-2 text-xs text-emerald-500 font-normal">● Schwab Live Data</span>}
+          </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -326,35 +330,83 @@ export default function ClientPortal() {
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Ticker</th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Name</th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Role</th>
-                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2">Weight</th>
+                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Target %</th>
+                  {hasSchwab && <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Actual %</th>}
+                  {hasSchwab && <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2 pr-4">Value</th>}
+                  {hasSchwab && <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide pb-2">Drift</th>}
                 </tr>
               </thead>
               <tbody>
-                {holdings.map((h) => (
-                  <tr key={h.ticker} className="border-t border-slate-100">
-                    <td
-                      className="py-2 pr-4 font-mono font-semibold text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
-                      onClick={() => setSummaryTicker(h.ticker)}
-                      title="Click for ticker summary"
-                    >
-                      {h.ticker}
-                    </td>
-                    <td className="py-2 pr-4 text-slate-600">{h.name}</td>
-                    <td className="py-2 pr-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        (h.category || 'Core') === 'Core' ? 'bg-blue-50 text-blue-700'
-                          : (h.category || 'Core') === 'Tilt' ? 'bg-violet-50 text-violet-700'
-                          : 'bg-amber-50 text-amber-700'
-                      }`}>
-                        {h.category || 'Core'}
-                      </span>
-                    </td>
-                    <td className="py-2 text-right font-mono text-slate-700">{(h.weight_percent || 0).toFixed(1)}%</td>
-                  </tr>
-                ))}
+                {holdings.map((h) => {
+                  const sp = hasSchwab ? schwabData.positions.find(p => p.ticker === h.ticker) : null;
+                  const drift = sp ? sp.actualWeight - h.weight_percent : null;
+                  const driftColor = drift != null
+                    ? (Math.abs(drift) <= 1 ? 'text-green-600' : Math.abs(drift) <= 3 ? 'text-amber-500' : 'text-red-500')
+                    : 'text-slate-300';
+                  return (
+                    <tr key={h.ticker} className="border-t border-slate-100">
+                      <td
+                        className="py-2 pr-4 font-mono font-semibold text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
+                        onClick={() => setSummaryTicker(h.ticker)}
+                        title="Click for ticker summary"
+                      >
+                        {h.ticker}
+                      </td>
+                      <td className="py-2 pr-4 text-slate-600">{h.name}</td>
+                      <td className="py-2 pr-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          (h.category || 'Core') === 'Core' ? 'bg-blue-50 text-blue-700'
+                            : (h.category || 'Core') === 'Tilt' ? 'bg-violet-50 text-violet-700'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {h.category || 'Core'}
+                        </span>
+                      </td>
+                      <td className="py-2 text-right font-mono text-slate-700 pr-4">{(h.weight_percent || 0).toFixed(1)}%</td>
+                      {hasSchwab && (
+                        <td className="py-2 text-right font-mono text-emerald-700 pr-4">
+                          {sp ? `${sp.actualWeight.toFixed(1)}%` : '—'}
+                        </td>
+                      )}
+                      {hasSchwab && (
+                        <td className="py-2 text-right font-mono text-emerald-700 pr-4">
+                          {sp ? `$${Math.round(sp.marketValue).toLocaleString()}` : '—'}
+                        </td>
+                      )}
+                      {hasSchwab && (
+                        <td className={`py-2 text-right font-mono font-semibold ${driftColor}`}>
+                          {drift != null ? `${drift > 0 ? '+' : ''}${drift.toFixed(1)}%` : '—'}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          {/* Unmodeled Schwab positions */}
+          {hasSchwab && (() => {
+            const modelTickers = new Set(holdings.map(h => h.ticker));
+            const unmodeled = schwabData.positions.filter(p => !modelTickers.has(p.ticker) && p.marketValue > 0);
+            if (!unmodeled.length) return null;
+            return (
+              <div className="mt-3 p-3 bg-amber-50/60 border border-amber-200 rounded-lg">
+                <h4 className="text-xs font-semibold text-amber-700 mb-2">
+                  Unmodeled Positions ({unmodeled.length})
+                  <span className="ml-1 font-normal text-amber-500">in Schwab but not in target model</span>
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {unmodeled.map(p => (
+                    <span key={p.ticker} className="inline-flex items-center gap-1 text-xs bg-white px-2 py-1 rounded border border-amber-200 font-mono text-amber-800">
+                      {p.ticker}
+                      <span className="text-amber-500">{p.actualWeight.toFixed(1)}%</span>
+                      <span className="text-amber-400">${Math.round(p.marketValue).toLocaleString()}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Messages with advisor + approve/comment */}

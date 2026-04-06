@@ -496,27 +496,38 @@ export default function PortfolioBuilder() {
   }
 
   // ── Live snapshot daily moves ────────────────────────────────────────────────
-  // Uses real Finnhub prices when configured
+  // Uses Schwab day P&L when linked, otherwise Finnhub prices
   const topHoldings = [...holdings]
     .sort((a, b) => b.weight_percent - a.weight_percent)
     .slice(0, 5)
     .map((h) => {
+      const sp = hasSchwab ? schwabPositions.positions.find(p => p.ticker === h.ticker) : null;
       const realQuote = live ? prices[h.ticker] : null;
       return {
         ...h,
-        displayPrice:  realQuote?.price       ?? h.last_price,
-        dailyChange:   realQuote?.changePercent ?? null,
-        isLive:        !!realQuote,
+        displayPrice:  sp ? (sp.marketValue / (sp.quantity || 1)) : (realQuote?.price ?? h.last_price),
+        dailyChange:   sp?.dayPLPercent != null ? sp.dayPLPercent : (realQuote?.changePercent ?? null),
+        marketValue:   sp?.marketValue ?? null,
+        isLive:        !!sp || !!realQuote,
       };
     });
 
-  // Portfolio-level 1D return
-  const portfolioReturn1D = live && holdings.length > 0
-    ? holdings.reduce((sum, h) => {
+  // Portfolio-level 1D return — use Schwab day P&L if linked
+  const portfolioReturn1D = (() => {
+    if (hasSchwab && holdings.length > 0) {
+      // Sum Schwab day P&L across all positions relative to total value
+      const totalDayPL = schwabPositions.positions.reduce((sum, p) => sum + (p.dayPL || 0), 0);
+      const totalVal = schwabPositions.totalValue;
+      return totalVal > 0 ? (totalDayPL / totalVal) * 100 : 0;
+    }
+    if (live && holdings.length > 0) {
+      return holdings.reduce((sum, h) => {
         const cp = prices[h.ticker]?.changePercent;
         return sum + (cp != null ? cp * (h.weight_percent / 100) : 0);
-      }, 0)
-    : null;
+      }, 0);
+    }
+    return null;
+  })();
 
   const benchmarkReturn1D = benchmark
     ? (live && prices[benchmark]?.changePercent != null
@@ -881,11 +892,9 @@ export default function PortfolioBuilder() {
                         <th className="th hidden lg:table-cell">Role</th>
                         <th className="th text-right hidden sm:table-cell">Last Price</th>
                         <th className="th text-right">Target %</th>
-                        <th className="th text-right hidden sm:table-cell">Current %</th>
-                        <th className="th text-right hidden sm:table-cell">Est. Value</th>
-                        {hasSchwab && <th className="th text-right hidden md:table-cell">Actual %</th>}
-                        {hasSchwab && <th className="th text-right hidden md:table-cell">Actual Value</th>}
-                        {hasSchwab && <th className="th text-right hidden md:table-cell">Drift</th>}
+                        <th className="th text-right hidden sm:table-cell">{hasSchwab ? 'Actual %' : 'Current %'}</th>
+                        <th className="th text-right hidden sm:table-cell">{hasSchwab ? 'Market Value' : 'Est. Value'}</th>
+                        {hasSchwab && <th className="th text-right hidden sm:table-cell">Drift</th>}
                         <th className="th w-10" />
                       </tr>
                     </thead>
@@ -958,27 +967,49 @@ export default function PortfolioBuilder() {
                               <p className="text-xs text-red-500 mt-0.5 text-right">{weightErrors[h.ticker]}</p>
                             )}
                           </td>
-                          {/* Current (drifted) weight — read-only, color-coded vs target */}
+                          {/* Current/Actual weight — Schwab actual when linked, otherwise price-drift estimate */}
                           <td className="td text-right hidden sm:table-cell">
                             {(() => {
+                              if (hasSchwab) {
+                                const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                                if (!sp) return <span className="text-slate-300 text-xs">—</span>;
+                                const diff = sp.actualWeight - h.weight_percent;
+                                return (
+                                  <span className={`font-mono text-sm ${
+                                    Math.abs(diff) < 0.5 ? 'text-slate-500'
+                                      : diff > 0 ? 'text-green-600 font-semibold'
+                                      : 'text-orange-500 font-semibold'
+                                  }`}>
+                                    {sp.actualWeight.toFixed(2)}%
+                                  </span>
+                                );
+                              }
                               const drifted = currentWeights[h.ticker]?.driftedWeight;
                               if (drifted == null) return <span className="text-slate-300 text-xs">—</span>;
                               const diff = drifted - h.weight_percent;
                               return (
                                 <span className={`font-mono text-sm ${
-                                  Math.abs(diff) < 0.5
-                                    ? 'text-slate-500'
-                                    : diff > 0
-                                      ? 'text-green-600 font-semibold'
-                                      : 'text-orange-500 font-semibold'
+                                  Math.abs(diff) < 0.5 ? 'text-slate-500'
+                                    : diff > 0 ? 'text-green-600 font-semibold'
+                                    : 'text-orange-500 font-semibold'
                                 }`}>
                                   {drifted.toFixed(2)}%
                                 </span>
                               );
                             })()}
                           </td>
+                          {/* Market Value — Schwab real value when linked, otherwise estimated */}
                           <td className="td text-right hidden sm:table-cell">
                             {(() => {
+                              if (hasSchwab) {
+                                const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
+                                if (!sp) return <span className="text-slate-300 text-xs">—</span>;
+                                return (
+                                  <span className="font-mono text-sm text-emerald-700">
+                                    ${Math.round(sp.marketValue).toLocaleString('en-US')}
+                                  </span>
+                                );
+                              }
                               const drifted = currentWeights[h.ticker]?.driftedWeight;
                               if (drifted == null) return <span className="text-slate-300 text-xs">--</span>;
                               const dollarValue = currentPortfolioValue * (drifted / 100);
@@ -989,30 +1020,17 @@ export default function PortfolioBuilder() {
                               );
                             })()}
                           </td>
+                          {/* Drift from target — only when Schwab linked */}
                           {hasSchwab && (() => {
                             const sp = schwabPositions.positions.find(p => p.ticker === h.ticker);
-                            if (!sp) return (
-                              <>
-                                <td className="td text-right text-slate-300 text-xs hidden md:table-cell">—</td>
-                                <td className="td text-right text-slate-300 text-xs hidden md:table-cell">—</td>
-                                <td className="td text-right text-slate-300 text-xs hidden md:table-cell">—</td>
-                              </>
-                            );
+                            if (!sp) return <td className="td text-right text-slate-300 text-xs hidden sm:table-cell">—</td>;
                             const drift = sp.actualWeight - h.weight_percent;
                             const absDrift = Math.abs(drift);
                             const driftColor = absDrift <= 1 ? 'text-green-600' : absDrift <= 3 ? 'text-amber-500' : 'text-red-500';
                             return (
-                              <>
-                                <td className="td text-right font-mono text-sm text-slate-700 hidden md:table-cell">
-                                  {sp.actualWeight.toFixed(2)}%
-                                </td>
-                                <td className="td text-right font-mono text-sm text-slate-700 hidden md:table-cell">
-                                  ${Math.round(sp.marketValue).toLocaleString('en-US')}
-                                </td>
-                                <td className={`td text-right font-mono text-sm font-semibold hidden md:table-cell ${driftColor}`}>
-                                  {drift > 0 ? '+' : ''}{drift.toFixed(2)}%
-                                </td>
-                              </>
+                              <td className={`td text-right font-mono text-sm font-semibold hidden sm:table-cell ${driftColor}`}>
+                                {drift > 0 ? '+' : ''}{drift.toFixed(2)}%
+                              </td>
                             );
                           })()}
                           <td className="td">
@@ -1039,17 +1057,11 @@ export default function PortfolioBuilder() {
                         }`}>
                           {totalWeight.toFixed(2)}%
                         </td>
-                        <td className="hidden sm:table-cell" />{/* Current % — no total needed */}
-                        <td className="td text-right font-semibold font-mono text-sm text-slate-700 hidden sm:table-cell">
+                        <td className="hidden sm:table-cell" />{/* Current/Actual % — no total needed */}
+                        <td className={`td text-right font-semibold font-mono text-sm hidden sm:table-cell ${hasSchwab ? 'text-emerald-700' : 'text-slate-700'}`}>
                           ${Math.round(currentPortfolioValue).toLocaleString('en-US')}
                         </td>
-                        {hasSchwab && <td className="td text-right hidden md:table-cell" />}
-                        {hasSchwab && (
-                          <td className="td text-right font-semibold font-mono text-sm text-emerald-700 hidden md:table-cell">
-                            ${Math.round(schwabPositions.totalValue).toLocaleString('en-US')}
-                          </td>
-                        )}
-                        {hasSchwab && <td className="td hidden md:table-cell" />}
+                        {hasSchwab && <td className="td hidden sm:table-cell" />}{/* Drift — no total */}
                         <td />{/* Delete button column */}
                       </tr>
                     </tfoot>
@@ -1260,7 +1272,7 @@ export default function PortfolioBuilder() {
                         </button>
                       </div>
                     )}
-                    <AllocationPieChart holdings={displayHoldings} />
+                    <AllocationPieChart holdings={displayHoldings} schwabPositions={hasSchwab ? schwabPositions : null} />
                   </div>
                 );
               })()}
