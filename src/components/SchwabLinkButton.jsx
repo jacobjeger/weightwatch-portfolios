@@ -40,7 +40,7 @@ export default function SchwabLinkButton({
   const [lastSynced, setLastSynced] = useState(null);
   const [error, setError] = useState(null);
 
-  if (!isConfigured()) return null;
+  const configured = isConfigured();
 
   // Build set of Schwab account hashes already used by OTHER portfolios
   const usedHashes = new Set(
@@ -51,11 +51,11 @@ export default function SchwabLinkButton({
 
   // Check Schwab link status on mount
   useEffect(() => {
-    if (!userId) return;
+    if (!configured || !userId) return;
     checkSchwabLinked(userId).then(accts => {
       if (accts && accts.length > 0) setAccounts(accts);
     });
-  }, [userId]);
+  }, [configured, userId]);
 
   // Fetch positions when we have a linked account
   const fetchPositions = useCallback(async () => {
@@ -82,6 +82,8 @@ export default function SchwabLinkButton({
   useEffect(() => {
     if (schwabAccountHash) fetchPositions();
   }, [schwabAccountHash, fetchPositions]);
+
+  if (!configured) return null;
 
   // Find linked account info
   const linkedAccount = accounts?.find(a => a.hashValue === schwabAccountHash);
