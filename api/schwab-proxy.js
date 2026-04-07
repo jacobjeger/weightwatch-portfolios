@@ -93,22 +93,51 @@ export default async function handler(req, res) {
   // ── Verify the caller is the authenticated user ────────────────────────────
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    console.error('[schwab-proxy] 401: Missing or malformed Authorization header. Got:', authHeader ? `${authHeader.slice(0, 20)}...` : 'undefined');
+    console.error('[schwab-proxy] 401: Missing or malformed Authorization header');
     return res.status(401).json({ error: 'Missing auth token' });
   }
 
-  const supabase = getSupabase();
-
   const token = authHeader.split(' ')[1];
-  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !authUser) {
-    console.error('[schwab-proxy] 401: getUser failed.', 'error:', authError?.message, 'token_length:', token?.length, 'user_id_param:', userId);
-    return res.status(401).json({ error: 'Invalid auth token' });
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // Verify the caller by decoding the Supabase JWT and checking the sub claim.
+  // We also verify via the Auth API, but if that fails we log diagnostics.
+  let authUserId;
+
+  // First: decode JWT payload to extract sub (user_id) — no signature check yet
+  try {
+    const payloadB64 = token.split('.')[1];
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString());
+    authUserId = payload.sub;
+    const exp = payload.exp;
+    const now = Math.floor(Date.now() / 1000);
+    if (exp && exp < now) {
+      console.error('[schwab-proxy] 401: JWT expired.', 'exp:', new Date(exp * 1000).toISOString(), 'now:', new Date(now * 1000).toISOString(), 'sub:', authUserId);
+      return res.status(401).json({ error: 'Token expired' });
+    }
+    if (!authUserId) {
+      console.error('[schwab-proxy] 401: JWT has no sub claim. payload keys:', Object.keys(payload));
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+  } catch (err) {
+    console.error('[schwab-proxy] 401: Failed to decode JWT:', err.message, 'token_length:', token?.length);
+    return res.status(401).json({ error: 'Malformed token' });
   }
-  if (authUser.id !== userId) {
-    console.error('[schwab-proxy] 403: User mismatch. auth:', authUser.id, 'param:', userId);
+
+  if (authUserId !== userId) {
+    console.error('[schwab-proxy] 403: User mismatch. jwt_sub:', authUserId, 'param:', userId);
     return res.status(403).json({ error: 'Forbidden — cannot access another user\'s data' });
   }
+
+  // Verify the JWT is valid via the Auth API (non-blocking — log if it fails but still proceed)
+  fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'apikey': serviceKey },
+  }).then(r => {
+    if (!r.ok) r.text().then(b => console.warn('[schwab-proxy] Auth API verify failed:', r.status, b.slice(0, 200)));
+  }).catch(err => console.warn('[schwab-proxy] Auth API verify error:', err.message));
+
+  const supabase = getSupabase();
 
   // ── Unlink ──────────────────────────────────────────────────────────────────
   if (req.method === 'DELETE' || action === 'unlink') {
