@@ -78,6 +78,13 @@ async function getAccessToken(supabase, userId) {
 }
 
 export default async function handler(req, res) {
+  // CORS headers
+  const allowedOrigin = process.env.CORS_ORIGIN || 'https://www.ajawealthmanagement.com';
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   const { action, user_id: userId, account } = req.query;
 
   if (!action || !userId) {
@@ -152,9 +159,14 @@ export default async function handler(req, res) {
         { headers }
       );
       if (!resp.ok) {
+        const errText = await resp.text().catch(() => '');
+        console.error('[schwab-proxy] Positions API error:', resp.status, errText.slice(0, 500));
         return res.status(resp.status).json({ error: `Schwab API error: ${resp.status}` });
       }
       const data = await resp.json();
+
+      // Log the raw response shape for debugging
+      console.info('[schwab-proxy] Positions response keys:', Object.keys(data));
 
       // Normalize into a simpler format for the client
       const acct = data.securitiesAccount || data;

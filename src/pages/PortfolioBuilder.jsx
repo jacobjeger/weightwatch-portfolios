@@ -13,7 +13,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import MessagePanel from '../components/MessagePanel';
 import TickerSummaryModal from '../components/TickerSummaryModal';
 import SchwabLinkButton from '../components/SchwabLinkButton';
-import { isConfigured as isSchwabConfigured } from '../lib/schwab';
+import { isConfigured as isSchwabConfigured, getSchwabPositions } from '../lib/schwab';
 import { useToast } from '../context/ToastContext';
 import { useMarketData } from '../context/MarketDataContext';
 
@@ -63,6 +63,7 @@ export default function PortfolioBuilder() {
   // Schwab brokerage integration state
   const [schwabAccountHash, setSchwabAccountHash] = useState(null);
   const [schwabPositions, setSchwabPositions]     = useState(null);  // { totalValue, positions }
+  const [schwabError, setSchwabError]             = useState(null);
   const hasSchwab = !!schwabAccountHash && !!schwabPositions;
   const [allPortfolios, setAllPortfolios]         = useState([]);
 
@@ -105,6 +106,37 @@ export default function PortfolioBuilder() {
       }
     }
   }, [id, user, isNew]);
+
+  // Fetch Schwab positions directly when account is linked
+  useEffect(() => {
+    if (!isSchwabConfigured() || !user || !schwabAccountHash) {
+      setSchwabPositions(null);
+      setSchwabError(null);
+      return;
+    }
+    let cancelled = false;
+    setSchwabError(null);
+    getSchwabPositions(user.id, schwabAccountHash)
+      .then(data => {
+        if (cancelled) return;
+        if (data) {
+          setSchwabPositions(data);
+          setSchwabError(null);
+        } else {
+          setSchwabError('No position data returned from Schwab');
+        }
+      })
+      .catch(err => {
+        console.error('[Schwab] Position fetch failed:', err.message);
+        if (!cancelled) {
+          setSchwabPositions(null);
+          setSchwabError(err.message === 'reauth_required'
+            ? 'Schwab session expired — please re-link your account'
+            : `Failed to fetch Schwab data: ${err.message}`);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [user, schwabAccountHash]);
 
   // Look up which client is linked to this portfolio (for advisor display)
   useEffect(() => {
@@ -660,6 +692,14 @@ export default function PortfolioBuilder() {
       <div className="space-y-4 sm:space-y-6">
         {/* Main column — full width so holdings table is never squeezed */}
         <div className="space-y-4 sm:space-y-6">
+
+          {/* Schwab error banner */}
+          {schwabAccountHash && schwabError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>{schwabError}</span>
+            </div>
+          )}
 
           {/* Schwab Account Summary — real brokerage data */}
           {hasSchwab && (
