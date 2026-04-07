@@ -18,6 +18,7 @@ import ClientPortal from './pages/ClientPortal';
 import Messages from './pages/Messages';
 import MeetingScheduler from './pages/MeetingScheduler';
 import ErrorLogs from './pages/ErrorLogs';
+import DevDashboard from './pages/DevDashboard';
 import { initErrorLogging } from './lib/errorLogger';
 
 initErrorLogging();
@@ -38,6 +39,9 @@ export default function App() {
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/share/:token" element={<ShareView />} />
               <Route path="/invite/:token" element={<InviteView />} />
+
+              {/* Dev dashboard — no auth required */}
+              <Route path="/dev" element={<DevDashboard />} />
 
               {/* Protected */}
               <Route element={<ProtectedRoute />}>

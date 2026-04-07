@@ -43,9 +43,10 @@ async function refreshTokens(supabase, row) {
   }
 
   const tokens = await res.json();
+  if (!tokens.expires_in) console.warn('[schwab-proxy] Missing expires_in in token response, using 1800s fallback');
   const expiresAt = new Date(Date.now() + (tokens.expires_in || 1800) * 1000).toISOString();
 
-  await supabase
+  const { error: updateErr } = await supabase
     .from('schwab_tokens')
     .update({
       access_token: tokens.access_token,
@@ -54,6 +55,11 @@ async function refreshTokens(supabase, row) {
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', row.user_id);
+
+  if (updateErr) {
+    console.error('[schwab-proxy] Failed to persist refreshed tokens:', updateErr.message);
+    return null;
+  }
 
   return tokens.access_token;
 }
@@ -133,11 +139,12 @@ export default async function handler(req, res) {
       }
       const accounts = await resp.json();
 
-      // Cache account list in DB
-      await supabase
+      // Cache account list in DB (non-blocking — log on failure)
+      const { error: cacheErr } = await supabase
         .from('schwab_tokens')
         .update({ schwab_accounts: accounts, updated_at: new Date().toISOString() })
         .eq('user_id', userId);
+      if (cacheErr) console.warn('[schwab-proxy] Failed to cache accounts:', cacheErr.message);
 
       return res.status(200).json(accounts);
     }
@@ -158,8 +165,8 @@ export default async function handler(req, res) {
 
       // Normalize into a simpler format for the client
       const acct = data.securitiesAccount || data;
-      const positions = (acct.positions || []).map(pos => ({
-        ticker: pos.instrument?.symbol,
+      const positions = (acct.positions || []).filter(pos => pos.instrument?.symbol).map(pos => ({
+        ticker: pos.instrument.symbol,
         assetType: pos.instrument?.assetType,
         quantity: pos.longQuantity || 0,
         marketValue: pos.marketValue || 0,

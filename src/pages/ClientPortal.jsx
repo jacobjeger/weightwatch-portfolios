@@ -84,7 +84,7 @@ export default function ClientPortal() {
     let cancelled = false;
     getSchwabPositions(user.id, portfolio.schwab_account_hash)
       .then(data => { if (!cancelled && data) setSchwabData(data); })
-      .catch(() => { if (!cancelled) setSchwabData(null); });
+      .catch(err => { console.warn('[Schwab] ClientPortal fetch failed:', err.message); if (!cancelled) setSchwabData(null); });
     return () => { cancelled = true; };
   }, [user, portfolio?.schwab_account_hash, refreshKey]);
 

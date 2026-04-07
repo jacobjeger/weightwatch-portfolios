@@ -58,7 +58,7 @@ function schwabProxy() {
           const mod = await server.ssrLoadModule('/api/schwab-proxy.js');
           const params = new URL(req.url ?? '', 'http://localhost').searchParams;
           const query = Object.fromEntries(params.entries());
-          const fakeReq = { query, method: req.method };
+          const fakeReq = { query, method: req.method, headers: req.headers };
           const fakeRes = {
             status(code) { res.statusCode = code; return this; },
             json(data) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)); },
@@ -80,7 +80,7 @@ function schwabProxy() {
           const mod = await server.ssrLoadModule('/api/schwab-auth.js');
           const params = new URL(req.url ?? '', 'http://localhost').searchParams;
           const query = Object.fromEntries(params.entries());
-          const fakeReq = { query, method: req.method };
+          const fakeReq = { query, method: req.method, headers: req.headers };
           const fakeRes = {
             status(code) { res.statusCode = code; return this; },
             json(data) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)); },
@@ -99,8 +99,36 @@ function schwabProxy() {
   };
 }
 
+// Dev-only plugin: proxies /api/dev-dashboard for local development.
+function devDashboardProxy() {
+  return {
+    name: 'dev-dashboard-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/dev-dashboard', async (req, res) => {
+        try {
+          const mod = await server.ssrLoadModule('/api/dev-dashboard.js');
+          const params = new URL(req.url ?? '', 'http://localhost').searchParams;
+          const query = Object.fromEntries(params.entries());
+          const fakeReq = { query, method: req.method, headers: req.headers };
+          const fakeRes = {
+            status(code) { res.statusCode = code; return this; },
+            json(data) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)); },
+            setHeader(k, v) { res.setHeader(k, v); return this; },
+            end(body) { res.end(body); },
+          };
+          await mod.default(fakeReq, fakeRes);
+        } catch (err) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), yahooFinanceProxy(), schwabProxy()],
+  plugins: [react(), yahooFinanceProxy(), schwabProxy(), devDashboardProxy()],
   build: {
     sourcemap: true,
   },

@@ -73,7 +73,7 @@ export default function Dashboard() {
       linked.map(p =>
         getSchwabPositions(user.id, p.schwab_account_hash)
           .then(data => [p.id, data?.totalValue ?? null])
-          .catch(() => [p.id, null])
+          .catch(err => { console.warn('[Schwab] Dashboard value fetch failed for', p.name, err.message); return [p.id, null]; })
       )
     ).then(entries => {
       if (cancelled) return;

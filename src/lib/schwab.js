@@ -148,7 +148,10 @@ export async function unlinkSchwab(userId) {
 export async function checkSchwabLinked(userId) {
   try {
     return await getSchwabAccounts(userId);
-  } catch {
+  } catch (err) {
+    console.warn('[Schwab] checkSchwabLinked error:', err.message);
+    // Propagate reauth errors so UI can prompt re-link
+    if (err.message === 'reauth_required') throw err;
     return null;
   }
 }

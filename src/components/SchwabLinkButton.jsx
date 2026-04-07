@@ -49,13 +49,52 @@ export default function SchwabLinkButton({
       .map(p => p.schwab_account_hash)
   );
 
-  // Check Schwab link status on mount
+  // Handle OAuth error redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const schwabError = params.get('schwab_error');
+    if (schwabError) {
+      const messages = {
+        token_exchange_failed: 'Schwab authorization failed — please try again',
+        db_error: 'Failed to save Schwab connection — please try again',
+        invalid_state: 'Schwab authorization error — invalid session',
+        unexpected: 'Unexpected error connecting Schwab — please try again',
+      };
+      setError(messages[schwabError] || `Schwab error: ${schwabError}`);
+      const url = new URL(window.location);
+      url.searchParams.delete('schwab_error');
+      window.history.replaceState({}, '', url);
+    }
+  }, []);
+
+  // Check Schwab link status on mount; auto-select after OAuth redirect
   useEffect(() => {
     if (!configured || !userId) return;
     checkSchwabLinked(userId).then(accts => {
-      if (accts && accts.length > 0) setAccounts(accts);
+      if (!accts || accts.length === 0) return;
+      setAccounts(accts);
+
+      // After OAuth redirect, auto-link if no account is selected yet
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('schwab_linked') === 'true' && !schwabAccountHash) {
+        // Clean up the query param
+        const url = new URL(window.location);
+        url.searchParams.delete('schwab_linked');
+        window.history.replaceState({}, '', url);
+
+        const available = accts.filter(a => !usedHashes.has(a.hashValue));
+        if (available.length === 1) {
+          onAccountLinked?.(available[0].hashValue);
+        } else if (available.length > 1) {
+          setShowPicker(true);
+        }
+      }
+    }).catch(err => {
+      if (err.message === 'reauth_required') {
+        setError('Schwab session expired — please re-link your account');
+      }
     });
-  }, [configured, userId]);
+  }, [configured, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch positions when we have a linked account
   const fetchPositions = useCallback(async () => {
@@ -112,11 +151,14 @@ export default function SchwabLinkButton({
 
   async function handleUnlink() {
     try {
+      await unlinkSchwab(userId);
       onAccountUnlinked?.();
       setShowUnlink(false);
       setLastSynced(null);
-    } catch {
-      setError('Failed to unlink');
+      setAccounts(null);
+    } catch (err) {
+      console.error('[Schwab] Unlink failed:', err);
+      setError('Failed to unlink Schwab account');
     }
   }
 
