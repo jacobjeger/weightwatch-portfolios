@@ -19,6 +19,44 @@ function getSupabase() {
   return createClient(url, key);
 }
 
+// Log errors to the error_logs table so they show in the dev dashboard
+async function logSchwabError(message, metadata = {}) {
+  try {
+    const sb = getSupabase();
+    const fp = `schwab_${message.replace(/\s+/g, '_').slice(0, 80)}`;
+    // Try to increment existing error, otherwise insert
+    const { data: existing } = await sb
+      .from('error_logs')
+      .select('id, occurrence_count')
+      .eq('fingerprint', fp)
+      .gte('created_at', new Date(Date.now() - 86400000).toISOString())
+      .limit(1)
+      .single();
+    if (existing) {
+      await sb.from('error_logs').update({
+        occurrence_count: (existing.occurrence_count || 1) + 1,
+        last_seen_at: new Date().toISOString(),
+        metadata: JSON.stringify(metadata).slice(0, 5000),
+      }).eq('id', existing.id);
+    } else {
+      await sb.from('error_logs').insert({
+        level: 'error',
+        message: message.slice(0, 2000),
+        source: 'schwab',
+        fingerprint: fp,
+        metadata: JSON.stringify(metadata).slice(0, 5000),
+        user_id: metadata.userId || null,
+        url: '/api/schwab-proxy',
+        user_agent: 'vercel-serverless',
+        occurrence_count: 1,
+        last_seen_at: new Date().toISOString(),
+      });
+    }
+  } catch (e) {
+    console.warn('[schwab-proxy] Failed to log error to DB:', e.message);
+  }
+}
+
 // ── Token refresh ────────────────────────────────────────────────────────────
 async function refreshTokens(supabase, row) {
   const clientId     = process.env.SCHWAB_CLIENT_ID;
@@ -38,7 +76,9 @@ async function refreshTokens(supabase, row) {
   });
 
   if (!res.ok) {
-    console.error('[schwab-proxy] Token refresh failed:', res.status);
+    const body = await res.text().catch(() => '');
+    console.error('[schwab-proxy] Token refresh failed:', res.status, body.slice(0, 200));
+    logSchwabError('Schwab token refresh failed', { userId: row.user_id, status: res.status, body: body.slice(0, 500) });
     return null; // caller should return reauth_required
   }
 
@@ -94,6 +134,7 @@ export default async function handler(req, res) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     console.error('[schwab-proxy] 401: Missing or malformed Authorization header');
+    logSchwabError('Missing Authorization header', { userId, action });
     return res.status(401).json({ error: 'Missing auth token' });
   }
 
@@ -114,6 +155,7 @@ export default async function handler(req, res) {
     const now = Math.floor(Date.now() / 1000);
     if (exp && exp < now) {
       console.error('[schwab-proxy] 401: JWT expired.', 'exp:', new Date(exp * 1000).toISOString(), 'now:', new Date(now * 1000).toISOString(), 'sub:', authUserId);
+      logSchwabError('Supabase JWT expired', { userId, action, exp: new Date(exp * 1000).toISOString(), now: new Date(now * 1000).toISOString() });
       return res.status(401).json({ error: 'Token expired' });
     }
     if (!authUserId) {
@@ -122,6 +164,7 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error('[schwab-proxy] 401: Failed to decode JWT:', err.message, 'token_length:', token?.length);
+    logSchwabError('Failed to decode JWT', { userId, action, error: err.message, tokenLength: token?.length });
     return res.status(401).json({ error: 'Malformed token' });
   }
 
@@ -155,6 +198,9 @@ export default async function handler(req, res) {
   const auth = await getAccessToken(supabase, userId);
   if (auth.error) {
     const status = auth.error === 'not_linked' ? 404 : 401;
+    if (auth.error === 'reauth_required') {
+      logSchwabError('Schwab token refresh failed — reauth required', { userId, action });
+    }
     return res.status(status).json({ error: auth.error });
   }
 
@@ -168,6 +214,8 @@ export default async function handler(req, res) {
     if (action === 'accounts') {
       const resp = await fetch(`${SCHWAB_API_BASE}/accounts/accountNumbers`, { headers });
       if (!resp.ok) {
+        const body = await resp.text().catch(() => '');
+        logSchwabError(`Schwab accounts API error: ${resp.status}`, { userId, status: resp.status, body: body.slice(0, 500) });
         return res.status(resp.status).json({ error: `Schwab API error: ${resp.status}` });
       }
       const accounts = await resp.json();
@@ -192,6 +240,8 @@ export default async function handler(req, res) {
         { headers }
       );
       if (!resp.ok) {
+        const body = await resp.text().catch(() => '');
+        logSchwabError(`Schwab positions API error: ${resp.status}`, { userId, account, status: resp.status, body: body.slice(0, 500) });
         return res.status(resp.status).json({ error: `Schwab API error: ${resp.status}` });
       }
       const data = await resp.json();
@@ -222,6 +272,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Unknown action: ${action}` });
   } catch (err) {
     console.error('[schwab-proxy] Error:', err);
+    logSchwabError(`Schwab proxy unhandled error: ${err.message}`, { userId, action, stack: err.stack?.slice(0, 1000) });
     return res.status(500).json({ error: err.message });
   }
 }

@@ -7,6 +7,7 @@
 // (used to construct the OAuth authorization URL).
 
 import { supabase } from './supabase';
+import { logError } from './errorLogger';
 
 const CLIENT_ID = import.meta.env.VITE_SCHWAB_CLIENT_ID;
 
@@ -89,10 +90,14 @@ export async function getSchwabAccounts(userId) {
   if (res.status === 404) return null; // not linked
   if (res.status === 401) {
     const body = await res.json().catch(() => ({}));
+    logError({ level: 'error', message: `Schwab accounts 401: ${body.error || 'unknown'}`, source: 'schwab', metadata: { userId, status: 401, body } });
     if (body.error === 'reauth_required') throw new Error('reauth_required');
     throw new Error('Unauthorized');
   }
-  if (!res.ok) throw new Error(`Schwab accounts fetch failed: ${res.status}`);
+  if (!res.ok) {
+    logError({ level: 'error', message: `Schwab accounts fetch failed: ${res.status}`, source: 'schwab', metadata: { userId, status: res.status } });
+    throw new Error(`Schwab accounts fetch failed: ${res.status}`);
+  }
 
   const data = await res.json();
   accountsCache.set(userId, { data, ts: Date.now() });
@@ -115,10 +120,14 @@ export async function getSchwabPositions(userId, accountHash) {
   );
   if (res.status === 401) {
     const body = await res.json().catch(() => ({}));
+    logError({ level: 'error', message: `Schwab positions 401: ${body.error || 'unknown'}`, source: 'schwab', metadata: { userId, accountHash, status: 401, body } });
     if (body.error === 'reauth_required') throw new Error('reauth_required');
     throw new Error('Unauthorized');
   }
-  if (!res.ok) throw new Error(`Schwab positions fetch failed: ${res.status}`);
+  if (!res.ok) {
+    logError({ level: 'error', message: `Schwab positions fetch failed: ${res.status}`, source: 'schwab', metadata: { userId, accountHash, status: res.status } });
+    throw new Error(`Schwab positions fetch failed: ${res.status}`);
+  }
 
   const raw = await res.json();
 

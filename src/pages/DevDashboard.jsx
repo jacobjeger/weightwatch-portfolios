@@ -14,6 +14,7 @@ const SOURCE_COLORS = {
   console: 'bg-slate-100 text-slate-600',
   network: 'bg-blue-100 text-blue-700',
   manual: 'bg-purple-100 text-purple-700',
+  schwab: 'bg-emerald-100 text-emerald-700',
 };
 const PIE_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#64748b', '#3b82f6', '#a855f7'];
 const LEVEL_DOTS = { error: 'bg-red-500', warn: 'bg-amber-500', info: 'bg-blue-500' };
@@ -268,7 +269,7 @@ function ErrorsTab() {
       <div className="flex flex-wrap items-center gap-2">
         <select value={source} onChange={e => { setSource(e.target.value); setPage(0); }} className="input text-xs py-1.5">
           <option value="">All Sources</option>
-          {['react', 'unhandled', 'promise', 'console', 'network', 'manual'].map(s => (
+          {['react', 'unhandled', 'promise', 'console', 'network', 'manual', 'schwab'].map(s => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
