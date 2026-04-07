@@ -93,16 +93,20 @@ export default async function handler(req, res) {
   // ── Verify the caller is the authenticated user ────────────────────────────
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
+    console.error('[schwab-proxy] 401: Missing or malformed Authorization header. Got:', authHeader ? `${authHeader.slice(0, 20)}...` : 'undefined');
     return res.status(401).json({ error: 'Missing auth token' });
   }
 
   const supabase = getSupabase();
 
-  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(authHeader.split(' ')[1]);
+  const token = authHeader.split(' ')[1];
+  const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !authUser) {
+    console.error('[schwab-proxy] 401: getUser failed.', 'error:', authError?.message, 'token_length:', token?.length, 'user_id_param:', userId);
     return res.status(401).json({ error: 'Invalid auth token' });
   }
   if (authUser.id !== userId) {
+    console.error('[schwab-proxy] 403: User mismatch. auth:', authUser.id, 'param:', userId);
     return res.status(403).json({ error: 'Forbidden — cannot access another user\'s data' });
   }
 

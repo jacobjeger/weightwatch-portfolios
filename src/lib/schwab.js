@@ -15,9 +15,16 @@ export const isConfigured = () => Boolean(CLIENT_ID);
 
 /** Get the current Supabase auth token for API calls. */
 async function getAuthHeaders() {
-  if (!supabase) return {};
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) return {};
+  if (!supabase) {
+    console.warn('[Schwab] getAuthHeaders: supabase client is null (demo mode)');
+    return {};
+  }
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) console.warn('[Schwab] getAuthHeaders: getSession error:', error.message);
+  if (!session?.access_token) {
+    console.warn('[Schwab] getAuthHeaders: no session/token available. session:', !!session);
+    return {};
+  }
   return { 'Authorization': `Bearer ${session.access_token}` };
 }
 
