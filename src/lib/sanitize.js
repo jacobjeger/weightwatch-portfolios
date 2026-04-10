@@ -24,6 +24,7 @@ export function sanitizePortfolio(p) {
     description: typeof p.description === 'string' ? p.description : '',
     owner: typeof p.owner === 'string' ? p.owner : String(p.owner ?? ''),
     primary_benchmark: typeof p.primary_benchmark === 'string' ? p.primary_benchmark : null,
+    secondary_benchmarks: Array.isArray(p.secondary_benchmarks) ? p.secondary_benchmarks : [],
     starting_value: Number(p.starting_value) || 0,
     cash_percent: Number(p.cash_percent) || 0,
     drip_enabled: Boolean(p.drip_enabled),
@@ -32,6 +33,8 @@ export function sanitizePortfolio(p) {
     holdings: Array.isArray(p.holdings)
       ? p.holdings.map(sanitizeHolding).filter(Boolean)
       : [],
+    weight_history: Array.isArray(p.weight_history) ? p.weight_history : [],
+    schwab_account_hash: typeof p.schwab_account_hash === 'string' ? p.schwab_account_hash : null,
   };
 }
 
