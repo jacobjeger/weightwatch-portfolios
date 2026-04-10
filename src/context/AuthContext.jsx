@@ -207,7 +207,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ── Auth actions ────────────────────────────────────────────────────────────
-  async function signUp(email, password, accountType = 'advisor') {
+  const signUp = useCallback(async function signUp(email, password, accountType = 'advisor') {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -249,9 +249,9 @@ export function AuthProvider({ children }) {
     const u = mockSignUp(email, password, accountType);
     setUser(u);
     return u;
-  }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function signIn(email, password) {
+  const signIn = useCallback(async function signIn(email, password) {
     if (isSupabaseConfigured) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -260,9 +260,9 @@ export function AuthProvider({ children }) {
     const u = mockSignIn(email, password);
     setUser(u);
     return u;
-  }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function signOut() {
+  const signOut = useCallback(async function signOut() {
     // Clear pending session in both modes
     localStorage.removeItem(LS.session);
     if (isSupabaseConfigured) {
@@ -271,9 +271,9 @@ export function AuthProvider({ children }) {
       mockSignOut();
     }
     setUser(null);
-  }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function resetPassword(email) {
+  const resetPassword = useCallback(async function resetPassword(email) {
     if (isSupabaseConfigured) {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
@@ -282,7 +282,7 @@ export function AuthProvider({ children }) {
       return true;
     }
     return mockResetPassword(email);
-  }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh client portfolios by re-syncing from advisor's data in Supabase
   const refreshClientPortfolios = useCallback(async () => {
@@ -318,7 +318,7 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // Delete all account data and the account itself
-  async function deleteAccount() {
+  const deleteAccount = useCallback(async function deleteAccount() {
     if (!user) return;
     const userId = user.id;
     const email = user.email;
@@ -372,7 +372,7 @@ export function AuthProvider({ children }) {
     }
     setUser(null);
     localStorage.removeItem(LS.session);
-  }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const contextValue = useMemo(() => ({
     user, loading, role, signUp, signIn, signOut, resetPassword, refreshClientPortfolios, deleteAccount, isMockMode: !isSupabaseConfigured,
