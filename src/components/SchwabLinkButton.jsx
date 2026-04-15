@@ -91,7 +91,10 @@ export default function SchwabLinkButton({
       }
     }).catch(err => {
       if (err.message === 'reauth_required') {
-        setError('Schwab session expired — please re-link your account');
+        setError('Schwab session expired — click "Link Schwab" to reconnect');
+        // Auto-unlink so the Link button reappears
+        if (schwabAccountHash) onAccountUnlinked?.();
+        setAccounts(null);
       }
     });
   }, [configured, userId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -107,7 +110,10 @@ export default function SchwabLinkButton({
       setLastSynced(new Date());
     } catch (err) {
       if (err.message === 'reauth_required') {
-        setError('Schwab session expired — please re-link');
+        setError('Schwab session expired — click "Link Schwab" to reconnect');
+        // Auto-unlink so the Link button reappears
+        onAccountUnlinked?.();
+        setAccounts(null);
       } else {
         setError('Failed to fetch Schwab positions');
       }
